@@ -1,0 +1,7 @@
+{
+  "extends": "../../packages/typescript-config/react-app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": ".tsbuildinfo"
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}

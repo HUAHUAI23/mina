@@ -1,0 +1,35 @@
+{
+  "name": "@mina/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./client": {
+      "types": "./src/client.ts",
+      "default": "./src/client.ts"
+    }
+  },
+  "scripts": {
+    "dev": "bun --hot src/index.ts",
+    "build": "bun run typecheck && bun build src/index.ts --outdir dist --target bun",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@hono/standard-validator": "catalog:",
+    "@mina/contracts": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "hono": "catalog:",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "@mina/typescript-config": "workspace:*",
+    "@types/bun": "catalog:",
+    "drizzle-kit": "^0.31.10",
+    "typescript": "catalog:"
+  }
+}
