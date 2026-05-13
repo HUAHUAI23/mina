@@ -6,4 +6,5 @@ coverage
 *.log
 .env.local
 .env.*.local
+.env*
 temp
