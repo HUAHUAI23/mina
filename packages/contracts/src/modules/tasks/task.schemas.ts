@@ -16,7 +16,7 @@ export const ResourceRoleSchema = z.enum([
 export const TaskKindSchema = z.enum(['image_generation', 'video_generation'])
 export const TaskModeSchema = z.enum(['sync', 'async'])
 export const TaskStatusSchema = z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled'])
-export const BillingMetricSchema = z.enum(['token', 'duration_second'])
+export const BillingMetricSchema = z.enum(['token', 'image', 'duration_second'])
 
 export const ResourceMetadataSchema = z.record(z.string(), z.unknown())
 
@@ -123,6 +123,7 @@ export const TaskCostSchema = z.object({
 
 export const TaskResourceSchema = z.object({
   id: z.string().min(1),
+  accountId: z.string().min(1),
   taskId: z.string().min(1),
   direction: z.enum(['input', 'output']),
   kind: ResourceKindSchema,
@@ -135,6 +136,7 @@ export const TaskResourceSchema = z.object({
 export const TaskSchema = z.object({
   id: z.string().min(1),
   accountId: z.string().min(1),
+  idempotencyKey: z.string().min(1).optional(),
   kind: TaskKindSchema,
   mode: TaskModeSchema,
   provider: z.string().min(1),
@@ -142,6 +144,8 @@ export const TaskSchema = z.object({
   status: TaskStatusSchema,
   config: TaskConfigSchema,
   externalTaskId: z.string().min(1).optional(),
+  providerStatus: z.string().min(1).optional(),
+  providerMetadata: ResourceMetadataSchema.optional(),
   cost: TaskCostSchema,
   output: NodeExecutionOutputSchema.optional(),
   error: z
@@ -152,12 +156,23 @@ export const TaskSchema = z.object({
     .optional(),
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,
+  submittedAt: IsoDateTimeSchema.optional(),
   startedAt: IsoDateTimeSchema.optional(),
+  lastPolledAt: IsoDateTimeSchema.optional(),
+  nextRetryAt: IsoDateTimeSchema.optional(),
+  expiresAt: IsoDateTimeSchema.optional(),
   completedAt: IsoDateTimeSchema.optional(),
+  retryCount: z.number().int().nonnegative().optional(),
 })
 
 export const TaskParamsSchema = z.object({
   id: z.string().min(1),
+})
+
+export const CreateTaskSchema = z.object({
+  idempotencyKey: z.string().trim().min(1).max(200).optional(),
+  config: TaskConfigSchema,
+  inputResources: z.array(MediaInputSchema).default([]),
 })
 
 export const TaskListResponseSchema = z.object({
@@ -168,12 +183,17 @@ export const TaskResponseSchema = z.object({
   item: TaskSchema,
 })
 
+export const TaskResourceListResponseSchema = z.object({
+  items: z.array(TaskResourceSchema),
+})
+
 export const CancelTaskResponseSchema = z.object({
   success: z.literal(true),
 })
 
 export type BillingMetric = z.infer<typeof BillingMetricSchema>
 export type CancelTaskResponse = z.infer<typeof CancelTaskResponseSchema>
+export type CreateTaskInput = z.infer<typeof CreateTaskSchema>
 export type ImageGenerationConfig = z.infer<typeof ImageGenerationConfigSchema>
 export type MediaInput = z.infer<typeof MediaInputSchema>
 export type MediaInputSource = z.infer<typeof MediaInputSourceSchema>
@@ -189,6 +209,7 @@ export type TaskListResponse = z.infer<typeof TaskListResponseSchema>
 export type TaskMode = z.infer<typeof TaskModeSchema>
 export type TaskParams = z.infer<typeof TaskParamsSchema>
 export type TaskResource = z.infer<typeof TaskResourceSchema>
+export type TaskResourceListResponse = z.infer<typeof TaskResourceListResponseSchema>
 export type TaskResponse = z.infer<typeof TaskResponseSchema>
 export type TaskStatus = z.infer<typeof TaskStatusSchema>
 export type TaskUsage = z.infer<typeof TaskUsageSchema>

@@ -21,8 +21,9 @@ All repository-facing project text should remain in English:
 
 1. Import through package entrypoints, never through another package's internal `src/*` paths.
 2. Shared contracts belong in `@mina/contracts`.
-3. Browser packages must not depend on Bun globals or Bun-only runtime modules.
-4. API runtime composition belongs in `apps/api/src/app`.
+3. Shared reusable UI primitives belong in `@mina/ui`.
+4. Browser packages must not depend on Bun globals or Bun-only runtime modules.
+5. API runtime composition belongs in `apps/api/src/app`.
 
 ## TypeScript Rules
 
@@ -41,6 +42,9 @@ All repository-facing project text should remain in English:
 5. Validate request input with shared contracts.
 6. Return explicit JSON payload shapes instead of naked primitives when the response may evolve.
 7. Use top-level `notFound` and `onError` handlers in the root app.
+8. Keep external generation providers behind the task provider registry; provider adapters must return pending results for in-progress async work instead of throwing.
+9. Do not call external generation providers directly from workflow routes or request-time workflow reconciliation. Create durable queued tasks and let the scheduler/worker path start and poll them.
+10. Use task idempotency keys for client-submitted task retries instead of creating duplicate provider jobs.
 
 ## Frontend Rules
 
@@ -49,6 +53,8 @@ All repository-facing project text should remain in English:
 3. Keep stateful server interactions in hooks.
 4. Keep app shell concerns in `src/app`.
 5. Do not place large inline style objects in React components.
+6. Import shared shadcn/ui primitives through `@mina/ui/components/*`.
+7. Keep Tailwind theme tokens and shadcn global styles in `packages/ui/src/styles/globals.css`.
 
 ## Environment Rules
 
@@ -56,6 +62,7 @@ All repository-facing project text should remain in English:
 2. Never expose secrets through `VITE_*`.
 3. Keep default development values in `.env.example`.
 4. Parse environment values into typed config modules instead of reading raw strings throughout the codebase.
+5. Use `@t3-oss/env-core` and Zod for environment validation in app runtime and build-tool configuration.
 
 ## Testing Rules
 

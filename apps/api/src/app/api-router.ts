@@ -26,5 +26,3 @@ export const createApiRouter = ({
     .route('/tasks', createTasksRoutes(tasksService))
     .route('/workflows', createWorkflowsRoutes(workflowsService))
     .route('/workflow-runs', createWorkflowRunsRoutes(workflowsService))
-
-export type AppType = ReturnType<typeof createApiRouter>

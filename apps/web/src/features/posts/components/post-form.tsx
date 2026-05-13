@@ -1,4 +1,8 @@
 import type { CreatePostInput } from '@mina/contracts'
+import { Button } from '@mina/ui/components/button'
+import { Input } from '@mina/ui/components/input'
+import { Label } from '@mina/ui/components/label'
+import { Textarea } from '@mina/ui/components/textarea'
 import { useState, type FormEvent } from 'react'
 
 interface PostFormProps {
@@ -43,36 +47,42 @@ export function PostForm({ errorMessage, isSubmitting, onCreate }: PostFormProps
 
   return (
     <form className="post-form" onSubmit={handleSubmit}>
-      <label className="field">
+      <Label className="field">
         <span>Title</span>
-        <input
+        <Input
+          aria-invalid={Boolean(validationMessage && nextValidationField(validationMessage) === 'title')}
           autoComplete="off"
           name="title"
           onChange={(event) => setTitle(event.target.value)}
           placeholder="Describe the engineering decision"
           value={title}
         />
-      </label>
+      </Label>
 
-      <label className="field">
+      <Label className="field">
         <span>Body</span>
-        <textarea
+        <Textarea
+          aria-invalid={Boolean(validationMessage && nextValidationField(validationMessage) === 'body')}
           name="body"
           onChange={(event) => setBody(event.target.value)}
           placeholder="Capture the reasoning, tradeoffs, or implementation note."
           rows={5}
           value={body}
         />
-      </label>
+      </Label>
 
       <div className="form-footer">
         <p className="helper-text" data-tone={helperMessage ? 'error' : 'muted'}>
           {helperMessage ?? 'Shared contracts validate both the client and the Hono API.'}
         </p>
-        <button className="primary-button" disabled={isSubmitting} type="submit">
+        <Button disabled={isSubmitting} type="submit">
           {isSubmitting ? 'Publishing...' : 'Create post'}
-        </button>
+        </Button>
       </div>
     </form>
   )
+}
+
+function nextValidationField(message: string) {
+  return message.startsWith('Title') ? 'title' : 'body'
 }

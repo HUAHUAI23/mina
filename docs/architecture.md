@@ -30,6 +30,7 @@ This repository is structured for:
 ├── docs
 └── packages
     ├── contracts
+    ├── ui
     └── typescript-config
 ```
 
@@ -60,7 +61,16 @@ Shared runtime schemas and inferred TypeScript types for the full stack.
 - Request validation schemas
 - Response validation schemas
 - Shared DTOs and route data structures
-- Task, pricing, workflow, and React Flow-compatible canvas contracts
+- User/account, task, pricing, workflow, and React Flow-compatible canvas contracts
+
+### `packages/ui`
+
+Shared React UI primitives and design-system styling for browser applications.
+
+- shadcn/ui components generated into `src/components`
+- shared client-side UI hooks in `src/hooks`
+- UI utilities such as `cn` in `src/lib`
+- Tailwind CSS v4 theme tokens and source registration in `src/styles/globals.css`
 
 ### `packages/typescript-config`
 
@@ -113,11 +123,32 @@ Owns static seed data or adapter bootstrapping.
 
 Mina now has backend contracts and API services for the generation workflow core:
 
-- `tasks`: durable image/video generation task lifecycle, including sync image tasks, async video tasks, input/output resources, and task cancellation.
-- `pricing`: model/resolution aware pricing estimates for token and duration billing.
+- `tasks`: durable image/video generation task lifecycle, including standalone task submission, sync image tasks, async video tasks, input/output resources, idempotent client submission, and task cancellation.
+- `pricing`: model/resolution aware pricing estimates for token, image-count, and duration billing.
 - `workflows`: React Flow-compatible workflow definitions, media-slot edges, ordinary canvas node execution, flow-group DAG execution, node run states, and run cancellation.
 
-The current runtime uses in-memory repositories so tests and local development do not require PostgreSQL. The Drizzle schema in `apps/api/src/db/schema.ts` is the PostgreSQL shape for the future persistent adapter and mirrors the contracts for tasks, resources, pricing rules, workflows, workflow runs, and workflow-node task links.
+The workflow module keeps the public service small and splits stable internal rules by responsibility:
+
+- `workflows.service.ts`: workflow CRUD, version checks, run creation, and isolated-node preflight.
+- `execution.ts`: workflow-run reconciliation, node task creation, flow-group DAG execution, and run state transitions.
+- `graph.ts`: canvas graph traversal and executable/group node predicates.
+- `media.ts`: media-slot role/kind mapping, MediaView output selection, and task input config assembly.
+- `validation.ts`: persisted canvas validation and flow-group scope/cycle validation.
+
+The default local runtime uses in-memory repositories so tests and development do not require PostgreSQL. Set `MINA_PERSISTENCE_DRIVER=postgres` to use the Drizzle-backed task, pricing, and workflow repositories against the PostgreSQL schema in `apps/api/src/db/schema.ts`.
+
+User ownership is represented by `users` and `accounts`. Product data that belongs to a tenant stores `account_id`; `tasks`, `task_resources`, `workflows`, and `workflow_runs` now reference `accounts.id`. Event and link tables remain subordinate to their parent task or workflow run records.
+
+Background work is handled by a Croner-backed `BackgroundTaskScheduler` when `MINA_SCHEDULER_ENABLED=true`. Each tick starts due `queued` tasks, polls due async provider tasks, and then reconciles running workflow runs. The Drizzle task repository claims due queued/running tasks with `FOR UPDATE SKIP LOCKED` before provider calls so multiple schedulers do not process the same task at the same time.
+
+Task providers are registered behind `TaskProviderRegistry` by provider key. A provider starts a task and then reports polling results as `pending`, `succeeded`, `failed`, or `cancelled`. Pending provider results keep the Mina task in `running` status and update `nextRetryAt`; only terminal provider results complete or fail the task. Transport-level polling errors use retry/backoff counters and are distinct from provider terminal failures.
+
+The task API is the canonical execution entrypoint. `POST /api/tasks` creates a durable `queued` task and returns it immediately; clients then poll `GET /api/tasks/:id` or inspect `GET /api/tasks/:id/resources`. Workflow execution uses the same task queue: workflow runs create and link node tasks, then the background scheduler starts tasks and later reconciles node/run state from task terminal status. This keeps direct task submission and canvas execution on one state machine.
+
+Runtime logs use Pino through `src/lib/logger/logger.ts`. Durable lifecycle logs are stored separately in PostgreSQL:
+
+- `task_events`: task creation, start, provider submission, polling, success, and cancellation.
+- `workflow_run_events`: workflow run creation/cancellation/finalization and workflow node task/start/success/failure events.
 
 ### Canvas Execution Semantics
 
@@ -126,6 +157,19 @@ Media edges always represent media-slot connections.
 - On the ordinary canvas, running a selected node resolves required upstream media from the source node's persisted `mediaView`. Upstream nodes are not executed automatically.
 - Inside a `flow_group`, edges are also execution dependencies. A flow run executes all roots in the group and downstream nodes resolve media from the current run's upstream outputs by resource kind, role, and index.
 - `node_group` is visual only and does not affect execution.
+- Workflow run creation does not call external providers directly. It creates pending node tasks and relies on the task scheduler/worker path to start providers, poll async work, and reconcile workflow nodes.
+
+### Object Storage
+
+Object storage is abstracted behind `ObjectStorage` in `apps/api/src/lib/storage`. The production implementation uses the AWS SDK for JavaScript v3 S3 client and works with S3-compatible providers through endpoint/path-style configuration.
+
+Storage keys are account-scoped by construction:
+
+```text
+users/{accountId}/{scope}/{objectName}
+```
+
+The key builder rejects empty, reserved, traversal, and cross-account paths. This keeps user resources under one root so later quota, cleanup, and resource management jobs can operate per account without scanning unrelated objects.
 
 React Flow compatibility rules:
 
@@ -138,10 +182,12 @@ React Flow compatibility rules:
 The web app follows this sequence:
 
 ```text
-component -> hook -> feature api client -> shared http utility -> typed Hono client
+feature component -> shared UI primitive -> hook -> feature api client -> shared http utility -> typed Hono client
 ```
 
 This ensures that UI components do not depend on low-level transport details.
+
+The web app imports shared design-system CSS from `@mina/ui/globals.css` and composes shadcn/ui primitives through package entrypoints such as `@mina/ui/components/button`.
 
 ## API Contract Boundary
 
@@ -157,6 +203,8 @@ This keeps the client aligned with the API surface without coupling it to Bun-sp
 - Server variables use regular environment names such as `MINA_API_PORT`.
 - Client-safe values use the `VITE_` prefix so they can be accessed through `import.meta.env`.
 - Secrets must never use the `VITE_` prefix.
+- Runtime environment values are validated through `@t3-oss/env-core` and Zod in app-local `src/config/env.ts` modules.
+- Tooling that needs environment values, such as Drizzle Kit and Vite dev proxy configuration, must reuse the same validation approach instead of reading raw strings directly.
 
 ## Testing Strategy
 
@@ -164,9 +212,8 @@ The API uses Bun tests against `app.request(...)`, which allows route-level beha
 
 ## Planned Next Step for Database Work
 
-When a real database is introduced, the recommended upgrade path is:
+The account, task, pricing, and workflow modules have Drizzle-backed schema coverage. The remaining persistence work is:
 
-1. Add a database adapter in `apps/api/src/modules/posts/`
-2. Implement `PostRepository` with that adapter
-3. Replace the in-memory repository in `src/app/dependencies.ts`
-4. Keep routes, client contracts, and the React app unchanged
+1. Add a Drizzle-backed posts repository if posts become product data.
+2. Add integration tests that run migrations against a disposable PostgreSQL database.
+3. Move the existing scheduler loop from the API process to a separate worker process if API-process scheduling is not enough operationally.

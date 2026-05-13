@@ -16,6 +16,7 @@
     "useUnknownInCatchVariables": true,
     "verbatimModuleSyntax": true,
     "resolveJsonModule": true,
+    "resolvePackageJsonImports": true,
     "isolatedModules": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,

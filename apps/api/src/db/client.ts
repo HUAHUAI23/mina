@@ -13,3 +13,5 @@ export const createDbClient = (databaseUrl = apiEnv.databaseUrl) => {
   const client = postgres(databaseUrl, { prepare: false })
   return drizzle(client, { schema })
 }
+
+export type MinaDbClient = ReturnType<typeof createDbClient>

@@ -7,26 +7,35 @@ import type {
 
 import { InMemoryPricingRepository } from '../pricing/pricing.repository'
 import { PricingService } from '../pricing/pricing.service'
-import { DevTaskProvider } from '../tasks/tasks.provider'
+import { DevTaskProvider, type TaskProvider } from '../tasks/tasks.provider'
 import { InMemoryTaskRepository } from '../tasks/tasks.repository'
 import { TasksService } from '../tasks/tasks.service'
+import { InMemoryWorkflowRunEventLog } from './workflow-events'
 import { InMemoryWorkflowRepository } from './workflows.repository'
 import { WorkflowsService } from './workflows.service'
 
 const createServices = () => {
   const taskRepository = new InMemoryTaskRepository()
+  const workflowRunEventLog = new InMemoryWorkflowRunEventLog()
   const tasksService = new TasksService(
     taskRepository,
     new PricingService(new InMemoryPricingRepository()),
     new DevTaskProvider(),
   )
-  const workflowsService = new WorkflowsService(new InMemoryWorkflowRepository(), tasksService)
+  const workflowsService = new WorkflowsService(new InMemoryWorkflowRepository(), tasksService, workflowRunEventLog)
 
   return {
     taskRepository,
     tasksService,
+    workflowRunEventLog,
     workflowsService,
   }
+}
+
+const runBackgroundCycle = async (services: Pick<ReturnType<typeof createServices>, 'tasksService' | 'workflowsService'>) => {
+  await services.tasksService.startQueuedTasks()
+  await services.tasksService.pollAsyncTasks()
+  return services.workflowsService.reconcileRunningRuns()
 }
 
 const imageNode = (id: string, count: number, parentId?: string): WorkflowCanvasNode => ({
@@ -124,11 +133,13 @@ describe('WorkflowsService execution semantics', () => {
       expectedWorkflowVersion: workflow.version,
     })
     const sourceTaskId = sourceRun.nodeStates.a?.taskId
-    expect(sourceRun.status).toBe('succeeded')
+    expect(sourceRun.status).toBe('running')
     expect(typeof sourceTaskId).toBe('string')
     if (!sourceTaskId) {
       throw new Error('Source task id was not created.')
     }
+    const [completedSourceRun] = await runBackgroundCycle({ tasksService, workflowsService })
+    expect(completedSourceRun?.status).toBe('succeeded')
 
     const sourceTask = await tasksService.getTask(sourceTaskId)
     const selectedOutput = sourceTask.output?.resources[1]
@@ -217,11 +228,17 @@ describe('WorkflowsService execution semantics', () => {
       expectedWorkflowVersion: workflow.version,
     })
     expect(run.status).toBe('running')
-    expect(run.nodeStates.a?.status).toBe('succeeded')
-    expect(run.nodeStates.c?.status).toBe('succeeded')
-    expect(run.nodeStates.b?.status).toBe('running')
+    expect(run.nodeStates.a?.status).toBe('running')
+    expect(run.nodeStates.c?.status).toBe('running')
+    expect(run.nodeStates.b?.status).toBe('pending')
 
-    const videoTaskId = run.nodeStates.b?.taskId
+    const [rootCompletedRun] = await runBackgroundCycle({ tasksService, workflowsService })
+    expect(rootCompletedRun?.status).toBe('running')
+    expect(rootCompletedRun?.nodeStates.a?.status).toBe('succeeded')
+    expect(rootCompletedRun?.nodeStates.c?.status).toBe('succeeded')
+    expect(rootCompletedRun?.nodeStates.b?.status).toBe('running')
+
+    const videoTaskId = rootCompletedRun?.nodeStates.b?.taskId
     expect(typeof videoTaskId).toBe('string')
     if (!videoTaskId) {
       throw new Error('Video task id was not created.')
@@ -231,8 +248,7 @@ describe('WorkflowsService execution semantics', () => {
     )
     expect(inputResources.map((resource) => resource.role)).toEqual(['first_frame', 'reference_image'])
 
-    await tasksService.pollAsyncTasks()
-    const [completedRun] = await workflowsService.reconcileRunningRuns()
+    const [completedRun] = await runBackgroundCycle({ tasksService, workflowsService })
     expect(completedRun?.status).toBe('succeeded')
     expect(completedRun?.nodeStates.b?.output?.resources.map((resource) => resource.role)).toEqual([
       'generated_video',
@@ -262,5 +278,90 @@ describe('WorkflowsService execution semantics', () => {
     expect(task.cost.estimatedCost).toBe(50)
     const links = await workflowsService.getNodeTasks(workflow.id, 'video')
     expect(links).toHaveLength(1)
+  })
+
+  test('reconcileRun preserves not-found error semantics', async () => {
+    const { workflowsService } = createServices()
+
+    await expect(workflowsService.reconcileRun('missing-run')).rejects.toMatchObject({
+      code: 'WORKFLOW_RUN_NOT_FOUND',
+      status: 404,
+    })
+  })
+
+  test('records workflow run and node lifecycle events', async () => {
+    const { tasksService, workflowRunEventLog, workflowsService } = createServices()
+    const workflow = await workflowsService.createWorkflow({
+      name: 'workflow events',
+      nodes: [imageNode('image', 1)],
+      edges: [],
+    })
+
+    const run = await workflowsService.createRun(workflow.id, {
+      selectedNodeId: 'image',
+      expectedWorkflowVersion: workflow.version,
+    })
+
+    await runBackgroundCycle({ tasksService, workflowsService })
+    const events = await workflowRunEventLog.listEvents(run.id)
+    expect(events.map((event) => event.eventType)).toEqual([
+      'workflow.run.created',
+      'workflow.node.task_created',
+      'workflow.node.started',
+      'workflow.node.succeeded',
+      'workflow.run.succeeded',
+    ])
+    expect(events[1]?.nodeId).toBe('image')
+    expect(events[1]?.payload).toMatchObject({
+      inputResourceCount: 0,
+      nodeId: 'image',
+      status: 'running',
+    })
+  })
+
+  test('fails workflow run and records node failure when a node task fails', async () => {
+    const failingProvider: TaskProvider = {
+      poll: async () => ({
+        code: 'PROVIDER_FAILED',
+        message: 'Provider failed.',
+        status: 'failed',
+      }),
+      start: async () => ({
+        code: 'PROVIDER_FAILED',
+        message: 'Provider failed.',
+        status: 'failed',
+      }),
+    }
+    const workflowRunEventLog = new InMemoryWorkflowRunEventLog()
+    const tasksService = new TasksService(
+      new InMemoryTaskRepository(),
+      new PricingService(new InMemoryPricingRepository()),
+      failingProvider,
+    )
+    const workflowsService = new WorkflowsService(
+      new InMemoryWorkflowRepository(),
+      tasksService,
+      workflowRunEventLog,
+    )
+    const workflow = await workflowsService.createWorkflow({
+      name: 'workflow failure',
+      nodes: [imageNode('image', 1)],
+      edges: [],
+    })
+
+    const run = await workflowsService.createRun(workflow.id, {
+      selectedNodeId: 'image',
+      expectedWorkflowVersion: workflow.version,
+    })
+    expect(run.status).toBe('running')
+
+    await tasksService.startQueuedTasks()
+    const [failedRun] = await workflowsService.reconcileRunningRuns()
+
+    expect(failedRun?.status).toBe('failed')
+    expect(failedRun?.nodeStates.image?.status).toBe('failed')
+    const events = await workflowRunEventLog.listEvents(run.id)
+    expect(events.map((event) => event.eventType)).toContain('workflow.node.failed')
+    expect(events.map((event) => event.eventType)).toContain('workflow.run.failed')
   })
 })

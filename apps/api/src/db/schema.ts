@@ -9,6 +9,7 @@ import type {
   TaskKind,
   TaskMode,
   TaskStatus,
+  User,
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
   WorkflowRunMode,
@@ -21,6 +22,37 @@ const timestamps = () => ({
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
+
+export const users = pgTable(
+  'users',
+  {
+    id: text('id').primaryKey(),
+    email: text('email').notNull(),
+    displayName: text('display_name'),
+    role: text('role').$type<User['role']>().notNull().default('user'),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    ...timestamps(),
+  },
+  (table) => [uniqueIndex('users_email_uidx').on(table.email)],
+)
+
+export const accounts = pgTable(
+  'accounts',
+  {
+    id: text('id').primaryKey(),
+    ownerUserId: text('owner_user_id')
+      .notNull()
+      .references(() => users.id),
+    name: text('name').notNull(),
+    storageRootPrefix: text('storage_root_prefix').notNull(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    ...timestamps(),
+  },
+  (table) => [
+    index('accounts_owner_user_idx').on(table.ownerUserId),
+    uniqueIndex('accounts_storage_root_uidx').on(table.storageRootPrefix),
+  ],
+)
 
 export const pricingRules = pgTable(
   'pricing_rules',
@@ -53,7 +85,10 @@ export const tasks = pgTable(
   'tasks',
   {
     id: text('id').primaryKey(),
-    accountId: text('account_id').notNull(),
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    idempotencyKey: text('idempotency_key'),
     kind: text('kind').$type<TaskKind>().notNull(),
     mode: text('mode').$type<TaskMode>().notNull(),
     provider: text('provider').notNull(),
@@ -61,6 +96,8 @@ export const tasks = pgTable(
     status: text('status').$type<TaskStatus>().notNull(),
     config: jsonb('config').$type<TaskConfig>().notNull(),
     externalTaskId: text('external_task_id'),
+    providerStatus: text('provider_status'),
+    providerMetadata: jsonb('provider_metadata').$type<Record<string, unknown>>(),
     estimatedCost: numeric('estimated_cost', { precision: 16, scale: 6 }).notNull(),
     actualCost: numeric('actual_cost', { precision: 16, scale: 6 }),
     usageMetric: text('usage_metric').notNull(),
@@ -71,14 +108,19 @@ export const tasks = pgTable(
     errorMessage: text('error_message'),
     retryCount: integer('retry_count').notNull().default(0),
     nextRetryAt: timestamp('next_retry_at', { withTimezone: true }),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    lastPolledAt: timestamp('last_polled_at', { withTimezone: true }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
     startedAt: timestamp('started_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     ...timestamps(),
   },
   (table) => [
     index('tasks_status_retry_idx').on(table.status, table.nextRetryAt),
+    index('tasks_queued_start_idx').on(table.status, table.createdAt),
     index('tasks_async_poll_idx').on(table.status, table.mode, table.externalTaskId),
     index('tasks_account_created_idx').on(table.accountId, table.createdAt),
+    uniqueIndex('tasks_account_idempotency_uidx').on(table.accountId, table.idempotencyKey),
   ],
 )
 
@@ -86,6 +128,9 @@ export const taskResources = pgTable(
   'task_resources',
   {
     id: text('id').primaryKey(),
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id),
     taskId: text('task_id')
       .notNull()
       .references(() => tasks.id),
@@ -97,7 +142,10 @@ export const taskResources = pgTable(
     metadata: jsonb('metadata').$type<Record<string, unknown>>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index('task_resources_task_idx').on(table.taskId)],
+  (table) => [
+    index('task_resources_account_created_idx').on(table.accountId, table.createdAt),
+    index('task_resources_task_idx').on(table.taskId),
+  ],
 )
 
 export const taskEvents = pgTable(
@@ -119,7 +167,9 @@ export const workflows = pgTable(
   'workflows',
   {
     id: text('id').primaryKey(),
-    accountId: text('account_id').notNull(),
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id),
     name: text('name').notNull(),
     version: integer('version').notNull(),
     nodes: jsonb('nodes').$type<WorkflowCanvasNode[]>().notNull(),
@@ -137,7 +187,9 @@ export const workflowRuns = pgTable(
     workflowId: text('workflow_id')
       .notNull()
       .references(() => workflows.id),
-    accountId: text('account_id').notNull(),
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id),
     workflowVersion: integer('workflow_version').notNull(),
     runMode: text('run_mode').$type<WorkflowRunMode>().notNull(),
     selectedNodeId: text('selected_node_id').notNull(),

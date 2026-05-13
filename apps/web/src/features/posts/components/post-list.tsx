@@ -1,4 +1,5 @@
 import type { Post } from '@mina/contracts'
+import { Button } from '@mina/ui/components/button'
 
 interface PostListProps {
   deletingPostId: number | undefined
@@ -33,9 +34,9 @@ export function PostList({ deletingPostId, onDelete, posts }: PostListProps) {
                 <p className="eyebrow">Record #{post.id}</p>
                 <h3>{post.title}</h3>
               </div>
-              <button className="ghost-button" disabled={isDeleting} onClick={() => onDelete(post.id)} type="button">
+              <Button disabled={isDeleting} onClick={() => onDelete(post.id)} type="button" variant="ghost">
                 {isDeleting ? 'Removing...' : 'Remove'}
-              </button>
+              </Button>
             </div>
 
             <p className="post-body">{post.body}</p>

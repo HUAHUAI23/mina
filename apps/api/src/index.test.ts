@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { ApiError, PostResponse, WorkflowResponse, WorkflowRunResponse } from '@mina/contracts'
+import type { ApiError, PostResponse, TaskResponse, WorkflowResponse, WorkflowRunResponse } from '@mina/contracts'
 
 import { createApp } from './app/create-app'
 
@@ -47,6 +47,33 @@ describe('mina api', () => {
 
     expect(response.status).toBe(404)
     expect(payload.error.code).toBe('POST_NOT_FOUND')
+  })
+
+  test('POST /api/tasks creates an independently runnable task', async () => {
+    const app = createApp()
+    const response = await app.request('/api/tasks', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        idempotencyKey: 'route-task-1',
+        config: {
+          kind: 'image_generation',
+          mode: 'text_to_image',
+          provider: 'dev',
+          model: 'dev-image',
+          prompt: 'route task',
+          size: '1024x1024',
+          count: 1,
+        },
+      }),
+    })
+    const payload = (await response.json()) as TaskResponse
+
+    expect(response.status).toBe(201)
+    expect(payload.item.status).toBe('queued')
+    expect(payload.item.idempotencyKey).toBe('route-task-1')
   })
 
   test('POST /api/workflows/:id/runs executes an isolated image node', async () => {
@@ -99,7 +126,7 @@ describe('mina api', () => {
     const runPayload = (await runResponse.json()) as WorkflowRunResponse
 
     expect(runResponse.status).toBe(201)
-    expect(runPayload.item.status).toBe('succeeded')
-    expect(runPayload.item.nodeStates.image?.output?.resources[0]?.role).toBe('generated_image')
+    expect(runPayload.item.status).toBe('running')
+    expect(runPayload.item.nodeStates.image?.status).toBe('running')
   })
 })

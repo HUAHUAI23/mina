@@ -16,20 +16,30 @@
   "scripts": {
     "dev": "bun --hot src/index.ts",
     "build": "bun run typecheck && bun build src/index.ts --outdir dist --target bun",
+    "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "db:migrate": "drizzle-kit migrate --config drizzle.config.ts",
+    "db:seed": "bun src/db/seed.ts",
+    "db:studio": "drizzle-kit studio --config drizzle.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "catalog:",
+    "@aws-sdk/s3-request-presigner": "catalog:",
     "@hono/standard-validator": "catalog:",
     "@mina/contracts": "workspace:*",
-    "drizzle-orm": "^0.45.2",
+    "@t3-oss/env-core": "catalog:",
+    "croner": "catalog:",
+    "drizzle-orm": "catalog:",
     "hono": "catalog:",
-    "postgres": "^3.4.9"
+    "pino": "catalog:",
+    "postgres": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@mina/typescript-config": "workspace:*",
     "@types/bun": "catalog:",
-    "drizzle-kit": "^0.31.10",
+    "drizzle-kit": "catalog:",
     "typescript": "catalog:"
   }
 }

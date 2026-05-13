@@ -8,11 +8,11 @@ const nowIso = new Date('2026-01-01T00:00:00.000Z').toISOString()
 
 export const createDefaultPricingRules = (): PricingRule[] => [
   {
-    id: 'price_image_seedream_token',
+    id: 'price_image_dev_image',
     taskKind: 'image_generation',
     provider: 'dev',
     model: 'dev-image',
-    billingMetric: 'token',
+    billingMetric: 'image',
     unitPrice: 1,
     currency: 'credit',
     activeFrom: nowIso,

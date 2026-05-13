@@ -2,7 +2,10 @@ import type { Task, TaskResource } from '@mina/contracts'
 
 export interface TaskRepository {
   appendResources?(taskId: string, resources: TaskResource[]): Promise<void>
+  claimQueuedTasksForStart(limit: number, leaseSeconds: number): Promise<Task[]>
+  claimRunningAsyncTasksForPolling(limit: number, leaseSeconds: number): Promise<Task[]>
   create(task: Task, resources: TaskResource[]): Promise<Task>
+  findByAccountIdAndIdempotencyKey(accountId: string, idempotencyKey: string): Promise<Task | undefined>
   findById(id: string): Promise<Task | undefined>
   list(accountId?: string): Promise<Task[]>
   listResources(taskId: string): Promise<TaskResource[]>
@@ -20,6 +23,44 @@ export class InMemoryTaskRepository implements TaskRepository {
     this.#tasks.set(task.id, cloneTask(task))
     this.#resources.set(task.id, resources.map(cloneResource))
     return cloneTask(task)
+  }
+
+  async claimQueuedTasksForStart(limit: number, leaseSeconds: number): Promise<Task[]> {
+    const now = new Date()
+    const leaseUntil = new Date(now.getTime() + leaseSeconds * 1000).toISOString()
+    const claimed = Array.from(this.#tasks.values())
+      .filter((task) => {
+        const isDue = !task.nextRetryAt || new Date(task.nextRetryAt) <= now
+        return task.status === 'queued' && isDue
+      })
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+      .slice(0, limit)
+    for (const task of claimed) {
+      this.#tasks.set(task.id, cloneTask({ ...task, nextRetryAt: leaseUntil }))
+    }
+    return claimed.map(cloneTask)
+  }
+
+  async claimRunningAsyncTasksForPolling(limit: number, leaseSeconds: number): Promise<Task[]> {
+    const now = new Date()
+    const leaseUntil = new Date(now.getTime() + leaseSeconds * 1000).toISOString()
+    const claimed = Array.from(this.#tasks.values())
+      .filter((task) => {
+        const isDue = !task.nextRetryAt || new Date(task.nextRetryAt) <= now
+        return task.status === 'running' && task.mode === 'async' && task.externalTaskId && isDue
+      })
+      .slice(0, limit)
+    for (const task of claimed) {
+      this.#tasks.set(task.id, cloneTask({ ...task, nextRetryAt: leaseUntil }))
+    }
+    return claimed.map(cloneTask)
+  }
+
+  async findByAccountIdAndIdempotencyKey(accountId: string, idempotencyKey: string): Promise<Task | undefined> {
+    const task = Array.from(this.#tasks.values()).find(
+      (candidate) => candidate.accountId === accountId && candidate.idempotencyKey === idempotencyKey,
+    )
+    return task ? cloneTask(task) : undefined
   }
 
   async findById(id: string): Promise<Task | undefined> {

@@ -7,6 +7,7 @@ import { secureHeaders } from 'hono/secure-headers'
 
 import { apiEnv } from '../config/env'
 import { HttpError, createErrorPayload } from '../lib/http/http-error'
+import { appLogger } from '../lib/logger/logger'
 import { createApiRouter } from './api-router'
 import { createAppDependencies, type AppDependencies } from './dependencies'
 
@@ -39,7 +40,7 @@ export const createApp = (dependencies: AppDependencies = createAppDependencies(
       return c.json(createErrorPayload(error.code, error.message), error.status)
     }
 
-    console.error(error)
+    appLogger.error({ error }, 'Unhandled API error.')
     return c.json(createErrorPayload('INTERNAL_SERVER_ERROR', 'Unexpected server error.'), 500)
   })
 
