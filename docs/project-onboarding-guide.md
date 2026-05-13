@@ -52,7 +52,7 @@ API modules:
 - `apps/api/src/modules/workflows/`
 - `apps/api/src/lib/storage/`
 
-Tasks are a standalone execution primitive. `POST /api/tasks` creates a durable queued task, supports `idempotencyKey` for client retries, and returns before provider execution. The scheduler/worker path starts queued tasks, polls async provider work, and writes terminal task status and resources.
+Tasks are a standalone execution primitive. `POST /api/tasks` creates a durable queued task and returns before provider execution. The scheduler/worker path starts queued tasks, polls async provider work, and writes terminal task status and resources.
 
 Task providers are registered by provider key and expose explicit start/poll/cancel semantics. Async provider polling can return pending without failing the task; terminal succeeded/failed/cancelled results drive the durable task status.
 

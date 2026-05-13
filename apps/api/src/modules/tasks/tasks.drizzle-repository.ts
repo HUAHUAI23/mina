@@ -21,7 +21,6 @@ const taskFromRow = (row: TaskRow): Task =>
   TaskSchema.parse({
     id: row.id,
     accountId: row.accountId,
-    ...(row.idempotencyKey ? { idempotencyKey: row.idempotencyKey } : {}),
     kind: row.kind,
     mode: row.mode,
     provider: row.provider,
@@ -55,7 +54,6 @@ const taskFromRow = (row: TaskRow): Task =>
 const taskInsertFromTask = (task: Task): TaskInsert => ({
   id: task.id,
   accountId: task.accountId,
-  idempotencyKey: task.idempotencyKey ?? null,
   kind: task.kind,
   mode: task.mode,
   provider: task.provider,
@@ -86,7 +84,6 @@ const taskInsertFromTask = (task: Task): TaskInsert => ({
 
 const taskUpdateFromTask = (task: Task): Partial<TaskInsert> => ({
   accountId: task.accountId,
-  idempotencyKey: task.idempotencyKey ?? null,
   kind: task.kind,
   mode: task.mode,
   provider: task.provider,
@@ -220,15 +217,6 @@ export class DrizzleTaskRepository implements TaskRepository {
 
   async findById(id: string): Promise<Task | undefined> {
     const [row] = await this.db.select().from(tasks).where(eq(tasks.id, id)).limit(1)
-    return row ? taskFromRow(row) : undefined
-  }
-
-  async findByAccountIdAndIdempotencyKey(accountId: string, idempotencyKey: string): Promise<Task | undefined> {
-    const [row] = await this.db
-      .select()
-      .from(tasks)
-      .where(and(eq(tasks.accountId, accountId), eq(tasks.idempotencyKey, idempotencyKey)))
-      .limit(1)
     return row ? taskFromRow(row) : undefined
   }
 

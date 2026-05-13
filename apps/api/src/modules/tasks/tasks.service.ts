@@ -19,7 +19,6 @@ import type { TaskRepository } from './tasks.repository'
 interface CreateTaskInput {
   accountId: string
   config: TaskConfig
-  idempotencyKey?: string
   inputResources?: MediaInput[]
 }
 
@@ -35,13 +34,26 @@ const providerFromConfig = (config: TaskConfig): string => config.provider
 
 const modelFromConfig = (config: TaskConfig): string => config.model
 
+type VideoGenerationConfig = Extract<TaskConfig, { kind: 'video_generation' }>
+
+type VideoPricingKeyResolver = (config: VideoGenerationConfig) => string
+
+const defaultVideoPricingKeyFromConfig: VideoPricingKeyResolver = (config) => `resolution:${config.resolution}`
+
+const videoPricingKeyResolvers = new Map<string, VideoPricingKeyResolver>([
+  ['dev:dev-video', defaultVideoPricingKeyFromConfig],
+])
+
+const videoPricingKeyFromConfig = (config: VideoGenerationConfig): string =>
+  (videoPricingKeyResolvers.get(`${config.provider}:${config.model}`) ?? defaultVideoPricingKeyFromConfig)(config)
+
 const pricingInputFromConfig = (config: TaskConfig) => {
   if (config.kind === 'video_generation') {
     return {
       taskKind: config.kind,
       provider: config.provider,
       model: config.model,
-      resolution: config.resolution,
+      pricingKey: videoPricingKeyFromConfig(config),
       billingMetric: 'duration_second' as const,
       usageAmount: config.durationSeconds,
     }
@@ -120,13 +132,6 @@ export class TasksService {
   ) {}
 
   async createTask(input: CreateTaskInput): Promise<Task> {
-    if (input.idempotencyKey) {
-      const existing = await this.taskRepository.findByAccountIdAndIdempotencyKey(input.accountId, input.idempotencyKey)
-      if (existing) {
-        return existing
-      }
-    }
-
     const kind = taskKindFromConfig(input.config)
     const mode = taskModeFromKind(kind)
     const pricing = await this.pricingService.estimate(pricingInputFromConfig(input.config))
@@ -135,7 +140,6 @@ export class TasksService {
     const task: Task = {
       id,
       accountId: input.accountId,
-      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       kind,
       mode,
       provider: providerFromConfig(input.config),

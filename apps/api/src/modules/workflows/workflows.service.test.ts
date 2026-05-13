@@ -256,7 +256,7 @@ describe('WorkflowsService execution semantics', () => {
     ])
   })
 
-  test('video duration pricing uses model and resolution rules', async () => {
+  test('video duration pricing uses model and pricing key rules', async () => {
     const { tasksService, workflowsService } = createServices()
     const workflow = await workflowsService.createWorkflow({
       name: 'pricing',

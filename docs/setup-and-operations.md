@@ -144,7 +144,7 @@ MINA_PERSISTENCE_DRIVER=postgres bun --filter @mina/api db:seed
 3. The posts module uses an in-memory repository, so post data resets when the process restarts.
 4. The task/workflow core defaults to in-memory repositories for local development. Set `MINA_PERSISTENCE_DRIVER=postgres` to use the Drizzle-backed task, pricing, and workflow repositories.
 5. Set `MINA_SCHEDULER_ENABLED=true` to run the Croner-backed task starter, async task poller, and workflow reconciler in the API process. A future standalone worker can run the same service loop.
-6. `POST /api/tasks` creates a standalone `queued` task and returns immediately. Use `GET /api/tasks/:id` for status and `GET /api/tasks/:id/resources` for persisted input/output resources. Supply `idempotencyKey` to make client retries return the same task for the same account.
+6. `POST /api/tasks` creates a standalone `queued` task and returns immediately. Use `GET /api/tasks/:id` for status and `GET /api/tasks/:id/resources` for persisted input/output resources.
 7. Workflow runs create and link node tasks, then rely on the scheduler/worker path to start providers and reconcile nodes from task status. Workflow creation does not block on provider execution.
 8. Async providers return `pending`, `succeeded`, `failed`, or `cancelled` when polled. Pending tasks remain `running` and are retried after `MINA_TASK_POLL_DEFAULT_INTERVAL_SECONDS` or the provider-specific delay.
 9. Task lifecycle events are recorded in `task_events`; workflow run and node lifecycle events are recorded in `workflow_run_events`.

@@ -5,7 +5,6 @@ export interface TaskRepository {
   claimQueuedTasksForStart(limit: number, leaseSeconds: number): Promise<Task[]>
   claimRunningAsyncTasksForPolling(limit: number, leaseSeconds: number): Promise<Task[]>
   create(task: Task, resources: TaskResource[]): Promise<Task>
-  findByAccountIdAndIdempotencyKey(accountId: string, idempotencyKey: string): Promise<Task | undefined>
   findById(id: string): Promise<Task | undefined>
   list(accountId?: string): Promise<Task[]>
   listResources(taskId: string): Promise<TaskResource[]>
@@ -54,13 +53,6 @@ export class InMemoryTaskRepository implements TaskRepository {
       this.#tasks.set(task.id, cloneTask({ ...task, nextRetryAt: leaseUntil }))
     }
     return claimed.map(cloneTask)
-  }
-
-  async findByAccountIdAndIdempotencyKey(accountId: string, idempotencyKey: string): Promise<Task | undefined> {
-    const task = Array.from(this.#tasks.values()).find(
-      (candidate) => candidate.accountId === accountId && candidate.idempotencyKey === idempotencyKey,
-    )
-    return task ? cloneTask(task) : undefined
   }
 
   async findById(id: string): Promise<Task | undefined> {

@@ -57,7 +57,6 @@ describe('mina api', () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        idempotencyKey: 'route-task-1',
         config: {
           kind: 'image_generation',
           mode: 'text_to_image',
@@ -73,7 +72,6 @@ describe('mina api', () => {
 
     expect(response.status).toBe(201)
     expect(payload.item.status).toBe('queued')
-    expect(payload.item.idempotencyKey).toBe('route-task-1')
   })
 
   test('POST /api/workflows/:id/runs executes an isolated image node', async () => {

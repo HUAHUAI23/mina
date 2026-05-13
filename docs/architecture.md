@@ -124,7 +124,7 @@ Owns static seed data or adapter bootstrapping.
 Mina now has backend contracts and API services for the generation workflow core:
 
 - `tasks`: durable image/video generation task lifecycle, including standalone task submission, sync image tasks, async video tasks, input/output resources, idempotent client submission, and task cancellation.
-- `pricing`: model/resolution aware pricing estimates for token, image-count, and duration billing.
+- `pricing`: model and pricing-key aware estimates for token, image-count, and duration billing.
 - `workflows`: React Flow-compatible workflow definitions, media-slot edges, ordinary canvas node execution, flow-group DAG execution, node run states, and run cancellation.
 
 The workflow module keeps the public service small and splits stable internal rules by responsibility:

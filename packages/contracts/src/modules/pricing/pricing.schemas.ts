@@ -7,7 +7,7 @@ export const PricingRuleSchema = z.object({
   taskKind: TaskKindSchema,
   provider: z.string().min(1),
   model: z.string().min(1),
-  resolution: z.string().min(1).optional(),
+  pricingKey: z.string().min(1).optional(),
   billingMetric: BillingMetricSchema,
   unitPrice: z.number().nonnegative(),
   currency: z.string().min(1).default('credit'),
@@ -20,7 +20,7 @@ export const PricingEstimateRequestSchema = z.object({
   taskKind: TaskKindSchema,
   provider: z.string().min(1),
   model: z.string().min(1),
-  resolution: z.string().min(1).optional(),
+  pricingKey: z.string().min(1).optional(),
   billingMetric: BillingMetricSchema,
   usageAmount: z.number().nonnegative(),
 })

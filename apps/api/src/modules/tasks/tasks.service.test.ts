@@ -88,11 +88,10 @@ describe('TasksService event logging', () => {
     })
   })
 
-  test('returns the existing task for a repeated idempotency key', async () => {
-    const { taskEventLog, tasksService } = createService()
+  test('creates a new task for each create request', async () => {
+    const { tasksService } = createService()
     const input = {
       accountId: 'account',
-      idempotencyKey: 'client-request-1',
       config: {
         kind: 'image_generation' as const,
         mode: 'text_to_image' as const,
@@ -107,9 +106,7 @@ describe('TasksService event logging', () => {
     const first = await tasksService.createTask(input)
     const second = await tasksService.createTask(input)
 
-    expect(second.id).toBe(first.id)
-    expect(second.idempotencyKey).toBe('client-request-1')
-    expect(await taskEventLog.listEvents(first.id)).toHaveLength(1)
+    expect(second.id).not.toBe(first.id)
   })
 
   test('starts queued tasks from the background worker path', async () => {

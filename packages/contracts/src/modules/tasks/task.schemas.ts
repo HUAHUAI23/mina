@@ -136,7 +136,6 @@ export const TaskResourceSchema = z.object({
 export const TaskSchema = z.object({
   id: z.string().min(1),
   accountId: z.string().min(1),
-  idempotencyKey: z.string().min(1).optional(),
   kind: TaskKindSchema,
   mode: TaskModeSchema,
   provider: z.string().min(1),
@@ -170,7 +169,6 @@ export const TaskParamsSchema = z.object({
 })
 
 export const CreateTaskSchema = z.object({
-  idempotencyKey: z.string().trim().min(1).max(200).optional(),
   config: TaskConfigSchema,
   inputResources: z.array(MediaInputSchema).default([]),
 })

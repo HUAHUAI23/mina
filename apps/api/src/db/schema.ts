@@ -61,7 +61,7 @@ export const pricingRules = pgTable(
     taskKind: text('task_kind').$type<PricingRule['taskKind']>().notNull(),
     provider: text('provider').notNull(),
     model: text('model').notNull(),
-    resolution: text('resolution'),
+    pricingKey: text('pricing_key'),
     billingMetric: text('billing_metric').$type<PricingRule['billingMetric']>().notNull(),
     unitPrice: numeric('unit_price', { precision: 16, scale: 6 }).notNull(),
     currency: text('currency').notNull(),
@@ -75,7 +75,7 @@ export const pricingRules = pgTable(
       table.taskKind,
       table.provider,
       table.model,
-      table.resolution,
+      table.pricingKey,
       table.billingMetric,
     ),
   ],
@@ -88,7 +88,6 @@ export const tasks = pgTable(
     accountId: text('account_id')
       .notNull()
       .references(() => accounts.id),
-    idempotencyKey: text('idempotency_key'),
     kind: text('kind').$type<TaskKind>().notNull(),
     mode: text('mode').$type<TaskMode>().notNull(),
     provider: text('provider').notNull(),
@@ -120,7 +119,6 @@ export const tasks = pgTable(
     index('tasks_queued_start_idx').on(table.status, table.createdAt),
     index('tasks_async_poll_idx').on(table.status, table.mode, table.externalTaskId),
     index('tasks_account_created_idx').on(table.accountId, table.createdAt),
-    uniqueIndex('tasks_account_idempotency_uidx').on(table.accountId, table.idempotencyKey),
   ],
 )
 

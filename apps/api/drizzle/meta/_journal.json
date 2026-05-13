@@ -29,6 +29,20 @@
       "when": 1778598260623,
       "tag": "0003_long_fenris",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778658113143,
+      "tag": "0004_yielding_lila_cheney",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1778676838463,
+      "tag": "0005_abstract_pricing_key",
+      "breakpoints": true
     }
   ]
 }

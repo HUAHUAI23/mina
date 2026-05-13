@@ -10,8 +10,8 @@ const isRuleActive = (rule: PricingRule, at: Date): boolean => {
   return activeFrom <= at && (!activeTo || activeTo > at)
 }
 
-const matchesResolution = (rule: PricingRule, resolution: string | undefined): boolean =>
-  rule.resolution === resolution || rule.resolution === undefined
+const matchesPricingKey = (rule: PricingRule, pricingKey: string | undefined): boolean =>
+  rule.pricingKey === pricingKey || rule.pricingKey === undefined
 
 export class PricingService {
   constructor(private readonly pricingRepository: PricingRepository) {}
@@ -25,7 +25,7 @@ export class PricingService {
           rule.provider === input.provider &&
           rule.model === input.model &&
           rule.billingMetric === input.billingMetric &&
-          matchesResolution(rule, input.resolution) &&
+          matchesPricingKey(rule, input.pricingKey) &&
           isRuleActive(rule, at),
       )
       .sort((left, right) => {
@@ -34,8 +34,8 @@ export class PricingService {
           return priorityDiff
         }
 
-        const leftSpecificity = left.resolution ? 1 : 0
-        const rightSpecificity = right.resolution ? 1 : 0
+        const leftSpecificity = left.pricingKey ? 1 : 0
+        const rightSpecificity = right.pricingKey ? 1 : 0
         return rightSpecificity - leftSpecificity
       })[0]
 

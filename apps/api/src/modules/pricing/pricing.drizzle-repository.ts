@@ -16,7 +16,7 @@ const pricingRuleFromRow = (row: PricingRuleRow): PricingRule =>
     taskKind: row.taskKind,
     provider: row.provider,
     model: row.model,
-    ...(row.resolution ? { resolution: row.resolution } : {}),
+    ...(row.pricingKey ? { pricingKey: row.pricingKey } : {}),
     billingMetric: row.billingMetric,
     unitPrice: Number(row.unitPrice),
     currency: row.currency,
