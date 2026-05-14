@@ -1,23 +1,24 @@
 import { describe, expect, test } from 'bun:test'
 import type {
   MediaInput,
-  MediaSlotConnection,
   NodeExecutionOutput,
   ResourceKind,
   ResourceRole,
   VideoGenerationConfig,
+} from '@mina/contracts/modules/tasks'
+import type {
+  MediaSlotConnection,
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
-} from '@mina/contracts'
+} from '@mina/contracts/modules/canvas'
 
-import { createInitialNodeStates } from './execution'
+import { createInitialNodeStates } from './run-state'
 import {
-  buildVideoTaskConfig,
-  collectInputResources,
   findOutputByMediaView,
   slotToInputRole,
   slotToResourceKind,
-} from './media'
+} from './media-selection'
+import { buildVideoTaskConfig, collectInputResources } from './task-config'
 import { validateFlowGroup } from './validation'
 
 const imageNode = (id: string, parentId?: string): WorkflowCanvasNode => ({

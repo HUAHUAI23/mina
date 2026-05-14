@@ -1,24 +1,28 @@
 import type {
-  CancelTaskResponse,
-  CancelWorkflowRunResponse,
   CreatePostInput,
-  CreateTaskInput,
-  CreateWorkflowInput,
-  CreateWorkflowRunInput,
   DeletePostResponse,
-  DeleteWorkflowResponse,
   PostListResponse,
   PostResponse,
+} from '@mina/contracts/modules/posts'
+import type {
+  CancelTaskResponse,
+  CreateTaskInput,
   TaskListResponse,
   TaskResourceListResponse,
   TaskResponse,
+} from '@mina/contracts/modules/tasks'
+import type {
+  CancelWorkflowRunResponse,
+  CreateWorkflowInput,
+  CreateWorkflowRunInput,
+  DeleteWorkflowResponse,
   UpdateNodeMediaViewInput,
   UpdateWorkflowInput,
   WorkflowListResponse,
   WorkflowResponse,
   WorkflowRunListResponse,
   WorkflowRunResponse,
-} from '@mina/contracts'
+} from '@mina/contracts/modules/workflows'
 import type { Hono } from 'hono'
 import type { BlankEnv } from 'hono/types'
 

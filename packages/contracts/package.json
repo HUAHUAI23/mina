@@ -7,6 +7,30 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./modules/accounts": {
+      "types": "./src/modules/accounts/account.schemas.ts",
+      "default": "./src/modules/accounts/account.schemas.ts"
+    },
+    "./modules/canvas": {
+      "types": "./src/modules/canvas/canvas.schemas.ts",
+      "default": "./src/modules/canvas/canvas.schemas.ts"
+    },
+    "./modules/posts": {
+      "types": "./src/modules/posts/post.schemas.ts",
+      "default": "./src/modules/posts/post.schemas.ts"
+    },
+    "./modules/pricing": {
+      "types": "./src/modules/pricing/pricing.schemas.ts",
+      "default": "./src/modules/pricing/pricing.schemas.ts"
+    },
+    "./modules/tasks": {
+      "types": "./src/modules/tasks/task.schemas.ts",
+      "default": "./src/modules/tasks/task.schemas.ts"
+    },
+    "./modules/workflows": {
+      "types": "./src/modules/workflows/workflow.schemas.ts",
+      "default": "./src/modules/workflows/workflow.schemas.ts"
     }
   },
   "scripts": {

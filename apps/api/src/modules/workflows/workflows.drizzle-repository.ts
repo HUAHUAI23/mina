@@ -1,10 +1,6 @@
-import type {
-  NodeMediaViewState,
-  Workflow,
-  WorkflowRun,
-  WorkflowRunNodeState,
-} from '@mina/contracts'
-import { WorkflowRunSchema, WorkflowSchema } from '@mina/contracts'
+import type { NodeMediaViewState } from '@mina/contracts/modules/canvas'
+import type { Workflow, WorkflowRun, WorkflowRunNodeState } from '@mina/contracts/modules/workflows'
+import { WorkflowRunSchema, WorkflowSchema } from '@mina/contracts/modules/workflows'
 import { and, desc, eq, isNull } from 'drizzle-orm'
 
 import type { MinaDbClient } from '../../db/client'

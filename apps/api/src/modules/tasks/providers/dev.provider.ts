@@ -1,4 +1,6 @@
-import type { BillingMetric, NodeExecutionOutput, NodeOutputResource, Task } from '@mina/contracts'
+import type { NodeExecutionOutput, NodeOutputResource, Task } from '@mina/contracts/modules/tasks'
+
+import type { ProviderPollResult, ProviderStartResult, TaskProvider } from './provider'
 
 const outputUrl = (taskId: string, index: number, extension: string): string =>
   `mina://tasks/${taskId}/outputs/${index}.${extension}`
@@ -16,98 +18,6 @@ const buildVariables = (resources: NodeOutputResource[]): NodeExecutionOutput['v
     ...(videoUrls.length > 0 ? { videoUrls } : {}),
     ...(audioUrls.length > 0 ? { audioUrls } : {}),
     ...(lastFrameUrls.length > 0 ? { lastFrameUrls } : {}),
-  }
-}
-
-export interface ProviderUsage {
-  amount: number
-  metric: BillingMetric
-}
-
-export type ProviderStartResult =
-  | {
-      actualUsage?: ProviderUsage
-      metadata?: Record<string, unknown>
-      output: NodeExecutionOutput
-      status: 'succeeded'
-    }
-  | {
-      code: string
-      message: string
-      metadata?: Record<string, unknown>
-      providerStatus?: string
-      status: 'failed'
-    }
-  | {
-      message?: string
-      metadata?: Record<string, unknown>
-      providerStatus?: string
-      status: 'cancelled'
-    }
-  | {
-      externalTaskId: string
-      metadata?: Record<string, unknown>
-      nextPollAfterSeconds?: number
-      providerStatus?: string
-      status: 'submitted'
-    }
-
-export type ProviderPollResult =
-  | {
-      metadata?: Record<string, unknown>
-      nextPollAfterSeconds?: number
-      progress?: number
-      providerStatus?: string
-      status: 'pending'
-    }
-  | {
-      actualUsage?: ProviderUsage
-      metadata?: Record<string, unknown>
-      output: NodeExecutionOutput
-      providerStatus?: string
-      status: 'succeeded'
-    }
-  | {
-      code: string
-      message: string
-      metadata?: Record<string, unknown>
-      providerStatus?: string
-      status: 'failed'
-    }
-  | {
-      message?: string
-      metadata?: Record<string, unknown>
-      providerStatus?: string
-      status: 'cancelled'
-    }
-
-export interface TaskProvider {
-  cancel?(task: Task): Promise<void>
-  poll(task: Task): Promise<ProviderPollResult>
-  start(task: Task): Promise<ProviderStartResult>
-}
-
-export class TaskProviderRegistry implements TaskProvider {
-  constructor(private readonly providers: Record<string, TaskProvider>) {}
-
-  async cancel(task: Task): Promise<void> {
-    await this.get(task.provider).cancel?.(task)
-  }
-
-  async poll(task: Task): Promise<ProviderPollResult> {
-    return this.get(task.provider).poll(task)
-  }
-
-  async start(task: Task): Promise<ProviderStartResult> {
-    return this.get(task.provider).start(task)
-  }
-
-  private get(provider: string): TaskProvider {
-    const taskProvider = this.providers[provider]
-    if (!taskProvider) {
-      throw new Error(`Unsupported task provider: ${provider}`)
-    }
-    return taskProvider
   }
 }
 

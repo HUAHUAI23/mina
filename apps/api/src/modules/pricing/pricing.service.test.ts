@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { PricingRule } from '@mina/contracts'
+import type { PricingRule } from '@mina/contracts/modules/pricing'
 
 import { InMemoryPricingRepository } from './pricing.repository'
 import { PricingService } from './pricing.service'

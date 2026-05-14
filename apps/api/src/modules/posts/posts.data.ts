@@ -1,4 +1,4 @@
-import type { Post } from '@mina/contracts'
+import type { Post } from '@mina/contracts/modules/posts'
 
 export const createSeedPosts = (): Post[] => [
   {

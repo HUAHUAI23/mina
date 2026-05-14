@@ -1,4 +1,4 @@
-import type { PricingEstimate, PricingEstimateRequest, PricingRule } from '@mina/contracts'
+import type { PricingEstimate, PricingEstimateRequest, PricingRule } from '@mina/contracts/modules/pricing'
 
 import { HttpError } from '../../lib/http/http-error'
 import type { PricingRepository } from './pricing.repository'

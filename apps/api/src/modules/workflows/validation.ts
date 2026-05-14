@@ -1,4 +1,4 @@
-import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts'
+import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 
 import { HttpError } from '../../lib/http/http-error'
 import {

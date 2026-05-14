@@ -127,12 +127,16 @@ Mina now has backend contracts and API services for the generation workflow core
 - `pricing`: model and pricing-key aware estimates for token, image-count, and duration billing.
 - `workflows`: React Flow-compatible workflow definitions, media-slot edges, ordinary canvas node execution, flow-group DAG execution, node run states, and run cancellation.
 
-The workflow module keeps the public service small and splits stable internal rules by responsibility:
+The workflow module keeps public services small and splits stable internal rules by responsibility:
 
-- `workflows.service.ts`: workflow CRUD, version checks, run creation, and isolated-node preflight.
-- `execution.ts`: workflow-run reconciliation, node task creation, flow-group DAG execution, and run state transitions.
+- `workflows.service.ts`: workflow definition CRUD, version checks, MediaView updates, and node task link lookup.
+- `workflow-runs.service.ts`: workflow run creation, run lookup/listing, cancellation, isolated-node preflight, and reconciliation entrypoints.
+- `run-executor.ts`: workflow-run reconciliation and flow-group DAG scheduling.
+- `node-executor.ts`: single-node task creation, task observation, node state transitions, and node event recording.
+- `run-state.ts`: initial node state creation and pure run/node state builders.
 - `graph.ts`: canvas graph traversal and executable/group node predicates.
-- `media.ts`: media-slot role/kind mapping, MediaView output selection, and task input config assembly.
+- `media-selection.ts`: media-slot role/kind mapping, MediaView output selection, and media input conversion.
+- `task-config.ts`: image/video task config assembly and input resource collection.
 - `validation.ts`: persisted canvas validation and flow-group scope/cycle validation.
 
 The default local runtime uses in-memory repositories so tests and development do not require PostgreSQL. Set `MINA_PERSISTENCE_DRIVER=postgres` to use the Drizzle-backed task, pricing, and workflow repositories against the PostgreSQL schema in `apps/api/src/db/schema.ts`.
@@ -142,6 +146,18 @@ User ownership is represented by `users` and `accounts`. Product data that belon
 Background work is handled by a Croner-backed `BackgroundTaskScheduler` when `MINA_SCHEDULER_ENABLED=true`. Each tick starts due `queued` tasks, polls due async provider tasks, and then reconciles running workflow runs. The Drizzle task repository claims due queued/running tasks with `FOR UPDATE SKIP LOCKED` before provider calls so multiple schedulers do not process the same task at the same time.
 
 Task providers are registered behind `TaskProviderRegistry` by provider key. A provider starts a task and then reports polling results as `pending`, `succeeded`, `failed`, or `cancelled`. Pending provider results keep the Mina task in `running` status and update `nextRetryAt`; only terminal provider results complete or fail the task. Transport-level polling errors use retry/backoff counters and are distinct from provider terminal failures.
+
+The task module keeps lifecycle behavior behind small internal files:
+
+- `tasks.service.ts`: public task use cases, task creation, listing, lookup, cancellation entrypoint, and worker entrypoints.
+- `lifecycle.ts`: provider start/poll result handling, terminal state transitions, retry handling, output resource persistence, and lifecycle event recording.
+- `domain.ts`: task facts such as kind, mode, provider, and model extraction.
+- `pricing.ts`: deterministic pricing request construction and actual-cost calculation.
+- `resources.ts`: task input/output resource mapping.
+- `retry.ts`: retry/backoff and expiry helpers.
+- `providers/provider.ts`: provider port types.
+- `providers/registry.ts`: provider registry dispatch.
+- `providers/dev.provider.ts`: local development provider adapter.
 
 The task API is the canonical execution entrypoint. `POST /api/tasks` creates a durable `queued` task and returns it immediately; clients then poll `GET /api/tasks/:id` or inspect `GET /api/tasks/:id/resources`. Workflow execution uses the same task queue: workflow runs create and link node tasks, then the background scheduler starts tasks and later reconciles node/run state from task terminal status. This keeps direct task submission and canvas execution on one state machine.
 

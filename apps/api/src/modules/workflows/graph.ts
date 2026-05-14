@@ -2,7 +2,7 @@ import type {
   NodeMediaViewState,
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
-} from '@mina/contracts'
+} from '@mina/contracts/modules/canvas'
 
 export type MediaWorkflowNode = WorkflowCanvasNode & {
   data: {

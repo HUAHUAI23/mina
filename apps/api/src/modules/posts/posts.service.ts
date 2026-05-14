@@ -1,4 +1,4 @@
-import type { CreatePostInput, DeletePostResponse, PostListResponse, PostResponse } from '@mina/contracts'
+import type { CreatePostInput, DeletePostResponse, PostListResponse, PostResponse } from '@mina/contracts/modules/posts'
 
 import { HttpError } from '../../lib/http/http-error'
 import type { PostRepository } from './posts.repository'

@@ -1,4 +1,4 @@
-import type { PricingRule } from '@mina/contracts'
+import type { PricingRule } from '@mina/contracts/modules/pricing'
 
 export interface PricingRepository {
   listRules(): Promise<PricingRule[]>

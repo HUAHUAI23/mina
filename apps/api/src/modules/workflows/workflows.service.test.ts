@@ -3,11 +3,12 @@ import type {
   MediaSlotConnection,
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
-} from '@mina/contracts'
+} from '@mina/contracts/modules/canvas'
 
 import { InMemoryPricingRepository } from '../pricing/pricing.repository'
 import { PricingService } from '../pricing/pricing.service'
-import { DevTaskProvider, type TaskProvider } from '../tasks/tasks.provider'
+import { DevTaskProvider } from '../tasks/providers/dev.provider'
+import type { TaskProvider } from '../tasks/providers/provider'
 import { InMemoryTaskRepository } from '../tasks/tasks.repository'
 import { TasksService } from '../tasks/tasks.service'
 import { InMemoryWorkflowRunEventLog } from './workflow-events'

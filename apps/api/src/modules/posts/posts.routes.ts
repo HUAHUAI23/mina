@@ -1,5 +1,5 @@
 import { sValidator } from '@hono/standard-validator'
-import { CreatePostSchema, PostParamsSchema } from '@mina/contracts'
+import { CreatePostSchema, PostParamsSchema } from '@mina/contracts/modules/posts'
 import { Hono } from 'hono'
 
 import type { PostsService } from './posts.service'

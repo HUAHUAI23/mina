@@ -115,6 +115,14 @@ bun run build
 bun run check
 ```
 
+### Import Boundary Check
+
+```bash
+bun run check:boundaries
+```
+
+This verifies backend contract imports, API/domain layering, and web-to-API package boundaries.
+
 ## Database
 
 The API can run against in-memory repositories or PostgreSQL repositories.

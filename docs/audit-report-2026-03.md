@@ -97,3 +97,20 @@ The follow-up audit tightened the current monorepo baseline:
 - Reworked task providers around explicit start/poll/cancel semantics so async providers can return pending results without failing tasks.
 - Added an image-count billing metric for image generation pricing.
 - Added standalone task submission with idempotency keys and moved provider execution to the scheduler/worker path so workflow runs and direct task requests share the same durable task state machine.
+
+## 2026-05-13 Backend Refactor Baseline Update
+
+The backend structure was refactored against `docs/design/backend-refactor-guidance.md`:
+
+- Kept feature route factories inside `apps/api/src/modules/*` and retained `apps/api/src/app/api-router.ts` as the central Hono route graph.
+- Added contracts module subpath exports and moved API imports away from the broad `@mina/contracts` root barrel.
+- Split task provider, pricing, resource mapping, retry, domain, and lifecycle responsibilities out of `tasks.service.ts`.
+- Split workflow run routes, workflow run service, run executor, node executor, run state, media selection, and task config responsibilities out of the previous workflow service/execution helpers.
+- Added admin-first authorization policy helpers for public resource governance while keeping user public-share requests explicitly unimplemented.
+- Added `bun run check:boundaries` as a lightweight import boundary check until full ESLint boundary tooling exists.
+- Expanded API route-level tests to cover the typed client route surface in `apps/api/src/client.ts`.
+
+Verification after the migration:
+
+- `bun run check:boundaries` passes.
+- `bun run check` passes, including workspace typecheck, tests, and builds.

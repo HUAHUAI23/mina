@@ -4,7 +4,7 @@ import {
   CreateTaskSchema,
   TaskParamsSchema,
   TaskResourceListResponseSchema,
-} from '@mina/contracts'
+} from '@mina/contracts/modules/tasks'
 import { Hono } from 'hono'
 
 import { DEFAULT_ACCOUNT_ID } from '../accounts/accounts.data'

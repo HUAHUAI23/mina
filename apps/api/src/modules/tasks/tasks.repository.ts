@@ -1,4 +1,4 @@
-import type { Task, TaskResource } from '@mina/contracts'
+import type { Task, TaskResource } from '@mina/contracts/modules/tasks'
 
 export interface TaskRepository {
   appendResources?(taskId: string, resources: TaskResource[]): Promise<void>

@@ -58,14 +58,18 @@ Task providers are registered by provider key and expose explicit start/poll/can
 
 Workflow internals:
 
-- `workflows.service.ts`: workflow CRUD, version checks, run creation, and isolated-node preflight.
-- `execution.ts`: run reconciliation, node task creation, flow-group DAG execution, and state transitions. It does not call providers directly; workflow nodes observe task status through reconciliation.
+- `workflows.service.ts`: workflow definition CRUD, version checks, MediaView updates, and node task link lookup.
+- `workflow-runs.service.ts`: run creation, run lookup/listing, cancellation, isolated-node preflight, and reconciliation entrypoints.
+- `run-executor.ts`: run reconciliation and flow-group DAG scheduling. It does not call providers directly; workflow nodes observe task status through reconciliation.
+- `node-executor.ts`: single-node task creation, task observation, node state transitions, and node event recording.
+- `run-state.ts`: initial node state creation and pure run/node state builders.
 - `graph.ts`: graph traversal and executable/group predicates.
-- `media.ts`: media-slot role/kind mapping, MediaView selection, and task config assembly.
+- `media-selection.ts`: media-slot role/kind mapping, MediaView selection, and media input conversion.
+- `task-config.ts`: image/video task config assembly and input resource collection.
 - `validation.ts`: persisted canvas and flow-group validation.
 - `workflow-events.ts`: durable workflow run and node lifecycle event logging.
 
-Task lifecycle logging lives in `apps/api/src/modules/tasks/task-events.ts`.
+Task lifecycle logic is split across `tasks.service.ts`, `lifecycle.ts`, `pricing.ts`, `resources.ts`, `retry.ts`, `domain.ts`, and `providers/*`. Durable task lifecycle logging lives in `apps/api/src/modules/tasks/task-events.ts`.
 
 User/account ownership is represented in PostgreSQL by `users` and `accounts`; task and workflow product records reference `accounts.id`. Object storage keys are account-scoped under `users/{accountId}/...`.
 

@@ -1,5 +1,5 @@
-import type { BillingMetric, Task, TaskResource } from '@mina/contracts'
-import { TaskResourceSchema, TaskSchema } from '@mina/contracts'
+import type { BillingMetric, Task, TaskResource } from '@mina/contracts/modules/tasks'
+import { TaskResourceSchema, TaskSchema } from '@mina/contracts/modules/tasks'
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm'
 
 import type { MinaDbClient } from '../../db/client'

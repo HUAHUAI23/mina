@@ -1,5 +1,5 @@
-import type { PricingRule } from '@mina/contracts'
-import { PricingRuleSchema } from '@mina/contracts'
+import type { PricingRule } from '@mina/contracts/modules/pricing'
+import { PricingRuleSchema } from '@mina/contracts/modules/pricing'
 import { desc } from 'drizzle-orm'
 
 import type { MinaDbClient } from '../../db/client'

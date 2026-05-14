@@ -1,21 +1,25 @@
+import type { User } from '@mina/contracts/modules/accounts'
 import type {
   MediaSlotConnection,
-  NodeExecutionOutput,
   NodeMediaViewState,
-  PricingRule,
+  WorkflowCanvasEdge,
+  WorkflowCanvasNode,
+} from '@mina/contracts/modules/canvas'
+import type { PricingRule } from '@mina/contracts/modules/pricing'
+import type {
+  NodeExecutionOutput,
   ResourceKind,
   ResourceRole,
   TaskConfig,
   TaskKind,
   TaskMode,
   TaskStatus,
-  User,
-  WorkflowCanvasEdge,
-  WorkflowCanvasNode,
+} from '@mina/contracts/modules/tasks'
+import type {
   WorkflowRunMode,
   WorkflowRunNodeState,
   WorkflowRunStatus,
-} from '@mina/contracts'
+} from '@mina/contracts/modules/workflows'
 import { index, integer, jsonb, numeric, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
 
 const timestamps = () => ({

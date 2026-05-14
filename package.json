@@ -61,7 +61,8 @@
     "build:web": "bun --filter @mina/web build",
     "typecheck:api": "bun --filter @mina/api typecheck",
     "typecheck:web": "bun --filter @mina/web typecheck",
-    "typecheck:contracts": "bun --filter @mina/contracts typecheck"
+    "typecheck:contracts": "bun --filter @mina/contracts typecheck",
+    "check:boundaries": "bun scripts/check-api-boundaries.ts"
   },
   "devDependencies": {
     "turbo": "^2.8.21"

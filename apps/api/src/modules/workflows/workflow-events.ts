@@ -1,4 +1,4 @@
-import type { WorkflowRun } from '@mina/contracts'
+import type { WorkflowRun } from '@mina/contracts/modules/workflows'
 
 import type { MinaDbClient } from '../../db/client'
 import { workflowRunEvents } from '../../db/schema'

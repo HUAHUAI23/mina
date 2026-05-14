@@ -1,4 +1,4 @@
-import type { Task } from '@mina/contracts'
+import type { Task } from '@mina/contracts/modules/tasks'
 
 import type { MinaDbClient } from '../../db/client'
 import { taskEvents } from '../../db/schema'

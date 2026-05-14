@@ -1,4 +1,4 @@
-import type { CreatePostInput, Post } from '@mina/contracts'
+import type { CreatePostInput, Post } from '@mina/contracts/modules/posts'
 
 export interface PostRepository {
   create(input: CreatePostInput): Promise<Post>

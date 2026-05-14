@@ -1,4 +1,4 @@
-import type { Account, User } from '@mina/contracts'
+import type { Account, User } from '@mina/contracts/modules/accounts'
 
 export const DEFAULT_USER_ID = 'user_demo'
 export const DEFAULT_ACCOUNT_ID = 'demo-account'

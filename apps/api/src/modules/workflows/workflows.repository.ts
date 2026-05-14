@@ -1,9 +1,5 @@
-import type {
-  NodeMediaViewState,
-  Workflow,
-  WorkflowRun,
-  WorkflowRunNodeState,
-} from '@mina/contracts'
+import type { NodeMediaViewState } from '@mina/contracts/modules/canvas'
+import type { Workflow, WorkflowRun, WorkflowRunNodeState } from '@mina/contracts/modules/workflows'
 
 export interface WorkflowNodeTaskLink {
   nodeId: string
