@@ -1,17 +1,16 @@
 import type {
-  MediaInput,
   NodeExecutionOutput,
   Task,
-  TaskConfig,
   TaskResource,
 } from '@mina/contracts/modules/tasks'
+import type { TaskConfig } from '@mina/contracts/modules/tasks'
 
 import { apiEnv } from '../../config/env'
 import { HttpError } from '../../lib/http/http-error'
 import type { PricingService } from '../pricing/pricing.service'
-import { modelFromConfig, providerFromConfig, taskKindFromConfig, taskModeFromKind } from './domain'
 import { TaskLifecycle } from './lifecycle'
-import { pricingInputFromConfig } from './pricing'
+import type { ModelRegistry } from './models/model-registry'
+import type { OutputPostProcessor } from './output/output-post-processor'
 import type { TaskProvider } from './providers/provider'
 import { taskResourceFromInput } from './resources'
 import type { TaskRetryConfig } from './retry'
@@ -21,7 +20,6 @@ import type { TaskRepository } from './tasks.repository'
 interface CreateTaskInput {
   accountId: string
   config: TaskConfig
-  inputResources?: MediaInput[]
 }
 
 const nowIso = (): string => new Date().toISOString()
@@ -40,6 +38,8 @@ export class TasksService {
     private readonly taskRepository: TaskRepository,
     private readonly pricingService: PricingService,
     taskProvider: TaskProvider,
+    private readonly modelRegistry: ModelRegistry,
+    outputPostProcessor: OutputPostProcessor,
     private readonly taskEventLog: TaskEventLog = new NoopTaskEventLog(),
   ) {
     this.lifecycle = new TaskLifecycle({
@@ -49,26 +49,28 @@ export class TasksService {
         retry: retryConfig(),
       },
       taskEventLog,
+      outputPostProcessor,
       taskProvider,
       taskRepository,
     })
   }
 
   async createTask(input: CreateTaskInput): Promise<Task> {
-    const kind = taskKindFromConfig(input.config)
-    const mode = taskModeFromKind(kind)
-    const pricing = await this.pricingService.estimate(pricingInputFromConfig(input.config))
+    const spec = this.modelRegistry.get(input.config.kind, input.config.provider, input.config.model)
+    const config = spec.parseConfig(input.config)
+    const mode = spec.getTaskMode(config)
+    const pricing = await this.pricingService.estimate(spec.getPricingInput(config))
     const id = createId('task')
     const createdAt = nowIso()
     const task: Task = {
       id,
       accountId: input.accountId,
-      kind,
+      kind: config.kind,
       mode,
-      provider: providerFromConfig(input.config),
-      model: modelFromConfig(input.config),
+      provider: config.provider,
+      model: config.model,
       status: 'queued',
-      config: input.config,
+      config,
       cost: {
         estimatedCost: pricing.estimatedCost,
         usage: {
@@ -81,7 +83,7 @@ export class TasksService {
       updatedAt: createdAt,
     }
 
-    const resources = (input.inputResources ?? []).map((resource, index) =>
+    const resources = spec.collectInputResources(config).map((resource, index) =>
       taskResourceFromInput(id, input.accountId, resource, index, createId),
     )
     const created = await this.taskRepository.create(task, resources)

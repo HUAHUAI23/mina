@@ -6,6 +6,7 @@ import type {
 import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 
 import { HttpError } from '../../lib/http/http-error'
+import type { TaskConfigAssembler } from '../tasks/config/task-config-assembler'
 import type { TasksService } from '../tasks/tasks.service'
 import { WorkflowRunExecutor } from './run-executor'
 import {
@@ -34,9 +35,10 @@ export class WorkflowRunsService {
   constructor(
     private readonly workflowRepository: WorkflowRepository,
     private readonly tasksService: TasksService,
+    taskConfigAssembler: TaskConfigAssembler,
     private readonly workflowRunEventLog: WorkflowRunEventLog = new NoopWorkflowRunEventLog(),
   ) {
-    this.runExecutor = new WorkflowRunExecutor(workflowRepository, tasksService, workflowRunEventLog)
+    this.runExecutor = new WorkflowRunExecutor(workflowRepository, tasksService, taskConfigAssembler, workflowRunEventLog)
   }
 
   async createRun(workflowId: string, input: CreateWorkflowRunInput): Promise<WorkflowRun> {

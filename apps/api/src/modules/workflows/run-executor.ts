@@ -1,6 +1,7 @@
 import type { WorkflowRun } from '@mina/contracts/modules/workflows'
 
 import { HttpError } from '../../lib/http/http-error'
+import type { TaskConfigAssembler } from '../tasks/config/task-config-assembler'
 import type { TasksService } from '../tasks/tasks.service'
 import {
   getExecutablePredecessors,
@@ -24,10 +25,12 @@ export class WorkflowRunExecutor {
   constructor(
     private readonly workflowRepository: WorkflowRepository,
     tasksService: TasksService,
+    taskConfigAssembler: TaskConfigAssembler,
     private readonly workflowRunEventLog: WorkflowRunEventLog = new NoopWorkflowRunEventLog(),
   ) {
     this.nodeExecutor = new WorkflowNodeExecutor({
       failRun: (run, message, nodeId) => this.failRun(run, message, nodeId),
+      taskConfigAssembler,
       tasksService,
       workflowRepository,
       workflowRunEventLog,

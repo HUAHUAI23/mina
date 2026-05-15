@@ -10,6 +10,7 @@ import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/mod
 
 import { HttpError } from '../../lib/http/http-error'
 import { DEFAULT_ACCOUNT_ID } from '../accounts/accounts.data'
+import type { TaskConfigAssembler } from '../tasks/config/task-config-assembler'
 import type { TasksService } from '../tasks/tasks.service'
 import { validateCanvas } from './validation'
 import { NoopWorkflowRunEventLog, type WorkflowRunEventLog } from './workflow-events'
@@ -29,9 +30,15 @@ export class WorkflowsService {
   constructor(
     private readonly workflowRepository: WorkflowRepository,
     tasksService: TasksService,
+    taskConfigAssembler: TaskConfigAssembler,
     workflowRunEventLog: WorkflowRunEventLog = new NoopWorkflowRunEventLog(),
   ) {
-    this.workflowRunsService = new WorkflowRunsService(workflowRepository, tasksService, workflowRunEventLog)
+    this.workflowRunsService = new WorkflowRunsService(
+      workflowRepository,
+      tasksService,
+      taskConfigAssembler,
+      workflowRunEventLog,
+    )
   }
 
   async createWorkflow(input: CreateWorkflowInput, accountId = DEFAULT_ACCOUNT_ID): Promise<Workflow> {

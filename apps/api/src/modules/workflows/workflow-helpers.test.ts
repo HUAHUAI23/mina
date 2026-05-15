@@ -4,7 +4,6 @@ import type {
   NodeExecutionOutput,
   ResourceKind,
   ResourceRole,
-  VideoGenerationConfig,
 } from '@mina/contracts/modules/tasks'
 import type {
   MediaSlotConnection,
@@ -18,7 +17,7 @@ import {
   slotToInputRole,
   slotToResourceKind,
 } from './media-selection'
-import { buildVideoTaskConfig, collectInputResources } from './task-config'
+import { buildMediaEnvelope } from './task-config'
 import { validateFlowGroup } from './validation'
 
 const imageNode = (id: string, parentId?: string): WorkflowCanvasNode => ({
@@ -32,12 +31,13 @@ const imageNode = (id: string, parentId?: string): WorkflowCanvasNode => ({
     config: {
       task: {
         kind: 'image_generation',
-        mode: 'text_to_image',
         provider: 'dev',
         model: 'dev-image',
         prompt: id,
-        size: '1024x1024',
-        count: 1,
+        params: {
+          count: 1,
+          size: '1024x1024',
+        },
       },
     },
   },
@@ -110,38 +110,33 @@ describe('workflow helper semantics', () => {
     expect(findOutputByMediaView(output, undefined, undefined)?.id).toBe('out-0')
   })
 
-  test('builds video configs with first frame, tail frame, reference audio, and reference video inputs', () => {
-    const baseConfig: VideoGenerationConfig = {
-      kind: 'video_generation',
-      provider: 'dev',
-      model: 'dev-video',
-      prompt: 'video',
-      resolution: '1080p',
-      durationSeconds: 5,
-      referenceImages: [mediaInput('image', 'reference_image', 'https://cdn.test/base.png')],
-      referenceAudios: [],
-      referenceVideos: [],
-      outputLastFrame: true,
-    }
-
+  test('builds media envelopes with first frame, tail frame, reference audio, and reference video inputs', () => {
     const firstFrame = mediaInput('image', 'first_frame', 'https://cdn.test/first.png')
     const lastFrame = mediaInput('image', 'last_frame', 'https://cdn.test/last.png')
+    const referenceImage = mediaInput('image', 'reference_image', 'https://cdn.test/base.png')
     const referenceAudio = mediaInput('audio', 'reference_audio', 'https://cdn.test/ref.mp3')
     const referenceVideo = mediaInput('video', 'reference_video', 'https://cdn.test/ref.mp4')
 
-    const config = buildVideoTaskConfig(baseConfig, {
+    const media = buildMediaEnvelope({
       firstFrame: [firstFrame],
       lastFrame: [lastFrame],
+      referenceImages: [referenceImage],
       referenceAudios: [referenceAudio],
       referenceVideos: [referenceVideo],
     })
 
-    expect(config.firstFrame).toEqual(firstFrame)
-    expect(config.lastFrame).toEqual(lastFrame)
-    expect(config.referenceImages).toHaveLength(1)
-    expect(config.referenceAudios).toEqual([referenceAudio])
-    expect(config.referenceVideos).toEqual([referenceVideo])
-    expect(collectInputResources(config).map((input) => input.role)).toEqual([
+    expect(media.firstFrame).toEqual(firstFrame)
+    expect(media.lastFrame).toEqual(lastFrame)
+    expect(media.referenceImages).toEqual([referenceImage])
+    expect(media.referenceAudios).toEqual([referenceAudio])
+    expect(media.referenceVideos).toEqual([referenceVideo])
+    expect([
+      media.firstFrame,
+      media.lastFrame,
+      ...media.referenceImages,
+      ...media.referenceAudios,
+      ...media.referenceVideos,
+    ].filter((input): input is MediaInput => input !== undefined).map((input) => input.role)).toEqual([
       'first_frame',
       'last_frame',
       'reference_image',

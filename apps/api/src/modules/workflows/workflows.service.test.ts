@@ -7,7 +7,12 @@ import type {
 
 import { InMemoryPricingRepository } from '../pricing/pricing.repository'
 import { PricingService } from '../pricing/pricing.service'
-import { DevTaskProvider } from '../tasks/providers/dev.provider'
+import { TaskConfigAssembler } from '../tasks/config/task-config-assembler'
+import { ModelRegistry } from '../tasks/models/model-registry'
+import { ProviderRouter } from '../tasks/models/provider-router'
+import { registerTaskModels } from '../tasks/models/register-models'
+import { OutputPostProcessor } from '../tasks/output/output-post-processor'
+import { DeterministicVideoCoverGenerator } from '../tasks/output/video-cover-generator'
 import type { TaskProvider } from '../tasks/providers/provider'
 import { InMemoryTaskRepository } from '../tasks/tasks.repository'
 import { TasksService } from '../tasks/tasks.service'
@@ -18,12 +23,21 @@ import { WorkflowsService } from './workflows.service'
 const createServices = () => {
   const taskRepository = new InMemoryTaskRepository()
   const workflowRunEventLog = new InMemoryWorkflowRunEventLog()
+  const modelRegistry = registerTaskModels(new ModelRegistry())
+  const taskConfigAssembler = new TaskConfigAssembler(modelRegistry)
   const tasksService = new TasksService(
     taskRepository,
     new PricingService(new InMemoryPricingRepository()),
-    new DevTaskProvider(),
+    new ProviderRouter(modelRegistry),
+    modelRegistry,
+    new OutputPostProcessor(new DeterministicVideoCoverGenerator()),
   )
-  const workflowsService = new WorkflowsService(new InMemoryWorkflowRepository(), tasksService, workflowRunEventLog)
+  const workflowsService = new WorkflowsService(
+    new InMemoryWorkflowRepository(),
+    tasksService,
+    taskConfigAssembler,
+    workflowRunEventLog,
+  )
 
   return {
     taskRepository,
@@ -50,12 +64,13 @@ const imageNode = (id: string, count: number, parentId?: string): WorkflowCanvas
     config: {
       task: {
         kind: 'image_generation',
-        mode: 'text_to_image',
         provider: 'dev',
         model: 'dev-image',
         prompt: `prompt ${id}`,
-        size: '1024x1024',
-        count,
+        params: {
+          count,
+          size: '1024x1024',
+        },
       },
     },
   },
@@ -75,12 +90,11 @@ const videoNode = (id: string, parentId?: string): WorkflowCanvasNode => ({
         provider: 'dev',
         model: 'dev-video',
         prompt: `prompt ${id}`,
-        resolution: '1080p',
-        durationSeconds: 5,
-        referenceImages: [],
-        referenceAudios: [],
-        referenceVideos: [],
-        outputLastFrame: true,
+        params: {
+          durationSeconds: 5,
+          outputLastFrame: true,
+          resolution: '1080p',
+        },
       },
     },
   },
@@ -198,6 +212,40 @@ describe('WorkflowsService execution semantics', () => {
     })
   })
 
+  test('fails execution when node type and task kind do not match', async () => {
+    const { workflowsService } = createServices()
+    const baseNode = imageNode('image', 1)
+    const invalidNode: WorkflowCanvasNode = {
+      ...baseNode,
+      data: {
+        nodeType: 'image_generation',
+        title: 'image',
+        config: {
+          task: {
+            kind: 'video_generation',
+            provider: 'dev',
+            model: 'dev-video',
+            prompt: 'wrong kind',
+            params: {},
+          },
+        },
+      },
+    }
+    const workflow = await workflowsService.createWorkflow({
+      name: 'kind mismatch',
+      nodes: [invalidNode],
+      edges: [],
+    })
+
+    const run = await workflowsService.createRun(workflow.id, {
+      selectedNodeId: 'image',
+      expectedWorkflowVersion: workflow.version,
+    })
+
+    expect(run.status).toBe('failed')
+    expect(run.error).toContain('task kind does not match node type')
+  })
+
   test('flow group executes all roots and resolves selected run outputs by role and index', async () => {
     const { taskRepository, tasksService, workflowsService } = createServices()
     const workflow = await workflowsService.createWorkflow({
@@ -254,6 +302,7 @@ describe('WorkflowsService execution semantics', () => {
     expect(completedRun?.nodeStates.b?.output?.resources.map((resource) => resource.role)).toEqual([
       'generated_video',
       'last_frame',
+      'video_cover',
     ])
   })
 
@@ -334,14 +383,19 @@ describe('WorkflowsService execution semantics', () => {
       }),
     }
     const workflowRunEventLog = new InMemoryWorkflowRunEventLog()
+    const modelRegistry = registerTaskModels(new ModelRegistry())
+    const taskConfigAssembler = new TaskConfigAssembler(modelRegistry)
     const tasksService = new TasksService(
       new InMemoryTaskRepository(),
       new PricingService(new InMemoryPricingRepository()),
       failingProvider,
+      modelRegistry,
+      new OutputPostProcessor(new DeterministicVideoCoverGenerator()),
     )
     const workflowsService = new WorkflowsService(
       new InMemoryWorkflowRepository(),
       tasksService,
+      taskConfigAssembler,
       workflowRunEventLog,
     )
     const workflow = await workflowsService.createWorkflow({

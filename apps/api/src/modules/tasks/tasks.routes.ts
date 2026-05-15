@@ -20,7 +20,6 @@ export const createTasksRoutes = (tasksService: TasksService): Hono =>
           item: await tasksService.createTask({
             accountId: DEFAULT_ACCOUNT_ID,
             config: payload.config,
-            inputResources: payload.inputResources,
           }),
         },
         201,

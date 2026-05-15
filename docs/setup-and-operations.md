@@ -30,6 +30,8 @@ Environment variables are validated with `@t3-oss/env-core` and Zod during start
 | `MINA_LOG_LEVEL` | Pino log level | `info` |
 | `MINA_PERSISTENCE_DRIVER` | API persistence driver, either `memory` or `postgres` | `memory` |
 | `MINA_DATABASE_URL` | PostgreSQL URL used when `MINA_PERSISTENCE_DRIVER=postgres` | `postgres://postgres:postgres@localhost:5432/mina` |
+| `GOOGLE_API_BASE_URL` | Google Gemini/Veo API base URL | `https://generativelanguage.googleapis.com` |
+| `GOOGLE_API_KEY` | Google API key for Gemini image and Veo video providers | empty |
 | `MINA_SCHEDULER_CRON` | Croner expression for task/workflow scheduler ticks | `*/5 * * * * *` |
 | `MINA_SCHEDULER_ENABLED` | Enables the background task/workflow scheduler outside tests | `false` |
 | `MINA_STORAGE_DRIVER` | Object storage driver, either `memory` or `s3` | `memory` |
@@ -40,6 +42,11 @@ Environment variables are validated with `@t3-oss/env-core` and Zod during start
 | `MINA_TASK_POLL_LEASE_SECONDS` | Poll claim lease duration for concurrent schedulers | `30` |
 | `MINA_TASK_POLL_MAX_INTERVAL_SECONDS` | Maximum provider polling delay or retry backoff | `120` |
 | `MINA_TASK_PROVIDER_ERROR_MAX_RETRIES` | Maximum transport-level provider polling retries before task failure | `8` |
+| `VOLCENGINE_ARK_API_KEY` | Default Volcengine Ark API key for Seedream/Seedance providers | empty |
+| `VOLCENGINE_ARK_BASE_URL` | Volcengine Ark API base URL | `https://ark.cn-beijing.volces.com/api/v3` |
+| `VOLCENGINE_ARK_MODEL_API_KEYS` | JSON object of model-specific Volcengine API keys | empty |
+| `VOLCENGINE_IMAGE_MODEL_ALIASES` | JSON object mapping Mina image model ids to Volcengine upstream model ids | empty |
+| `VOLCENGINE_VIDEO_MODEL_ALIASES` | JSON object mapping Mina video model ids to Volcengine upstream model ids | empty |
 | `MINA_S3_REGION` | S3 client region when `MINA_STORAGE_DRIVER=s3` | `us-east-1` |
 | `MINA_S3_BUCKET` | S3 bucket when `MINA_STORAGE_DRIVER=s3` | empty |
 | `MINA_S3_ENDPOINT` | Optional S3-compatible endpoint | empty |

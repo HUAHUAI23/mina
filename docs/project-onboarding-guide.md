@@ -54,7 +54,7 @@ API modules:
 
 Tasks are a standalone execution primitive. `POST /api/tasks` creates a durable queued task and returns before provider execution. The scheduler/worker path starts queued tasks, polls async provider work, and writes terminal task status and resources.
 
-Task providers are registered by provider key and expose explicit start/poll/cancel semantics. Async provider polling can return pending without failing the task; terminal succeeded/failed/cancelled results drive the durable task status.
+Task providers are registered as model specs in `ModelRegistry` and dispatched through `ProviderRouter`. Each model spec owns parameter validation, defaults, pricing input, task mode, input resources, and provider request/output mapping. Async provider polling can return pending without failing the task; terminal succeeded/failed/cancelled results drive the durable task status.
 
 Workflow internals:
 
@@ -65,11 +65,11 @@ Workflow internals:
 - `run-state.ts`: initial node state creation and pure run/node state builders.
 - `graph.ts`: graph traversal and executable/group predicates.
 - `media-selection.ts`: media-slot role/kind mapping, MediaView selection, and media input conversion.
-- `task-config.ts`: image/video task config assembly and input resource collection.
+- `task-config.ts`: media envelope assembly for task config preparation.
 - `validation.ts`: persisted canvas and flow-group validation.
 - `workflow-events.ts`: durable workflow run and node lifecycle event logging.
 
-Task lifecycle logic is split across `tasks.service.ts`, `lifecycle.ts`, `pricing.ts`, `resources.ts`, `retry.ts`, `domain.ts`, and `providers/*`. Durable task lifecycle logging lives in `apps/api/src/modules/tasks/task-events.ts`.
+Task lifecycle logic is split across `tasks.service.ts`, `lifecycle.ts`, `models/*`, `config/*`, `output/*`, `pricing.ts`, `resources.ts`, `retry.ts`, and `providers/*`. Durable task lifecycle logging lives in `apps/api/src/modules/tasks/task-events.ts`.
 
 User/account ownership is represented in PostgreSQL by `users` and `accounts`; task and workflow product records reference `accounts.id`. Object storage keys are account-scoped under `users/{accountId}/...`.
 

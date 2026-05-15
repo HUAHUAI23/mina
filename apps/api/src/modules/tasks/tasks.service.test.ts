@@ -1,12 +1,53 @@
 import { describe, expect, test } from 'bun:test'
+import type { TaskConfig } from '@mina/contracts/modules/tasks'
 
 import { InMemoryPricingRepository } from '../pricing/pricing.repository'
 import { PricingService } from '../pricing/pricing.service'
+import { ModelRegistry } from './models/model-registry'
+import { ProviderRouter } from './models/provider-router'
+import { registerTaskModels } from './models/register-models'
+import { OutputPostProcessor } from './output/output-post-processor'
+import { DeterministicVideoCoverGenerator } from './output/video-cover-generator'
 import { InMemoryTaskEventLog } from './task-events'
-import { DevTaskProvider } from './providers/dev.provider'
 import type { TaskProvider } from './providers/provider'
 import { InMemoryTaskRepository } from './tasks.repository'
 import { TasksService } from './tasks.service'
+
+const imageConfig = (count = 1): TaskConfig => ({
+  kind: 'image_generation',
+  provider: 'dev',
+  model: 'dev-image',
+  prompt: 'image',
+  media: {
+    inputImages: [],
+    referenceImages: [],
+    referenceAudios: [],
+    referenceVideos: [],
+  },
+  params: {
+    count,
+    size: '1024x1024',
+  },
+})
+
+const videoConfig = (params: Record<string, unknown> = {}): TaskConfig => ({
+  kind: 'video_generation',
+  provider: 'dev',
+  model: 'dev-video',
+  prompt: 'video',
+  media: {
+    inputImages: [],
+    referenceImages: [],
+    referenceAudios: [],
+    referenceVideos: [],
+  },
+  params: {
+    durationSeconds: 2,
+    outputLastFrame: false,
+    resolution: '720p',
+    ...params,
+  },
+})
 
 const videoOutput = (taskId: string) => ({
   resources: [
@@ -23,13 +64,16 @@ const videoOutput = (taskId: string) => ({
   },
 })
 
-const createService = (taskProvider: TaskProvider = new DevTaskProvider()) => {
+const createService = (taskProvider?: TaskProvider) => {
   const taskEventLog = new InMemoryTaskEventLog()
   const taskRepository = new InMemoryTaskRepository()
+  const modelRegistry = registerTaskModels(new ModelRegistry())
   const tasksService = new TasksService(
     taskRepository,
     new PricingService(new InMemoryPricingRepository()),
-    taskProvider,
+    taskProvider ?? new ProviderRouter(modelRegistry),
+    modelRegistry,
+    new OutputPostProcessor(new DeterministicVideoCoverGenerator()),
     taskEventLog,
   )
 
@@ -41,15 +85,7 @@ describe('TasksService event logging', () => {
     const { tasksService } = createService()
     const task = await tasksService.createTask({
       accountId: 'account',
-      config: {
-        kind: 'image_generation',
-        mode: 'text_to_image',
-        provider: 'dev',
-        model: 'dev-image',
-        prompt: 'image',
-        size: '1024x1024',
-        count: 3,
-      },
+      config: imageConfig(3),
     })
 
     expect(task.cost.usage).toEqual({
@@ -63,15 +99,7 @@ describe('TasksService event logging', () => {
     const { taskEventLog, tasksService } = createService()
     const task = await tasksService.createTask({
       accountId: 'account',
-      config: {
-        kind: 'image_generation',
-        mode: 'text_to_image',
-        provider: 'dev',
-        model: 'dev-image',
-        prompt: 'image',
-        size: '1024x1024',
-        count: 1,
-      },
+      config: imageConfig(),
     })
 
     const completed = await tasksService.runTask(task.id)
@@ -93,15 +121,7 @@ describe('TasksService event logging', () => {
     const { tasksService } = createService()
     const input = {
       accountId: 'account',
-      config: {
-        kind: 'image_generation' as const,
-        mode: 'text_to_image' as const,
-        provider: 'dev',
-        model: 'dev-image',
-        prompt: 'image',
-        size: '1024x1024',
-        count: 1,
-      },
+      config: imageConfig(),
     }
 
     const first = await tasksService.createTask(input)
@@ -114,15 +134,7 @@ describe('TasksService event logging', () => {
     const { taskEventLog, tasksService } = createService()
     const task = await tasksService.createTask({
       accountId: 'account',
-      config: {
-        kind: 'image_generation',
-        mode: 'text_to_image',
-        provider: 'dev',
-        model: 'dev-image',
-        prompt: 'image',
-        size: '1024x1024',
-        count: 1,
-      },
+      config: imageConfig(),
     })
 
     const [completed] = await tasksService.startQueuedTasks()
@@ -135,6 +147,62 @@ describe('TasksService event logging', () => {
       'task.started',
       'task.succeeded',
     ])
+  })
+
+  test('validates standalone task media through the model spec before creation', async () => {
+    const { tasksService } = createService()
+
+    await expect(
+      tasksService.createTask({
+        accountId: 'account',
+        config: {
+          kind: 'video_generation',
+          provider: 'google',
+          model: 'veo-3.1-generate-preview',
+          prompt: 'video',
+          media: {
+            inputImages: [],
+            lastFrame: {
+              kind: 'image',
+              role: 'last_frame',
+              url: 'data:image/png;base64,abc',
+            },
+            referenceImages: [],
+            referenceAudios: [],
+            referenceVideos: [],
+          },
+          params: {},
+        },
+      }),
+    ).rejects.toThrow('lastFrame requires firstFrame')
+  })
+
+  test('validates standalone task media capabilities before creation', async () => {
+    const { tasksService } = createService()
+    const referenceImages = Array.from({ length: 4 }, (_unused, index) => ({
+      kind: 'image' as const,
+      role: 'reference_image' as const,
+      url: `data:image/png;base64,${index}`,
+    }))
+
+    await expect(
+      tasksService.createTask({
+        accountId: 'account',
+        config: {
+          kind: 'video_generation',
+          provider: 'google',
+          model: 'veo-3.1-generate-preview',
+          prompt: 'video',
+          media: {
+            inputImages: [],
+            referenceAudios: [],
+            referenceImages,
+            referenceVideos: [],
+          },
+          params: {},
+        },
+      }),
+    ).rejects.toThrow('supports at most 3')
   })
 
   test('retries provider start transport errors without failing the task immediately', async () => {
@@ -151,15 +219,7 @@ describe('TasksService event logging', () => {
     const { taskEventLog, tasksService } = createService(failingProvider)
     const task = await tasksService.createTask({
       accountId: 'account',
-      config: {
-        kind: 'image_generation',
-        mode: 'text_to_image',
-        provider: 'dev',
-        model: 'dev-image',
-        prompt: 'image',
-        size: '1024x1024',
-        count: 1,
-      },
+      config: imageConfig(),
     })
 
     const retried = await tasksService.startQueuedTasks()
@@ -207,18 +267,7 @@ describe('TasksService event logging', () => {
     const { taskEventLog, tasksService } = createService(asyncProvider)
     const task = await tasksService.createTask({
       accountId: 'account',
-      config: {
-        kind: 'video_generation',
-        provider: 'dev',
-        model: 'dev-video',
-        prompt: 'video',
-        resolution: '720p',
-        durationSeconds: 2,
-        referenceImages: [],
-        referenceAudios: [],
-        referenceVideos: [],
-        outputLastFrame: false,
-      },
+      config: videoConfig(),
     })
 
     const [submitted] = await tasksService.startQueuedTasks()
@@ -234,6 +283,7 @@ describe('TasksService event logging', () => {
     const [completed] = await tasksService.pollAsyncTasks()
     expect(completed?.status).toBe('succeeded')
     expect(completed?.output?.resources[0]?.role).toBe('generated_video')
+    expect(completed?.output?.resources[1]?.role).toBe('video_cover')
 
     const events = await taskEventLog.listEvents(task.id)
     expect(events.map((event) => event.eventType)).toEqual([
@@ -260,18 +310,7 @@ describe('TasksService event logging', () => {
     const { taskEventLog, tasksService } = createService(flakyProvider)
     const task = await tasksService.createTask({
       accountId: 'account',
-      config: {
-        kind: 'video_generation',
-        provider: 'dev',
-        model: 'dev-video',
-        prompt: 'video',
-        resolution: '720p',
-        durationSeconds: 2,
-        referenceImages: [],
-        referenceAudios: [],
-        referenceVideos: [],
-        outputLastFrame: false,
-      },
+      config: videoConfig(),
     })
 
     await tasksService.startQueuedTasks()

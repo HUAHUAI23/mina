@@ -13,6 +13,8 @@ const DEFAULT_TASK_POLL_DEFAULT_INTERVAL_SECONDS = 10
 const DEFAULT_TASK_POLL_LEASE_SECONDS = 30
 const DEFAULT_TASK_POLL_MAX_INTERVAL_SECONDS = 120
 const DEFAULT_TASK_PROVIDER_ERROR_MAX_RETRIES = 8
+const DEFAULT_GOOGLE_API_BASE_URL = 'https://generativelanguage.googleapis.com'
+const DEFAULT_VOLCENGINE_ARK_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
 
 const booleanEnvSchema = z
   .enum(['true', 'false'])
@@ -26,6 +28,8 @@ const env = createEnv({
     MINA_ALLOWED_ORIGIN: z.string().trim().min(1).default(DEFAULT_ALLOWED_ORIGIN),
     MINA_API_PORT: z.coerce.number().int().positive().default(DEFAULT_API_PORT),
     MINA_DATABASE_URL: z.url().optional(),
+    GOOGLE_API_BASE_URL: z.url().default(DEFAULT_GOOGLE_API_BASE_URL),
+    GOOGLE_API_KEY: optionalNonEmptyStringSchema,
     MINA_LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
     MINA_PERSISTENCE_DRIVER: z.enum(['memory', 'postgres']).default('memory'),
     MINA_S3_ACCESS_KEY_ID: optionalNonEmptyStringSchema,
@@ -57,6 +61,11 @@ const env = createEnv({
       .int()
       .nonnegative()
       .default(DEFAULT_TASK_PROVIDER_ERROR_MAX_RETRIES),
+    VOLCENGINE_ARK_API_KEY: optionalNonEmptyStringSchema,
+    VOLCENGINE_ARK_BASE_URL: z.url().default(DEFAULT_VOLCENGINE_ARK_BASE_URL),
+    VOLCENGINE_ARK_MODEL_API_KEYS: optionalNonEmptyStringSchema,
+    VOLCENGINE_IMAGE_MODEL_ALIASES: optionalNonEmptyStringSchema,
+    VOLCENGINE_VIDEO_MODEL_ALIASES: optionalNonEmptyStringSchema,
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   },
   runtimeEnv: process.env,
@@ -66,6 +75,8 @@ const env = createEnv({
 export const apiEnv = {
   allowedOrigin: env.MINA_ALLOWED_ORIGIN,
   databaseUrl: env.MINA_DATABASE_URL,
+  googleApiBaseUrl: env.GOOGLE_API_BASE_URL,
+  googleApiKey: env.GOOGLE_API_KEY,
   logLevel: env.MINA_LOG_LEVEL,
   persistenceDriver: env.MINA_PERSISTENCE_DRIVER,
   s3AccessKeyId: env.MINA_S3_ACCESS_KEY_ID,
@@ -85,6 +96,11 @@ export const apiEnv = {
   taskPollLeaseSeconds: env.MINA_TASK_POLL_LEASE_SECONDS,
   taskPollMaxIntervalSeconds: env.MINA_TASK_POLL_MAX_INTERVAL_SECONDS,
   taskProviderErrorMaxRetries: env.MINA_TASK_PROVIDER_ERROR_MAX_RETRIES,
+  volcengineArkApiKey: env.VOLCENGINE_ARK_API_KEY,
+  volcengineArkBaseUrl: env.VOLCENGINE_ARK_BASE_URL,
+  volcengineArkModelApiKeys: env.VOLCENGINE_ARK_MODEL_API_KEYS,
+  volcengineImageModelAliases: env.VOLCENGINE_IMAGE_MODEL_ALIASES,
+  volcengineVideoModelAliases: env.VOLCENGINE_VIDEO_MODEL_ALIASES,
   nodeEnv: env.NODE_ENV,
   port: env.MINA_API_PORT,
 } as const

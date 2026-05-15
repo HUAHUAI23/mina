@@ -8,10 +8,14 @@ import { PostsService } from '../modules/posts/posts.service'
 import { DrizzlePricingRepository } from '../modules/pricing/pricing.drizzle-repository'
 import { InMemoryPricingRepository } from '../modules/pricing/pricing.repository'
 import { PricingService } from '../modules/pricing/pricing.service'
+import { TaskConfigAssembler } from '../modules/tasks/config/task-config-assembler'
+import { ModelRegistry } from '../modules/tasks/models/model-registry'
+import { ProviderRouter } from '../modules/tasks/models/provider-router'
+import { registerTaskModels } from '../modules/tasks/models/register-models'
+import { OutputPostProcessor } from '../modules/tasks/output/output-post-processor'
+import { FfmpegVideoCoverGenerator } from '../modules/tasks/output/video-cover-generator'
 import { DrizzleTaskEventLog, InMemoryTaskEventLog } from '../modules/tasks/task-events'
 import { DrizzleTaskRepository } from '../modules/tasks/tasks.drizzle-repository'
-import { DevTaskProvider } from '../modules/tasks/providers/dev.provider'
-import { TaskProviderRegistry } from '../modules/tasks/providers/registry'
 import { InMemoryTaskRepository } from '../modules/tasks/tasks.repository'
 import { TasksService } from '../modules/tasks/tasks.service'
 import { DrizzleWorkflowRunEventLog, InMemoryWorkflowRunEventLog } from '../modules/workflows/workflow-events'
@@ -50,17 +54,22 @@ export const createAppDependencies = (): AppDependencies => {
 
   const pricingService = new PricingService(repositories.pricingRepository)
   const storage = createObjectStorage()
+  const modelRegistry = registerTaskModels(new ModelRegistry())
+  const taskConfigAssembler = new TaskConfigAssembler(modelRegistry)
+  const taskProvider = new ProviderRouter(modelRegistry)
+  const outputPostProcessor = new OutputPostProcessor(new FfmpegVideoCoverGenerator(storage))
   const tasksService = new TasksService(
     repositories.taskRepository,
     pricingService,
-    new TaskProviderRegistry({
-      dev: new DevTaskProvider(),
-    }),
+    taskProvider,
+    modelRegistry,
+    outputPostProcessor,
     repositories.taskEventLog,
   )
   const workflowsService = new WorkflowsService(
     repositories.workflowRepository,
     tasksService,
+    taskConfigAssembler,
     repositories.workflowRunEventLog,
   )
 

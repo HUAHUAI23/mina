@@ -1,11 +1,10 @@
 import { z } from 'zod'
 
 import {
-  ImageGenerationConfigSchema,
   ResourceKindSchema,
   ResourceRefSchema,
   ResourceRoleSchema,
-  VideoGenerationConfigSchema,
+  TaskDraftConfigSchema,
 } from '../tasks/task.schemas'
 
 export const WorkflowNodeTypeSchema = z.enum([
@@ -23,11 +22,11 @@ export const NodeMediaViewStateSchema = z.object({
 })
 
 export const ImageGenerationNodeConfigSchema = z.object({
-  task: ImageGenerationConfigSchema.optional(),
+  task: TaskDraftConfigSchema.optional(),
 })
 
 export const VideoGenerationNodeConfigSchema = z.object({
-  task: VideoGenerationConfigSchema.optional(),
+  task: TaskDraftConfigSchema.optional(),
 })
 
 export const FlowGroupNodeConfigSchema = z.object({

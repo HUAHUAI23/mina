@@ -112,12 +112,13 @@ describe('mina api', () => {
       body: JSON.stringify({
         config: {
           kind: 'image_generation',
-          mode: 'text_to_image',
           provider: 'dev',
           model: 'dev-image',
           prompt: 'route task',
-          size: '1024x1024',
-          count: 1,
+          params: {
+            count: 1,
+            size: '1024x1024',
+          },
         },
       }),
     })
@@ -137,12 +138,13 @@ describe('mina api', () => {
       body: JSON.stringify({
         config: {
           kind: 'image_generation',
-          mode: 'text_to_image',
           provider: 'dev',
           model: 'dev-image',
           prompt: 'route task coverage',
-          size: '1024x1024',
-          count: 1,
+          params: {
+            count: 1,
+            size: '1024x1024',
+          },
         },
       }),
     })
@@ -190,12 +192,13 @@ describe('mina api', () => {
               config: {
                 task: {
                   kind: 'image_generation',
-                  mode: 'text_to_image',
                   provider: 'dev',
                   model: 'dev-image',
                   prompt: 'route test',
-                  size: '1024x1024',
-                  count: 1,
+                  params: {
+                    count: 1,
+                    size: '1024x1024',
+                  },
                 },
               },
             },
@@ -245,12 +248,13 @@ describe('mina api', () => {
               config: {
                 task: {
                   kind: 'image_generation',
-                  mode: 'text_to_image',
                   provider: 'dev',
                   model: 'dev-image',
                   prompt: 'route coverage',
-                  size: '1024x1024',
-                  count: 1,
+                  params: {
+                    count: 1,
+                    size: '1024x1024',
+                  },
                 },
               },
             },

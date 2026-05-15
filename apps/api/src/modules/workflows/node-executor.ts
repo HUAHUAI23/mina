@@ -7,6 +7,7 @@ import type {
 import type { MediaSlotConnection, WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import type { WorkflowRun } from '@mina/contracts/modules/workflows'
 
+import type { TaskConfigAssembler } from '../tasks/config/task-config-assembler'
 import type { TasksService } from '../tasks/tasks.service'
 import { getIncomingEdges, getNodeMap, isMediaWorkflowNode } from './graph'
 import {
@@ -20,7 +21,7 @@ import {
   slotToResourceKind,
 } from './media-selection'
 import { workflowNodeRunningState, workflowNodeSucceededState } from './run-state'
-import { buildImageTaskConfig, buildVideoTaskConfig, collectInputResources } from './task-config'
+import { buildMediaEnvelope } from './task-config'
 import { workflowRunEventPayload, type WorkflowRunEventLog } from './workflow-events'
 import type { WorkflowRepository } from './workflows.repository'
 
@@ -31,6 +32,7 @@ export interface ExecuteNodeResult {
 
 interface WorkflowNodeExecutorDependencies {
   failRun(run: WorkflowRun, message: string, nodeId?: string): Promise<WorkflowRun>
+  taskConfigAssembler: TaskConfigAssembler
   tasksService: TasksService
   workflowRepository: WorkflowRepository
   workflowRunEventLog: WorkflowRunEventLog
@@ -71,19 +73,20 @@ export class WorkflowNodeExecutor {
 
     try {
       const taskConfig = await this.buildTaskConfigForNode(run, node)
-      const inputResources = collectInputResources(taskConfig)
       const task = await this.dependencies.tasksService.createTask({
         accountId: run.accountId,
         config: taskConfig,
-        inputResources,
       })
       await this.dependencies.workflowRepository.linkNodeTask({
         workflowRunId: run.id,
         nodeId: node.id,
         taskId: task.id,
       })
+      const inputResourceCount = (await this.dependencies.tasksService.listTaskResources(task.id)).filter(
+        (resource) => resource.direction === 'input',
+      ).length
       await this.recordWorkflowRunEvent(run, 'workflow.node.task_created', 'Workflow node task was created.', {
-        inputResourceCount: inputResources.length,
+        inputResourceCount,
         nodeId: node.id,
         taskId: task.id,
       })
@@ -113,19 +116,11 @@ export class WorkflowNodeExecutor {
     if (!node.data.config.task) {
       throw new Error('Executable node is missing task config.')
     }
+    if (node.data.config.task.kind !== node.data.nodeType) {
+      throw new Error('Executable node task kind does not match node type.')
+    }
 
     const inputs = await this.resolveIncomingMediaInputs(run, node)
-    if (node.data.nodeType === 'image_generation') {
-      return buildImageTaskConfig(
-        node.data.config.task,
-        inputs.filter((item) => item.targetSlot === 'inputImages').map((item) => item.input),
-      )
-    }
-
-    if (node.data.config.task.kind !== 'video_generation') {
-      throw new Error('Video node task config is invalid.')
-    }
-
     const inputsBySlot = inputs.reduce<Partial<Record<MediaSlotConnection['targetSlot'], MediaInput[]>>>(
       (accumulator, item) => ({
         ...accumulator,
@@ -133,7 +128,10 @@ export class WorkflowNodeExecutor {
       }),
       {},
     )
-    return buildVideoTaskConfig(node.data.config.task, inputsBySlot)
+    return this.dependencies.taskConfigAssembler.prepare({
+      draft: node.data.config.task,
+      media: buildMediaEnvelope(inputsBySlot),
+    })
   }
 
   private async resolveIncomingMediaInputs(run: WorkflowRun, node: WorkflowCanvasNode): Promise<ResolvedMediaInput[]> {
