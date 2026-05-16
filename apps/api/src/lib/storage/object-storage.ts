@@ -1,6 +1,6 @@
 export type ObjectStorageBody = Blob | ReadableStream | string | Uint8Array
 
-export type StorageObjectScope = 'assets' | 'task-inputs' | 'task-outputs' | 'temporary' | 'uploads'
+export type StorageObjectScope = 'assets' | 'media' | 'task-inputs' | 'task-outputs' | 'temporary' | 'uploads'
 
 export interface StoredObject {
   bucket: string

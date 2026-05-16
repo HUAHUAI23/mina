@@ -1,12 +1,16 @@
 import { describe, expect, test } from 'bun:test'
 import type { TaskConfig } from '@mina/contracts/modules/tasks'
 
+import { InMemoryObjectStorage } from '../../lib/storage/in-memory-object-storage'
+import { InMemoryMediaObjectRepository } from '../media/media-object.repository'
+import { MediaObjectService } from '../media/media-object.service'
 import { InMemoryPricingRepository } from '../pricing/pricing.repository'
 import { PricingService } from '../pricing/pricing.service'
 import { ModelRegistry } from './models/model-registry'
 import { ProviderRouter } from './models/provider-router'
 import { registerTaskModels } from './models/register-models'
 import { OutputPostProcessor } from './output/output-post-processor'
+import { TaskOutputFinalizer } from './output/task-output-finalizer'
 import { DeterministicVideoCoverGenerator } from './output/video-cover-generator'
 import { InMemoryTaskEventLog } from './task-events'
 import type { TaskProvider } from './providers/provider'
@@ -68,16 +72,28 @@ const createService = (taskProvider?: TaskProvider) => {
   const taskEventLog = new InMemoryTaskEventLog()
   const taskRepository = new InMemoryTaskRepository()
   const modelRegistry = registerTaskModels(new ModelRegistry())
+  const mediaObjectService = new MediaObjectService(
+    new InMemoryMediaObjectRepository(),
+    new InMemoryObjectStorage(),
+    {
+      fetch: async () => {
+        throw new Error('fetcher not configured')
+      },
+    },
+  )
   const tasksService = new TasksService(
     taskRepository,
     new PricingService(new InMemoryPricingRepository()),
     taskProvider ?? new ProviderRouter(modelRegistry),
     modelRegistry,
-    new OutputPostProcessor(new DeterministicVideoCoverGenerator()),
+    new TaskOutputFinalizer(mediaObjectService),
+    new OutputPostProcessor(
+      new DeterministicVideoCoverGenerator(mediaObjectService),
+    ),
     taskEventLog,
   )
 
-  return { taskEventLog, tasksService }
+  return { mediaObjectService, taskEventLog, taskRepository, tasksService }
 }
 
 describe('TasksService event logging', () => {
@@ -106,7 +122,11 @@ describe('TasksService event logging', () => {
     expect(completed.status).toBe('succeeded')
 
     const events = await taskEventLog.listEvents(task.id)
-    expect(events.map((event) => event.eventType)).toEqual(['task.created', 'task.started', 'task.succeeded'])
+    expect(events.map((event) => event.eventType)).toEqual([
+      'task.created',
+      'task.started',
+      'task.succeeded',
+    ])
     expect(events[0]?.payload).toMatchObject({
       estimatedCost: 1,
       status: 'queued',
@@ -131,7 +151,7 @@ describe('TasksService event logging', () => {
   })
 
   test('starts queued tasks from the background worker path', async () => {
-    const { taskEventLog, tasksService } = createService()
+    const { taskEventLog, taskRepository, tasksService } = createService()
     const task = await tasksService.createTask({
       accountId: 'account',
       config: imageConfig(),
@@ -142,11 +162,17 @@ describe('TasksService event logging', () => {
     expect(completed?.id).toBe(task.id)
     expect(completed?.status).toBe('succeeded')
     expect(completed?.output?.resources[0]?.role).toBe('generated_image')
-    expect((await taskEventLog.listEvents(task.id)).map((event) => event.eventType)).toEqual([
-      'task.created',
-      'task.started',
-      'task.succeeded',
-    ])
+    expect(completed?.output?.resources[0]?.mediaObjectId).toMatch(/^media_/)
+    expect(completed?.output?.resources[0]?.url).toContain('/media/')
+    const outputResources = (
+      await taskRepository.listResources(task.id)
+    ).filter((resource) => resource.direction === 'output')
+    expect(outputResources[0]?.mediaObjectId).toBe(
+      completed?.output?.resources[0]?.mediaObjectId,
+    )
+    expect(
+      (await taskEventLog.listEvents(task.id)).map((event) => event.eventType),
+    ).toEqual(['task.created', 'task.started', 'task.succeeded'])
   })
 
   test('validates standalone task media through the model spec before creation', async () => {
@@ -231,7 +257,11 @@ describe('TasksService event logging', () => {
       message: 'Provider failed.',
     })
     const events = await taskEventLog.listEvents(task.id)
-    expect(events.map((event) => event.eventType)).toEqual(['task.created', 'task.started', 'task.start.retry'])
+    expect(events.map((event) => event.eventType)).toEqual([
+      'task.created',
+      'task.started',
+      'task.start.retry',
+    ])
     expect(events[2]?.payload).toMatchObject({
       retryCount: 1,
       status: 'queued',
@@ -283,7 +313,9 @@ describe('TasksService event logging', () => {
     const [completed] = await tasksService.pollAsyncTasks()
     expect(completed?.status).toBe('succeeded')
     expect(completed?.output?.resources[0]?.role).toBe('generated_video')
+    expect(completed?.output?.resources[0]?.mediaObjectId).toMatch(/^media_/)
     expect(completed?.output?.resources[1]?.role).toBe('video_cover')
+    expect(completed?.output?.resources[1]?.mediaObjectId).toMatch(/^media_/)
 
     const events = await taskEventLog.listEvents(task.id)
     expect(events.map((event) => event.eventType)).toEqual([

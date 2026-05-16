@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import type { NodeOutputResource } from '@mina/contracts/modules/tasks'
 
-import type { ObjectStorage } from '../../../lib/storage/object-storage'
+import type { MediaObjectService } from '../../media/media-object.service'
 
 export interface VideoCoverGeneratorInput {
   accountId: string
@@ -18,7 +18,41 @@ export interface VideoCoverGenerator {
 }
 
 export class DeterministicVideoCoverGenerator implements VideoCoverGenerator {
+  constructor(private readonly mediaObjectService?: MediaObjectService) {}
+
   async generateCover(input: VideoCoverGeneratorInput): Promise<NodeOutputResource> {
+    if (this.mediaObjectService) {
+      const mediaObject = await this.mediaObjectService.createFromBuffer({
+        accountId: input.accountId,
+        body: new TextEncoder().encode(`${input.taskId}:${input.video.id}:cover`),
+        kind: 'image',
+        mimeType: 'image/jpeg',
+        metadata: {
+          frameTimeSeconds: 0,
+          parentMediaObjectId: input.video.mediaObjectId,
+          sourceVideoResourceId: input.video.id,
+        },
+        objectNameKind: 'cover',
+        origin: 'system_generated',
+        ...(input.video.mediaObjectId ? { parentMediaObjectId: input.video.mediaObjectId } : {}),
+        purpose: 'preview',
+        retention: 'task_scoped',
+        sourceTaskId: input.taskId,
+      })
+      return {
+        id: `${input.taskId}:video-cover:${input.video.index}`,
+        kind: 'image',
+        role: 'video_cover',
+        index: input.video.index + 1,
+        url: mediaObject.url,
+        mediaObjectId: mediaObject.id,
+        metadata: {
+          frameTimeSeconds: 0,
+          parentMediaObjectId: input.video.mediaObjectId,
+          sourceVideoResourceId: input.video.id,
+        },
+      }
+    }
     return {
       id: `${input.taskId}:video-cover:${input.video.index}`,
       kind: 'image',
@@ -34,11 +68,11 @@ export class DeterministicVideoCoverGenerator implements VideoCoverGenerator {
 }
 
 export class FfmpegVideoCoverGenerator implements VideoCoverGenerator {
-  constructor(private readonly storage: ObjectStorage) {}
+  constructor(private readonly mediaObjectService: MediaObjectService) {}
 
   async generateCover(input: VideoCoverGeneratorInput): Promise<NodeOutputResource> {
     if (!/^https?:\/\//.test(input.video.url)) {
-      return new DeterministicVideoCoverGenerator().generateCover(input)
+      return new DeterministicVideoCoverGenerator(this.mediaObjectService).generateCover(input)
     }
 
     const tempDir = await mkdtemp(join(tmpdir(), 'mina-video-cover-'))
@@ -63,12 +97,22 @@ export class FfmpegVideoCoverGenerator implements VideoCoverGenerator {
         coverPath,
       ])
       const cover = await readFile(coverPath)
-      const stored = await this.storage.putObject({
+      const mediaObject = await this.mediaObjectService.createFromBuffer({
         accountId: input.accountId,
         body: cover,
-        contentType: 'image/jpeg',
-        objectName: `${input.taskId}/video-cover-${input.video.index}.jpg`,
-        scope: 'task-outputs',
+        kind: 'image',
+        mimeType: 'image/jpeg',
+        metadata: {
+          frameTimeSeconds: 0,
+          parentMediaObjectId: input.video.mediaObjectId,
+          sourceVideoResourceId: input.video.id,
+        },
+        objectNameKind: 'cover',
+        origin: 'system_generated',
+        ...(input.video.mediaObjectId ? { parentMediaObjectId: input.video.mediaObjectId } : {}),
+        purpose: 'preview',
+        retention: 'task_scoped',
+        sourceTaskId: input.taskId,
       })
 
       return {
@@ -76,10 +120,11 @@ export class FfmpegVideoCoverGenerator implements VideoCoverGenerator {
         kind: 'image',
         role: 'video_cover',
         index: input.video.index + 1,
-        url: stored.url,
+        url: mediaObject.url,
+        mediaObjectId: mediaObject.id,
         metadata: {
           frameTimeSeconds: 0,
-          sourceStorageKey: stored.key,
+          parentMediaObjectId: input.video.mediaObjectId,
           sourceVideoResourceId: input.video.id,
         },
       }

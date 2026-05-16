@@ -11,12 +11,13 @@ import type { TasksService } from '../tasks/tasks.service'
 import { WorkflowRunExecutor } from './run-executor'
 import {
   findNearestFlowGroupId,
-  getIncomingEdges,
   getNodeMap,
   isExecutableNode,
   isMediaWorkflowNode,
 } from './graph'
-import { findOutputByMediaView, slotToResourceKind } from './media-selection'
+import { findOutputByMediaView, slotToResourceKind } from './media/media-input-builder'
+import { mediaSlotItemsForNode } from './media/node-media-slots'
+import type { WorkflowMediaResolver } from './media/workflow-media-resolver'
 import { createInitialNodeStates } from './run-state'
 import { validateFlowGroup } from './validation'
 import { NoopWorkflowRunEventLog, workflowRunEventPayload, type WorkflowRunEventLog } from './workflow-events'
@@ -36,9 +37,16 @@ export class WorkflowRunsService {
     private readonly workflowRepository: WorkflowRepository,
     private readonly tasksService: TasksService,
     taskConfigAssembler: TaskConfigAssembler,
+    workflowMediaResolver: WorkflowMediaResolver,
     private readonly workflowRunEventLog: WorkflowRunEventLog = new NoopWorkflowRunEventLog(),
   ) {
-    this.runExecutor = new WorkflowRunExecutor(workflowRepository, tasksService, taskConfigAssembler, workflowRunEventLog)
+    this.runExecutor = new WorkflowRunExecutor(
+      workflowRepository,
+      tasksService,
+      taskConfigAssembler,
+      workflowMediaResolver,
+      workflowRunEventLog,
+    )
   }
 
   async createRun(workflowId: string, input: CreateWorkflowRunInput): Promise<WorkflowRun> {
@@ -131,17 +139,16 @@ export class WorkflowRunsService {
 
   private async preflightIsolatedNode(workflow: Workflow, node: WorkflowCanvasNode): Promise<void> {
     const nodeMap = getNodeMap(workflow.nodes)
-    for (const edge of getIncomingEdges(node.id, workflow.edges)) {
-      const { connection } = edge.data
-      if (!connection.required || connection.sourceSelector.mode === 'empty' || connection.targetSlot === 'prompt') {
+    for (const item of mediaSlotItemsForNode(node, workflow.edges)) {
+      if (!item.required) {
         continue
       }
 
-      if (connection.sourceSelector.mode === 'asset') {
+      if (item.source.type === 'media_object' || item.source.type === 'external_url') {
         continue
       }
 
-      if (connection.sourceSelector.mode !== 'current_media') {
+      if (item.source.resolve !== 'current_media') {
         throw new HttpError(
           422,
           'WORKFLOW_ISOLATED_RUN_OUTPUT_SELECTOR',
@@ -149,7 +156,7 @@ export class WorkflowRunsService {
         )
       }
 
-      const sourceNode = nodeMap.get(edge.source)
+      const sourceNode = nodeMap.get(item.source.nodeId)
       if (!sourceNode || !isMediaWorkflowNode(sourceNode) || !sourceNode.data.mediaView?.taskId) {
         throw new HttpError(422, 'WORKFLOW_UPSTREAM_OUTPUT_MISSING', 'Required upstream MediaView output is missing.')
       }
@@ -158,11 +165,11 @@ export class WorkflowRunsService {
       const resource = output
         ? findOutputByMediaView(output, sourceNode.data.mediaView.outputResourceId, sourceNode.data.mediaView.outputIndex)
         : undefined
-      const expectedKind = slotToResourceKind(connection.targetSlot)
+      const expectedKind = slotToResourceKind(item.slot)
       if (!resource) {
         throw new HttpError(422, 'WORKFLOW_UPSTREAM_OUTPUT_MISSING', 'Required upstream MediaView output is missing.')
       }
-      if (expectedKind && resource.kind !== expectedKind) {
+      if (resource.kind !== expectedKind) {
         throw new HttpError(422, 'WORKFLOW_UPSTREAM_OUTPUT_KIND_MISMATCH', 'Upstream output kind does not match target slot.')
       }
     }

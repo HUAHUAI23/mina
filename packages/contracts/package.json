@@ -16,6 +16,10 @@
       "types": "./src/modules/canvas/canvas.schemas.ts",
       "default": "./src/modules/canvas/canvas.schemas.ts"
     },
+    "./modules/media": {
+      "types": "./src/modules/media/media.schemas.ts",
+      "default": "./src/modules/media/media.schemas.ts"
+    },
     "./modules/posts": {
       "types": "./src/modules/posts/post.schemas.ts",
       "default": "./src/modules/posts/post.schemas.ts"

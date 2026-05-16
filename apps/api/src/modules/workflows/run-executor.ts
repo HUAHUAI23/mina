@@ -4,12 +4,13 @@ import { HttpError } from '../../lib/http/http-error'
 import type { TaskConfigAssembler } from '../tasks/config/task-config-assembler'
 import type { TasksService } from '../tasks/tasks.service'
 import {
-  getExecutablePredecessors,
   getNodeMap,
   isDescendantOf,
   isExecutableNode,
   sortNodesForExecution,
 } from './graph'
+import { nodeOutputDependenciesForNode } from './media/node-media-slots'
+import type { WorkflowMediaResolver } from './media/workflow-media-resolver'
 import { WorkflowNodeExecutor } from './node-executor'
 import {
   failedRun,
@@ -26,12 +27,14 @@ export class WorkflowRunExecutor {
     private readonly workflowRepository: WorkflowRepository,
     tasksService: TasksService,
     taskConfigAssembler: TaskConfigAssembler,
+    workflowMediaResolver: WorkflowMediaResolver,
     private readonly workflowRunEventLog: WorkflowRunEventLog = new NoopWorkflowRunEventLog(),
   ) {
     this.nodeExecutor = new WorkflowNodeExecutor({
       failRun: (run, message, nodeId) => this.failRun(run, message, nodeId),
       taskConfigAssembler,
       tasksService,
+      workflowMediaResolver,
       workflowRepository,
       workflowRunEventLog,
     })
@@ -85,9 +88,6 @@ export class WorkflowRunExecutor {
       ),
     )
     const scopedNodeIds = new Set(scopedNodes.map((node) => node.id))
-    const scopedEdges = run.snapshotEdges.filter(
-      (edge) => scopedNodeIds.has(edge.source) && scopedNodeIds.has(edge.target),
-    )
 
     let progressed = true
     while (progressed && run.status === 'running') {
@@ -106,7 +106,12 @@ export class WorkflowRunExecutor {
           continue
         }
 
-        const predecessors = getExecutablePredecessors(node.id, scopedEdges, nodeMap)
+        const predecessors = nodeOutputDependenciesForNode(node, run.snapshotEdges)
+          .filter((nodeId) => scopedNodeIds.has(nodeId))
+          .map((nodeId) => nodeMap.get(nodeId))
+          .filter((predecessor): predecessor is NonNullable<typeof predecessor> =>
+            predecessor !== undefined && isExecutableNode(predecessor),
+          )
         const allPredecessorsSucceeded = predecessors.every(
           (predecessor) => run.nodeStates[predecessor.id]?.status === 'succeeded',
         )

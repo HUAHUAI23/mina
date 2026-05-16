@@ -123,9 +123,10 @@ Owns static seed data or adapter bootstrapping.
 
 Mina now has backend contracts and API services for the generation workflow core:
 
-- `tasks`: durable image/video generation task lifecycle, including standalone task submission, sync image tasks, async video tasks, input/output resources, idempotent client submission, and task cancellation.
+- `media`: managed media object persistence for user uploads, workflow slot inputs, mirrored provider outputs, derived previews, storage usage, and object storage key ownership.
+- `tasks`: durable image/video generation task lifecycle, including standalone task submission, sync image tasks, async video tasks, input/output resource snapshots, output media finalization, idempotent client submission, and task cancellation.
 - `pricing`: model and pricing-key aware estimates for token, image-count, and duration billing.
-- `workflows`: React Flow-compatible workflow definitions, media-slot edges, ordinary canvas node execution, flow-group DAG execution, node run states, and run cancellation.
+- `workflows`: React Flow-compatible workflow definitions, ordered node `mediaSlots`, ordinary canvas node execution, flow-group DAG execution, node run states, and run cancellation.
 
 The workflow module keeps public services small and splits stable internal rules by responsibility:
 
@@ -135,13 +136,15 @@ The workflow module keeps public services small and splits stable internal rules
 - `node-executor.ts`: single-node task creation, task observation, node state transitions, and node event recording.
 - `run-state.ts`: initial node state creation and pure run/node state builders.
 - `graph.ts`: canvas graph traversal and executable/group node predicates.
-- `media-selection.ts`: media-slot role/kind mapping, MediaView output selection, and media input conversion.
+- `media-selection.ts`: compatibility exports for media-slot role/kind mapping and output selection.
+- `media/*`: `WorkflowMediaResolver`, media slot helpers, and media input builders for `media_object`, `external_url`, current MediaView, and current workflow-run output sources.
 - `task-config.ts`: media envelope assembly for task config preparation.
-- `validation.ts`: persisted canvas validation and flow-group scope/cycle validation.
+- `validation.ts`: persisted canvas validation, media slot/edge consistency checks, and flow-group scope/cycle validation.
+- `group-conversion.ts`: pure helper for converting `flow_group` nodes to visual-only `node_group` nodes and downgrading `run_output` media slot sources to `current_media`.
 
-The default local runtime uses in-memory repositories so tests and development do not require PostgreSQL. Set `MINA_PERSISTENCE_DRIVER=postgres` to use the Drizzle-backed task, pricing, and workflow repositories against the PostgreSQL schema in `apps/api/src/db/schema.ts`.
+The default local runtime uses in-memory repositories so tests and development do not require PostgreSQL. Set `MINA_PERSISTENCE_DRIVER=postgres` to use the Drizzle-backed task, pricing, workflow, and media object repositories against the PostgreSQL schema in `apps/api/src/db/schema.ts`.
 
-User ownership is represented by `users` and `accounts`. Product data that belongs to a tenant stores `account_id`; `tasks`, `task_resources`, `workflows`, and `workflow_runs` now reference `accounts.id`. Event and link tables remain subordinate to their parent task or workflow run records.
+User ownership is represented by `users` and `accounts`. Product data that belongs to a tenant stores `account_id`; `tasks`, `task_resources`, `media_objects`, `workflows`, and `workflow_runs` reference `accounts.id`. Event and link tables remain subordinate to their parent task or workflow run records.
 
 Background work is handled by a Croner-backed `BackgroundTaskScheduler` when `MINA_SCHEDULER_ENABLED=true`. Each tick starts due `queued` tasks, polls due async provider tasks, and then reconciles running workflow runs. The Drizzle task repository claims due queued/running tasks with `FOR UPDATE SKIP LOCKED` before provider calls so multiple schedulers do not process the same task at the same time.
 
@@ -155,7 +158,9 @@ The task module keeps lifecycle behavior behind small internal files:
 - `models/model-spec.ts`: model-owned config, pricing, resource, and provider lifecycle contract.
 - `models/provider-router.ts`: `TaskProvider` dispatch to the selected model spec.
 - `config/task-config-assembler.ts`: workflow draft config plus media envelope preparation through model specs.
+- `output/task-output-finalizer.ts`: mirrors provider outputs from data URLs, HTTP(S), memory URLs, `mina://media/{id}`, and dev `mina://tasks/...` outputs into managed media objects before task success is persisted.
 - `output/output-post-processor.ts`: generic output invariants, including required `video_cover` resources for successful video tasks.
+- `output/video-cover-generator.ts`: creates video cover resources through `MediaObjectService`, with deterministic fallback for non-HTTP test/dev video URLs.
 - `pricing.ts`: actual-cost calculation from provider usage.
 - `resources.ts`: task input/output resource mapping.
 - `retry.ts`: retry/backoff and expiry helpers.
@@ -171,10 +176,12 @@ Runtime logs use Pino through `src/lib/logger/logger.ts`. Durable lifecycle logs
 
 ### Canvas Execution Semantics
 
-Media edges always represent media-slot connections.
+Executable node media inputs are owned by target node `data.mediaSlots`. Edges remain as React Flow visual links and as a consistency projection for node-output slot items.
 
+- Slot items can point to `media_object`, `external_url`, `node_output/current_media`, or `node_output/run_output` sources.
+- Within one slot, item order is determined by `mediaSlots[slot][].order`, with item id as a deterministic tie-breaker.
 - On the ordinary canvas, running a selected node resolves required upstream media from the source node's persisted `mediaView`. Upstream nodes are not executed automatically.
-- Inside a `flow_group`, edges are also execution dependencies. A flow run executes all roots in the group and downstream nodes resolve media from the current run's upstream outputs by resource kind, role, and index.
+- Inside a `flow_group`, execution dependencies are derived from node-output media slot sources. A flow run executes all roots in the group and downstream nodes resolve media from the current run's upstream outputs by resource kind, role, and index.
 - `node_group` is visual only and does not affect execution.
 - Workflow run creation does not call external providers directly. It creates pending node tasks and relies on the task scheduler/worker path to start providers, poll async work, and reconcile workflow nodes.
 
@@ -189,6 +196,17 @@ users/{accountId}/{scope}/{objectName}
 ```
 
 The key builder rejects empty, reserved, traversal, and cross-account paths. This keeps user resources under one root so later quota, cleanup, and resource management jobs can operate per account without scanning unrelated objects.
+
+Managed media objects use the `media` scope:
+
+```text
+users/{accountId}/media/{mediaObjectId}/original.{ext}
+users/{accountId}/media/{mediaObjectId}/cover.jpg
+```
+
+The `media_objects` table is the file entity table. Workflow slots, task input resources, task output resources, and future asset library rows should reference `media_objects` instead of treating object storage URLs as the system of record. Account storage usage is calculated from ready, non-deleted `media_objects.byteSize` values.
+
+`task_resources` remains the task-level resource index. It now stores `media_object_id`, `slot`, `slot_item_id`, `slot_order`, and structured `source` for input lineage and output traceability.
 
 React Flow compatibility rules:
 
@@ -231,7 +249,7 @@ The API uses Bun tests against `app.request(...)`, which allows route-level beha
 
 ## Planned Next Step for Database Work
 
-The account, task, pricing, and workflow modules have Drizzle-backed schema coverage. The remaining persistence work is:
+The account, task, pricing, media object, and workflow modules have Drizzle-backed schema coverage. The remaining persistence work is:
 
 1. Add a Drizzle-backed posts repository if posts become product data.
 2. Add integration tests that run migrations against a disposable PostgreSQL database.

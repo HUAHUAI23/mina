@@ -2,6 +2,10 @@ import { apiEnv } from '../config/env'
 import { createDbClient } from '../db/client'
 import { createObjectStorage } from '../lib/storage/create-object-storage'
 import type { ObjectStorage } from '../lib/storage/object-storage'
+import { DrizzleMediaObjectRepository } from '../modules/media/media-object.drizzle-repository'
+import { InMemoryMediaObjectRepository } from '../modules/media/media-object.repository'
+import { MediaObjectService } from '../modules/media/media-object.service'
+import { FetchRemoteMediaFetcher } from '../modules/media/remote-media-fetcher'
 import { createSeedPosts } from '../modules/posts/posts.data'
 import { InMemoryPostRepository } from '../modules/posts/posts.repository'
 import { PostsService } from '../modules/posts/posts.service'
@@ -13,12 +17,14 @@ import { ModelRegistry } from '../modules/tasks/models/model-registry'
 import { ProviderRouter } from '../modules/tasks/models/provider-router'
 import { registerTaskModels } from '../modules/tasks/models/register-models'
 import { OutputPostProcessor } from '../modules/tasks/output/output-post-processor'
+import { TaskOutputFinalizer } from '../modules/tasks/output/task-output-finalizer'
 import { FfmpegVideoCoverGenerator } from '../modules/tasks/output/video-cover-generator'
 import { DrizzleTaskEventLog, InMemoryTaskEventLog } from '../modules/tasks/task-events'
 import { DrizzleTaskRepository } from '../modules/tasks/tasks.drizzle-repository'
 import { InMemoryTaskRepository } from '../modules/tasks/tasks.repository'
 import { TasksService } from '../modules/tasks/tasks.service'
 import { DrizzleWorkflowRunEventLog, InMemoryWorkflowRunEventLog } from '../modules/workflows/workflow-events'
+import { WorkflowMediaResolver } from '../modules/workflows/media/workflow-media-resolver'
 import { DrizzleWorkflowRepository } from '../modules/workflows/workflows.drizzle-repository'
 import { InMemoryWorkflowRepository } from '../modules/workflows/workflows.repository'
 import { WorkflowsService } from '../modules/workflows/workflows.service'
@@ -38,6 +44,7 @@ export const createAppDependencies = (): AppDependencies => {
           const db = createDbClient()
           return {
             pricingRepository: new DrizzlePricingRepository(db),
+            mediaObjectRepository: new DrizzleMediaObjectRepository(db),
             taskEventLog: new DrizzleTaskEventLog(db),
             taskRepository: new DrizzleTaskRepository(db),
             workflowRunEventLog: new DrizzleWorkflowRunEventLog(db),
@@ -46,6 +53,7 @@ export const createAppDependencies = (): AppDependencies => {
         })()
       : {
           pricingRepository: new InMemoryPricingRepository(),
+          mediaObjectRepository: new InMemoryMediaObjectRepository(),
           taskEventLog: new InMemoryTaskEventLog(),
           taskRepository: new InMemoryTaskRepository(),
           workflowRunEventLog: new InMemoryWorkflowRunEventLog(),
@@ -54,22 +62,31 @@ export const createAppDependencies = (): AppDependencies => {
 
   const pricingService = new PricingService(repositories.pricingRepository)
   const storage = createObjectStorage()
+  const mediaObjectService = new MediaObjectService(
+    repositories.mediaObjectRepository,
+    storage,
+    new FetchRemoteMediaFetcher(),
+  )
   const modelRegistry = registerTaskModels(new ModelRegistry())
   const taskConfigAssembler = new TaskConfigAssembler(modelRegistry)
   const taskProvider = new ProviderRouter(modelRegistry)
-  const outputPostProcessor = new OutputPostProcessor(new FfmpegVideoCoverGenerator(storage))
+  const outputFinalizer = new TaskOutputFinalizer(mediaObjectService)
+  const outputPostProcessor = new OutputPostProcessor(new FfmpegVideoCoverGenerator(mediaObjectService))
   const tasksService = new TasksService(
     repositories.taskRepository,
     pricingService,
     taskProvider,
     modelRegistry,
+    outputFinalizer,
     outputPostProcessor,
     repositories.taskEventLog,
   )
+  const workflowMediaResolver = new WorkflowMediaResolver(mediaObjectService, tasksService)
   const workflowsService = new WorkflowsService(
     repositories.workflowRepository,
     tasksService,
     taskConfigAssembler,
+    workflowMediaResolver,
     repositories.workflowRunEventLog,
   )
 

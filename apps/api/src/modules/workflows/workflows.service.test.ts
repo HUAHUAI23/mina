@@ -5,6 +5,10 @@ import type {
   WorkflowCanvasNode,
 } from '@mina/contracts/modules/canvas'
 
+import { InMemoryObjectStorage } from '../../lib/storage/in-memory-object-storage'
+import { DEFAULT_ACCOUNT_ID } from '../accounts/accounts.data'
+import { InMemoryMediaObjectRepository } from '../media/media-object.repository'
+import { MediaObjectService } from '../media/media-object.service'
 import { InMemoryPricingRepository } from '../pricing/pricing.repository'
 import { PricingService } from '../pricing/pricing.service'
 import { TaskConfigAssembler } from '../tasks/config/task-config-assembler'
@@ -12,34 +16,51 @@ import { ModelRegistry } from '../tasks/models/model-registry'
 import { ProviderRouter } from '../tasks/models/provider-router'
 import { registerTaskModels } from '../tasks/models/register-models'
 import { OutputPostProcessor } from '../tasks/output/output-post-processor'
+import { TaskOutputFinalizer } from '../tasks/output/task-output-finalizer'
 import { DeterministicVideoCoverGenerator } from '../tasks/output/video-cover-generator'
 import type { TaskProvider } from '../tasks/providers/provider'
 import { InMemoryTaskRepository } from '../tasks/tasks.repository'
 import { TasksService } from '../tasks/tasks.service'
+import { validateCanvas } from './validation'
 import { InMemoryWorkflowRunEventLog } from './workflow-events'
+import { WorkflowMediaResolver } from './media/workflow-media-resolver'
 import { InMemoryWorkflowRepository } from './workflows.repository'
 import { WorkflowsService } from './workflows.service'
 
-const createServices = () => {
+const createServices = (taskProvider?: TaskProvider) => {
   const taskRepository = new InMemoryTaskRepository()
   const workflowRunEventLog = new InMemoryWorkflowRunEventLog()
   const modelRegistry = registerTaskModels(new ModelRegistry())
   const taskConfigAssembler = new TaskConfigAssembler(modelRegistry)
+  const mediaObjectService = new MediaObjectService(
+    new InMemoryMediaObjectRepository(),
+    new InMemoryObjectStorage(),
+    {
+      fetch: async () => {
+        throw new Error('fetcher not configured')
+      },
+    },
+  )
   const tasksService = new TasksService(
     taskRepository,
     new PricingService(new InMemoryPricingRepository()),
-    new ProviderRouter(modelRegistry),
+    taskProvider ?? new ProviderRouter(modelRegistry),
     modelRegistry,
-    new OutputPostProcessor(new DeterministicVideoCoverGenerator()),
+    new TaskOutputFinalizer(mediaObjectService),
+    new OutputPostProcessor(
+      new DeterministicVideoCoverGenerator(mediaObjectService),
+    ),
   )
   const workflowsService = new WorkflowsService(
     new InMemoryWorkflowRepository(),
     tasksService,
     taskConfigAssembler,
+    new WorkflowMediaResolver(mediaObjectService, tasksService),
     workflowRunEventLog,
   )
 
   return {
+    mediaObjectService,
     taskRepository,
     tasksService,
     workflowRunEventLog,
@@ -47,13 +68,22 @@ const createServices = () => {
   }
 }
 
-const runBackgroundCycle = async (services: Pick<ReturnType<typeof createServices>, 'tasksService' | 'workflowsService'>) => {
+const runBackgroundCycle = async (
+  services: Pick<
+    ReturnType<typeof createServices>,
+    'tasksService' | 'workflowsService'
+  >,
+) => {
   await services.tasksService.startQueuedTasks()
   await services.tasksService.pollAsyncTasks()
   return services.workflowsService.reconcileRunningRuns()
 }
 
-const imageNode = (id: string, count: number, parentId?: string): WorkflowCanvasNode => ({
+const imageNode = (
+  id: string,
+  count: number,
+  parentId?: string,
+): WorkflowCanvasNode => ({
   id,
   type: 'image_generation',
   position: { x: 0, y: 0 },
@@ -75,6 +105,25 @@ const imageNode = (id: string, count: number, parentId?: string): WorkflowCanvas
     },
   },
 })
+
+const imageNodeWithMediaSlots = (
+  node: WorkflowCanvasNode,
+  mediaSlots: Extract<
+    WorkflowCanvasNode['data'],
+    { nodeType: 'image_generation' }
+  >['mediaSlots'],
+): WorkflowCanvasNode => {
+  if (node.data.nodeType !== 'image_generation') {
+    throw new Error('Expected image generation node.')
+  }
+  return {
+    ...node,
+    data: {
+      ...node.data,
+      mediaSlots,
+    },
+  }
+}
 
 const videoNode = (id: string, parentId?: string): WorkflowCanvasNode => ({
   id,
@@ -140,7 +189,9 @@ describe('WorkflowsService execution semantics', () => {
     const workflow = await workflowsService.createWorkflow({
       name: 'ordinary media view',
       nodes: [imageNode('a', 2), videoNode('b')],
-      edges: [mediaEdge('a-b', 'a', 'b', 'firstFrame', { mode: 'current_media' })],
+      edges: [
+        mediaEdge('a-b', 'a', 'b', 'firstFrame', { mode: 'current_media' }),
+      ],
     })
 
     const sourceRun = await workflowsService.createRun(workflow.id, {
@@ -153,7 +204,10 @@ describe('WorkflowsService execution semantics', () => {
     if (!sourceTaskId) {
       throw new Error('Source task id was not created.')
     }
-    const [completedSourceRun] = await runBackgroundCycle({ tasksService, workflowsService })
+    const [completedSourceRun] = await runBackgroundCycle({
+      tasksService,
+      workflowsService,
+    })
     expect(completedSourceRun?.status).toBe('succeeded')
 
     const sourceTask = await tasksService.getTask(sourceTaskId)
@@ -163,13 +217,17 @@ describe('WorkflowsService execution semantics', () => {
       throw new Error('Selected output was not created.')
     }
 
-    const updatedWorkflow = await workflowsService.updateNodeMediaView(workflow.id, 'a', {
-      mediaView: {
-        taskId: sourceTask.id,
-        outputResourceId: selectedOutput.id,
-        outputIndex: 1,
+    const updatedWorkflow = await workflowsService.updateNodeMediaView(
+      workflow.id,
+      'a',
+      {
+        mediaView: {
+          taskId: sourceTask.id,
+          outputResourceId: selectedOutput.id,
+          outputIndex: 1,
+        },
       },
-    })
+    )
 
     const targetRun = await workflowsService.createRun(updatedWorkflow.id, {
       selectedNodeId: 'b',
@@ -185,12 +243,435 @@ describe('WorkflowsService execution semantics', () => {
     const sourceLinks = await workflowsService.getNodeTasks(workflow.id, 'a')
     expect(sourceLinks).toHaveLength(1)
 
-    const inputResources = (await taskRepository.listResources(targetTaskId)).filter(
-      (resource) => resource.direction === 'input',
-    )
+    const inputResources = (
+      await taskRepository.listResources(targetTaskId)
+    ).filter((resource) => resource.direction === 'input')
     expect(inputResources).toHaveLength(1)
     expect(inputResources[0]?.role).toBe('first_frame')
     expect(inputResources[0]?.url).toBe(selectedOutput?.url)
+    expect(inputResources[0]?.mediaObjectId).toBe(selectedOutput?.mediaObjectId)
+    expect(inputResources[0]?.source).toMatchObject({
+      type: 'workflow_current_media',
+      nodeId: 'a',
+      taskId: sourceTask.id,
+    })
+  })
+
+  test('ordinary canvas runs a node with media object slot input and no edges', async () => {
+    const { mediaObjectService, taskRepository, workflowsService } =
+      createServices()
+    const mediaObject = await mediaObjectService.createFromBuffer({
+      accountId: DEFAULT_ACCOUNT_ID,
+      body: new TextEncoder().encode('input-image'),
+      kind: 'image',
+      mimeType: 'image/png',
+      origin: 'user_upload',
+      purpose: 'workflow_slot',
+      retention: 'project_scoped',
+    })
+    const node = imageNode('image', 1)
+    const workflow = await workflowsService.createWorkflow({
+      name: 'media object slot',
+      nodes: [
+        imageNodeWithMediaSlots(node, {
+          inputImages: [
+            {
+              id: 'slot-local',
+              order: 0,
+              required: true,
+              slot: 'inputImages',
+              source: {
+                type: 'media_object',
+                mediaObjectId: mediaObject.id,
+              },
+            },
+          ],
+        }),
+      ],
+      edges: [],
+    })
+
+    const run = await workflowsService.createRun(workflow.id, {
+      selectedNodeId: 'image',
+      expectedWorkflowVersion: workflow.version,
+    })
+    const taskId = run.nodeStates.image?.taskId
+    expect(typeof taskId).toBe('string')
+    if (!taskId) {
+      throw new Error('Task id was not created.')
+    }
+    const inputResources = (await taskRepository.listResources(taskId)).filter(
+      (resource) => resource.direction === 'input',
+    )
+    expect(inputResources).toHaveLength(1)
+    expect(inputResources[0]).toMatchObject({
+      mediaObjectId: mediaObject.id,
+      role: 'reference_image',
+      slot: 'inputImages',
+      slotItemId: 'slot-local',
+      slotOrder: 0,
+      source: {
+        type: 'media_object',
+        mediaObjectId: mediaObject.id,
+      },
+    })
+  })
+
+  test('mediaSlots preserve mixed item order inside one slot', async () => {
+    const { mediaObjectService, taskRepository, workflowsService } =
+      createServices()
+    const first = await mediaObjectService.createFromBuffer({
+      accountId: DEFAULT_ACCOUNT_ID,
+      body: new TextEncoder().encode('first'),
+      kind: 'image',
+      mimeType: 'image/png',
+      origin: 'user_upload',
+      purpose: 'workflow_slot',
+      retention: 'project_scoped',
+    })
+    const second = await mediaObjectService.createFromBuffer({
+      accountId: DEFAULT_ACCOUNT_ID,
+      body: new TextEncoder().encode('second'),
+      kind: 'image',
+      mimeType: 'image/png',
+      origin: 'user_upload',
+      purpose: 'workflow_slot',
+      retention: 'project_scoped',
+    })
+    const node = imageNode('image', 1)
+    const workflow = await workflowsService.createWorkflow({
+      name: 'media object order',
+      nodes: [
+        imageNodeWithMediaSlots(node, {
+          inputImages: [
+            {
+              id: 'slot-second',
+              order: 20,
+              required: true,
+              slot: 'inputImages',
+              source: { type: 'media_object', mediaObjectId: second.id },
+            },
+            {
+              id: 'slot-first',
+              order: 10,
+              required: true,
+              slot: 'inputImages',
+              source: { type: 'media_object', mediaObjectId: first.id },
+            },
+          ],
+        }),
+      ],
+      edges: [],
+    })
+
+    const run = await workflowsService.createRun(workflow.id, {
+      selectedNodeId: 'image',
+      expectedWorkflowVersion: workflow.version,
+    })
+    const taskId = run.nodeStates.image?.taskId
+    expect(typeof taskId).toBe('string')
+    if (!taskId) {
+      throw new Error('Task id was not created.')
+    }
+
+    const inputResources = (await taskRepository.listResources(taskId)).filter(
+      (resource) => resource.direction === 'input',
+    )
+    expect(inputResources.map((resource) => resource.mediaObjectId)).toEqual([
+      first.id,
+      second.id,
+    ])
+    expect(inputResources.map((resource) => resource.slotOrder)).toEqual([
+      10, 20,
+    ])
+  })
+
+  test('mediaSlots preserve media object plus upstream A and B mixed order', async () => {
+    const providerOutputByPrompt = new Map<string, string>()
+    const taskProvider: TaskProvider = {
+      poll: async () => ({
+        code: 'NOT_ASYNC',
+        message: 'not async',
+        status: 'failed',
+      }),
+      start: async (task) => {
+        const mediaObjectId = providerOutputByPrompt.get(task.config.prompt)
+        if (!mediaObjectId) {
+          throw new Error(`Missing provider output for ${task.config.prompt}.`)
+        }
+        return {
+          output: {
+            resources: [
+              {
+                id: `${task.id}:image:0`,
+                kind: 'image',
+                role: 'generated_image',
+                index: 0,
+                url: `mina://media/${mediaObjectId}`,
+              },
+            ],
+            variables: {},
+          },
+          status: 'succeeded',
+        }
+      },
+    }
+    const { mediaObjectService, taskRepository, tasksService, workflowsService } =
+      createServices(taskProvider)
+    const local = await mediaObjectService.createFromBuffer({
+      accountId: DEFAULT_ACCOUNT_ID,
+      body: new TextEncoder().encode('local'),
+      kind: 'image',
+      mimeType: 'image/png',
+      origin: 'user_upload',
+      purpose: 'workflow_slot',
+      retention: 'project_scoped',
+    })
+    const fromA = await mediaObjectService.createFromBuffer({
+      accountId: DEFAULT_ACCOUNT_ID,
+      body: new TextEncoder().encode('a'),
+      kind: 'image',
+      mimeType: 'image/png',
+      origin: 'task_output',
+      purpose: 'task_output',
+      retention: 'task_scoped',
+    })
+    const fromB = await mediaObjectService.createFromBuffer({
+      accountId: DEFAULT_ACCOUNT_ID,
+      body: new TextEncoder().encode('b'),
+      kind: 'image',
+      mimeType: 'image/png',
+      origin: 'task_output',
+      purpose: 'task_output',
+      retention: 'task_scoped',
+    })
+    providerOutputByPrompt.set('prompt a', fromA.id)
+    providerOutputByPrompt.set('prompt b', fromB.id)
+
+    const baseA = imageNode('a', 1)
+    const baseB = imageNode('b', 1)
+    const sourceWorkflow = await workflowsService.createWorkflow({
+      name: 'mixed order sources',
+      nodes: [baseA, baseB],
+      edges: [],
+    })
+    const runA = await workflowsService.createRun(sourceWorkflow.id, {
+      selectedNodeId: 'a',
+      expectedWorkflowVersion: sourceWorkflow.version,
+    })
+    await tasksService.startQueuedTasks()
+    await workflowsService.reconcileRunningRuns()
+    const taskAId = runA.nodeStates.a?.taskId
+    if (!taskAId) {
+      throw new Error('Task A id was not created.')
+    }
+    const workflowWithA = await workflowsService.updateNodeMediaView(sourceWorkflow.id, 'a', {
+      mediaView: {
+        taskId: taskAId,
+        outputIndex: 0,
+      },
+    })
+    const runB = await workflowsService.createRun(sourceWorkflow.id, {
+      selectedNodeId: 'b',
+      expectedWorkflowVersion: workflowWithA.version,
+    })
+    await tasksService.startQueuedTasks()
+    await workflowsService.reconcileRunningRuns()
+    const taskBId = runB.nodeStates.b?.taskId
+    if (!taskBId) {
+      throw new Error('Task B id was not created.')
+    }
+
+    const target = imageNodeWithMediaSlots(imageNode('target', 1), {
+      inputImages: [
+        {
+          id: 'slot-b',
+          order: 30,
+          required: true,
+          slot: 'inputImages',
+          source: { type: 'node_output', nodeId: 'b', resolve: 'current_media' },
+        },
+        {
+          id: 'slot-local',
+          order: 10,
+          required: true,
+          slot: 'inputImages',
+          source: { type: 'media_object', mediaObjectId: local.id },
+        },
+        {
+          id: 'slot-a',
+          order: 20,
+          required: true,
+          slot: 'inputImages',
+          source: { type: 'node_output', nodeId: 'a', resolve: 'current_media' },
+        },
+      ],
+    })
+    const workflowWithB = await workflowsService.updateNodeMediaView(sourceWorkflow.id, 'b', {
+      mediaView: {
+        taskId: taskBId,
+        outputIndex: 0,
+      },
+    })
+    const workflow = await workflowsService.updateWorkflow(sourceWorkflow.id, {
+      version: workflowWithB.version,
+      nodes: [
+        workflowWithB.nodes[0] ?? baseA,
+        workflowWithB.nodes[1] ?? baseB,
+        target,
+      ],
+      edges: [
+        {
+          id: 'edge-a-target',
+          type: 'media',
+          source: 'a',
+          target: 'target',
+          data: {
+            connection: {
+              kind: 'media_link',
+              targetSlot: 'inputImages',
+              targetSlotItemId: 'slot-a',
+            },
+          },
+        },
+        {
+          id: 'edge-b-target',
+          type: 'media',
+          source: 'b',
+          target: 'target',
+          data: {
+            connection: {
+              kind: 'media_link',
+              targetSlot: 'inputImages',
+              targetSlotItemId: 'slot-b',
+            },
+          },
+        },
+      ],
+    })
+
+    const targetRun = await workflowsService.createRun(workflow.id, {
+      selectedNodeId: 'target',
+      expectedWorkflowVersion: workflow.version,
+    })
+    const targetTaskId = targetRun.nodeStates.target?.taskId
+    if (!targetTaskId) {
+      throw new Error('Target task id was not created.')
+    }
+    const inputResources = (await taskRepository.listResources(targetTaskId)).filter(
+      (resource) => resource.direction === 'input',
+    )
+
+    expect(inputResources.map((resource) => resource.mediaObjectId)).toEqual([
+      local.id,
+      fromA.id,
+      fromB.id,
+    ])
+    expect(inputResources.map((resource) => resource.slotItemId)).toEqual([
+      'slot-local',
+      'slot-a',
+      'slot-b',
+    ])
+  })
+
+  test('optional missing node output slot is skipped', async () => {
+    const { taskRepository, workflowsService } = createServices()
+    const target = imageNodeWithMediaSlots(imageNode('target', 1), {
+      inputImages: [
+        {
+          id: 'slot-optional',
+          order: 0,
+          required: false,
+          slot: 'inputImages',
+          source: { type: 'node_output', nodeId: 'source', resolve: 'current_media' },
+        },
+      ],
+    })
+    const workflow = await workflowsService.createWorkflow({
+      name: 'optional missing',
+      nodes: [imageNode('source', 1), target],
+      edges: [
+        {
+          id: 'edge-source-target',
+          type: 'media',
+          source: 'source',
+          target: 'target',
+          data: {
+            connection: {
+              kind: 'media_link',
+              targetSlot: 'inputImages',
+              targetSlotItemId: 'slot-optional',
+            },
+          },
+        },
+      ],
+    })
+
+    const run = await workflowsService.createRun(workflow.id, {
+      selectedNodeId: 'target',
+      expectedWorkflowVersion: workflow.version,
+    })
+    const taskId = run.nodeStates.target?.taskId
+    if (!taskId) {
+      throw new Error('Task id was not created.')
+    }
+
+    const inputResources = (await taskRepository.listResources(taskId)).filter(
+      (resource) => resource.direction === 'input',
+    )
+    expect(inputResources).toHaveLength(0)
+  })
+
+  test('validates media_link edges against mediaSlots', () => {
+    const target = imageNodeWithMediaSlots(imageNode('target', 1), {
+      inputImages: [
+        {
+          id: 'slot-a',
+          order: 0,
+          required: true,
+          slot: 'inputImages',
+          source: { type: 'node_output', nodeId: 'a', resolve: 'current_media' },
+        },
+      ],
+    })
+
+    expect(() =>
+      validateCanvas(
+        [
+          imageNode('a', 1),
+          imageNode('b', 1),
+          target,
+        ],
+        [
+          {
+            id: 'edge-a-target',
+            type: 'media',
+            source: 'a',
+            target: 'target',
+            data: {
+              connection: {
+                kind: 'media_link',
+                targetSlot: 'inputImages',
+                targetSlotItemId: 'slot-a',
+              },
+            },
+          },
+          {
+            id: 'edge-b-target',
+            type: 'media',
+            source: 'b',
+            target: 'target',
+            data: {
+              connection: {
+                kind: 'media_link',
+                targetSlot: 'inputImages',
+                targetSlotItemId: 'missing-slot',
+              },
+            },
+          },
+        ],
+      ),
+    ).toThrow('Media edge must point to a matching media slot item.')
   })
 
   test('ordinary canvas rejects a required upstream slot without MediaView output', async () => {
@@ -198,7 +679,9 @@ describe('WorkflowsService execution semantics', () => {
     const workflow = await workflowsService.createWorkflow({
       name: 'missing upstream',
       nodes: [imageNode('a', 1), videoNode('b')],
-      edges: [mediaEdge('a-b', 'a', 'b', 'firstFrame', { mode: 'current_media' })],
+      edges: [
+        mediaEdge('a-b', 'a', 'b', 'firstFrame', { mode: 'current_media' }),
+      ],
     })
 
     await expect(
@@ -281,7 +764,10 @@ describe('WorkflowsService execution semantics', () => {
     expect(run.nodeStates.c?.status).toBe('running')
     expect(run.nodeStates.b?.status).toBe('pending')
 
-    const [rootCompletedRun] = await runBackgroundCycle({ tasksService, workflowsService })
+    const [rootCompletedRun] = await runBackgroundCycle({
+      tasksService,
+      workflowsService,
+    })
     expect(rootCompletedRun?.status).toBe('running')
     expect(rootCompletedRun?.nodeStates.a?.status).toBe('succeeded')
     expect(rootCompletedRun?.nodeStates.c?.status).toBe('succeeded')
@@ -292,18 +778,32 @@ describe('WorkflowsService execution semantics', () => {
     if (!videoTaskId) {
       throw new Error('Video task id was not created.')
     }
-    const inputResources = (await taskRepository.listResources(videoTaskId)).filter(
-      (resource) => resource.direction === 'input',
-    )
-    expect(inputResources.map((resource) => resource.role)).toEqual(['first_frame', 'reference_image'])
-
-    const [completedRun] = await runBackgroundCycle({ tasksService, workflowsService })
-    expect(completedRun?.status).toBe('succeeded')
-    expect(completedRun?.nodeStates.b?.output?.resources.map((resource) => resource.role)).toEqual([
-      'generated_video',
-      'last_frame',
-      'video_cover',
+    const inputResources = (
+      await taskRepository.listResources(videoTaskId)
+    ).filter((resource) => resource.direction === 'input')
+    expect(inputResources.map((resource) => resource.role)).toEqual([
+      'first_frame',
+      'reference_image',
     ])
+    expect(inputResources[0]?.source).toMatchObject({
+      type: 'workflow_run_output',
+      nodeId: 'a',
+    })
+    expect(inputResources[1]?.source).toMatchObject({
+      type: 'workflow_run_output',
+      nodeId: 'c',
+    })
+
+    const [completedRun] = await runBackgroundCycle({
+      tasksService,
+      workflowsService,
+    })
+    expect(completedRun?.status).toBe('succeeded')
+    expect(
+      completedRun?.nodeStates.b?.output?.resources.map(
+        (resource) => resource.role,
+      ),
+    ).toEqual(['generated_video', 'last_frame', 'video_cover'])
   })
 
   test('video duration pricing uses model and pricing key rules', async () => {
@@ -333,14 +833,17 @@ describe('WorkflowsService execution semantics', () => {
   test('reconcileRun preserves not-found error semantics', async () => {
     const { workflowsService } = createServices()
 
-    await expect(workflowsService.reconcileRun('missing-run')).rejects.toMatchObject({
+    await expect(
+      workflowsService.reconcileRun('missing-run'),
+    ).rejects.toMatchObject({
       code: 'WORKFLOW_RUN_NOT_FOUND',
       status: 404,
     })
   })
 
   test('records workflow run and node lifecycle events', async () => {
-    const { tasksService, workflowRunEventLog, workflowsService } = createServices()
+    const { tasksService, workflowRunEventLog, workflowsService } =
+      createServices()
     const workflow = await workflowsService.createWorkflow({
       name: 'workflow events',
       nodes: [imageNode('image', 1)],
@@ -385,17 +888,30 @@ describe('WorkflowsService execution semantics', () => {
     const workflowRunEventLog = new InMemoryWorkflowRunEventLog()
     const modelRegistry = registerTaskModels(new ModelRegistry())
     const taskConfigAssembler = new TaskConfigAssembler(modelRegistry)
+    const mediaObjectService = new MediaObjectService(
+      new InMemoryMediaObjectRepository(),
+      new InMemoryObjectStorage(),
+      {
+        fetch: async () => {
+          throw new Error('fetcher not configured')
+        },
+      },
+    )
     const tasksService = new TasksService(
       new InMemoryTaskRepository(),
       new PricingService(new InMemoryPricingRepository()),
       failingProvider,
       modelRegistry,
-      new OutputPostProcessor(new DeterministicVideoCoverGenerator()),
+      new TaskOutputFinalizer(mediaObjectService),
+      new OutputPostProcessor(
+        new DeterministicVideoCoverGenerator(mediaObjectService),
+      ),
     )
     const workflowsService = new WorkflowsService(
       new InMemoryWorkflowRepository(),
       tasksService,
       taskConfigAssembler,
+      new WorkflowMediaResolver(mediaObjectService, tasksService),
       workflowRunEventLog,
     )
     const workflow = await workflowsService.createWorkflow({
@@ -416,7 +932,11 @@ describe('WorkflowsService execution semantics', () => {
     expect(failedRun?.status).toBe('failed')
     expect(failedRun?.nodeStates.image?.status).toBe('failed')
     const events = await workflowRunEventLog.listEvents(run.id)
-    expect(events.map((event) => event.eventType)).toContain('workflow.node.failed')
-    expect(events.map((event) => event.eventType)).toContain('workflow.run.failed')
+    expect(events.map((event) => event.eventType)).toContain(
+      'workflow.node.failed',
+    )
+    expect(events.map((event) => event.eventType)).toContain(
+      'workflow.run.failed',
+    )
   })
 })

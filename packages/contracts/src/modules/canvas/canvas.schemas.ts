@@ -1,6 +1,10 @@
 import { z } from 'zod'
 
 import {
+  NodeMediaSlotsSchema,
+  WorkflowMediaLinkConnectionSchema,
+} from '../media/media.schemas'
+import {
   ResourceKindSchema,
   ResourceRefSchema,
   ResourceRoleSchema,
@@ -47,12 +51,14 @@ export const WorkflowNodeDataSchema = z.discriminatedUnion('nodeType', [
     title: z.string().min(1),
     config: ImageGenerationNodeConfigSchema,
     mediaView: NodeMediaViewStateSchema.optional(),
+    mediaSlots: NodeMediaSlotsSchema.optional(),
   }),
   z.object({
     nodeType: z.literal('video_generation'),
     title: z.string().min(1),
     config: VideoGenerationNodeConfigSchema,
     mediaView: NodeMediaViewStateSchema.optional(),
+    mediaSlots: NodeMediaSlotsSchema.optional(),
   }),
   z.object({
     nodeType: z.literal('flow_group'),
@@ -116,7 +122,7 @@ export const MediaSlotConnectionSchema = z.object({
 })
 
 export const WorkflowEdgeDataSchema = z.object({
-  connection: MediaSlotConnectionSchema,
+  connection: z.union([WorkflowMediaLinkConnectionSchema, MediaSlotConnectionSchema]),
 })
 
 export const WorkflowCanvasEdgeSchema = z.object({

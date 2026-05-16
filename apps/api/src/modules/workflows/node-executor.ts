@@ -1,25 +1,11 @@
-import type {
-  MediaInput,
-  NodeOutputResource,
-  ResourceRef,
-  TaskConfig,
-} from '@mina/contracts/modules/tasks'
-import type { MediaSlotConnection, WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
+import type { MediaSlotName } from '@mina/contracts/modules/media'
+import type { MediaInput, TaskConfig } from '@mina/contracts/modules/tasks'
+import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import type { WorkflowRun } from '@mina/contracts/modules/workflows'
 
 import type { TaskConfigAssembler } from '../tasks/config/task-config-assembler'
 import type { TasksService } from '../tasks/tasks.service'
-import { getIncomingEdges, getNodeMap, isMediaWorkflowNode } from './graph'
-import {
-  findOutputByMediaView,
-  findOutputBySelector,
-  isNodeOutputResource,
-  mediaInputFromOutput,
-  mediaInputFromResourceRef,
-  type ResolvedMediaInput,
-  slotToInputRole,
-  slotToResourceKind,
-} from './media-selection'
+import type { WorkflowMediaResolver } from './media/workflow-media-resolver'
 import { workflowNodeRunningState, workflowNodeSucceededState } from './run-state'
 import { buildMediaEnvelope } from './task-config'
 import { workflowRunEventPayload, type WorkflowRunEventLog } from './workflow-events'
@@ -34,6 +20,7 @@ interface WorkflowNodeExecutorDependencies {
   failRun(run: WorkflowRun, message: string, nodeId?: string): Promise<WorkflowRun>
   taskConfigAssembler: TaskConfigAssembler
   tasksService: TasksService
+  workflowMediaResolver: WorkflowMediaResolver
   workflowRepository: WorkflowRepository
   workflowRunEventLog: WorkflowRunEventLog
 }
@@ -120,11 +107,11 @@ export class WorkflowNodeExecutor {
       throw new Error('Executable node task kind does not match node type.')
     }
 
-    const inputs = await this.resolveIncomingMediaInputs(run, node)
-    const inputsBySlot = inputs.reduce<Partial<Record<MediaSlotConnection['targetSlot'], MediaInput[]>>>(
+    const inputs = await this.dependencies.workflowMediaResolver.resolveNodeMedia({ run, node })
+    const inputsBySlot = inputs.reduce<Partial<Record<MediaSlotName, MediaInput[]>>>(
       (accumulator, item) => ({
         ...accumulator,
-        [item.targetSlot]: [...(accumulator[item.targetSlot] ?? []), item.input],
+        [item.slot]: [...(accumulator[item.slot] ?? []), item.input],
       }),
       {},
     )
@@ -132,95 +119,6 @@ export class WorkflowNodeExecutor {
       draft: node.data.config.task,
       media: buildMediaEnvelope(inputsBySlot),
     })
-  }
-
-  private async resolveIncomingMediaInputs(run: WorkflowRun, node: WorkflowCanvasNode): Promise<ResolvedMediaInput[]> {
-    const incomingEdges = getIncomingEdges(node.id, run.snapshotEdges)
-    const inputs: ResolvedMediaInput[] = []
-
-    for (const edge of incomingEdges) {
-      const resolved = await this.resolveEdgeMediaInput(run, edge)
-      if (resolved) {
-        inputs.push(resolved)
-      }
-    }
-
-    return inputs
-  }
-
-  private async resolveEdgeMediaInput(run: WorkflowRun, edge: WorkflowCanvasEdge): Promise<ResolvedMediaInput | null> {
-    const { connection } = edge.data
-    if (connection.sourceSelector.mode === 'empty') {
-      return null
-    }
-    if (connection.targetSlot === 'prompt') {
-      return null
-    }
-
-    const expectedKind = slotToResourceKind(connection.targetSlot)
-    const inputRole = slotToInputRole(connection.targetSlot)
-    let resource: NodeOutputResource | ResourceRef | undefined
-    let source: MediaInput['source']
-
-    if (connection.sourceSelector.mode === 'asset') {
-      resource = connection.sourceSelector.resource
-    } else if (connection.sourceSelector.mode === 'run_output') {
-      const sourceState = run.nodeStates[edge.source]
-      resource = sourceState?.output
-        ? findOutputBySelector(
-            sourceState.output,
-            connection.sourceSelector.resourceKind,
-            connection.sourceSelector.role,
-            connection.sourceSelector.index,
-          )
-        : undefined
-      source = {
-        workflowId: run.workflowId,
-        workflowRunId: run.id,
-        nodeId: edge.source,
-        ...(sourceState?.taskId ? { taskId: sourceState.taskId } : {}),
-        ...(resource?.id ? { outputResourceId: resource.id } : {}),
-        ...(resource?.index !== undefined ? { outputIndex: resource.index } : {}),
-      }
-    } else {
-      const sourceNode = getNodeMap(run.snapshotNodes).get(edge.source)
-      if (!sourceNode || !isMediaWorkflowNode(sourceNode) || !sourceNode.data.mediaView?.taskId) {
-        return this.handleMissingMedia(connection, 'Source node has no current MediaView output.')
-      }
-
-      const output = await this.dependencies.tasksService.getTaskOutput(sourceNode.data.mediaView.taskId)
-      resource = output
-        ? findOutputByMediaView(output, sourceNode.data.mediaView.outputResourceId, sourceNode.data.mediaView.outputIndex)
-        : undefined
-      source = {
-        workflowId: run.workflowId,
-        nodeId: edge.source,
-        taskId: sourceNode.data.mediaView.taskId,
-        ...(resource?.id ? { outputResourceId: resource.id } : {}),
-        ...(resource?.index !== undefined ? { outputIndex: resource.index } : {}),
-      }
-    }
-
-    if (!resource) {
-      return this.handleMissingMedia(connection, 'Required upstream output is missing.')
-    }
-    if (expectedKind && resource.kind !== expectedKind) {
-      throw new Error(`Upstream output kind "${resource.kind}" cannot be used for slot "${connection.targetSlot}".`)
-    }
-
-    return {
-      targetSlot: connection.targetSlot,
-      input: isNodeOutputResource(resource)
-        ? mediaInputFromOutput(resource, inputRole, source)
-        : mediaInputFromResourceRef(resource, inputRole),
-    }
-  }
-
-  private handleMissingMedia(connection: MediaSlotConnection, message: string): null {
-    if (!connection.required) {
-      return null
-    }
-    throw new Error(message)
   }
 
   private async recordWorkflowRunEvent(

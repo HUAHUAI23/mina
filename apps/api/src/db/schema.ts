@@ -22,6 +22,11 @@ import type {
 } from '@mina/contracts/modules/workflows'
 import { index, integer, jsonb, numeric, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
 
+export type MediaObjectStatus = 'uploading' | 'ready' | 'failed' | 'deleted'
+export type MediaObjectOrigin = 'user_upload' | 'task_output' | 'external_import' | 'system_generated'
+export type MediaObjectPurpose = 'task_input' | 'task_output' | 'workflow_slot' | 'temporary' | 'preview'
+export type MediaObjectRetention = 'temporary' | 'task_scoped' | 'project_scoped' | 'library'
+
 const timestamps = () => ({
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -141,12 +146,55 @@ export const taskResources = pgTable(
     url: text('url').notNull(),
     role: text('role').$type<ResourceRole>(),
     outputIndex: integer('output_index'),
+    mediaObjectId: text('media_object_id'),
+    slot: text('slot'),
+    slotItemId: text('slot_item_id'),
+    slotOrder: integer('slot_order'),
+    source: jsonb('source').$type<Record<string, unknown>>(),
     metadata: jsonb('metadata').$type<Record<string, unknown>>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index('task_resources_account_created_idx').on(table.accountId, table.createdAt),
+    index('task_resources_media_object_idx').on(table.mediaObjectId),
     index('task_resources_task_idx').on(table.taskId),
+  ],
+)
+
+export const mediaObjects = pgTable(
+  'media_objects',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    kind: text('kind').$type<ResourceKind>().notNull(),
+    status: text('status').$type<MediaObjectStatus>().notNull(),
+    bucket: text('bucket').notNull(),
+    storageKey: text('storage_key').notNull(),
+    url: text('url').notNull(),
+    mimeType: text('mime_type'),
+    byteSize: integer('byte_size').notNull().default(0),
+    checksum: text('checksum'),
+    width: integer('width'),
+    height: integer('height'),
+    durationSeconds: numeric('duration_seconds', { precision: 12, scale: 3 }),
+    origin: text('origin').$type<MediaObjectOrigin>().notNull(),
+    purpose: text('purpose').$type<MediaObjectPurpose>().notNull(),
+    retention: text('retention').$type<MediaObjectRetention>().notNull(),
+    parentMediaObjectId: text('parent_media_object_id'),
+    sourceTaskId: text('source_task_id').references(() => tasks.id),
+    sourceTaskResourceId: text('source_task_resource_id'),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    ...timestamps(),
+  },
+  (table) => [
+    index('media_objects_account_created_idx').on(table.accountId, table.createdAt),
+    index('media_objects_account_status_idx').on(table.accountId, table.status),
+    index('media_objects_source_task_idx').on(table.sourceTaskId),
+    uniqueIndex('media_objects_storage_key_uidx').on(table.storageKey),
   ],
 )
 

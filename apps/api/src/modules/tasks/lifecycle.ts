@@ -2,6 +2,7 @@ import type { NodeExecutionOutput, Task } from '@mina/contracts/modules/tasks'
 
 import { actualCostFromUsage } from './pricing'
 import type { OutputPostProcessor } from './output/output-post-processor'
+import type { TaskOutputFinalizer } from './output/task-output-finalizer'
 import type {
   ProviderPollResult,
   ProviderStartResult,
@@ -29,6 +30,7 @@ interface TaskLifecycleConfig {
 interface TaskLifecycleDependencies {
   config: TaskLifecycleConfig
   outputPostProcessor: OutputPostProcessor
+  outputFinalizer: TaskOutputFinalizer
   taskEventLog: TaskEventLog
   taskProvider: TaskProvider
   taskRepository: TaskRepository
@@ -176,7 +178,8 @@ export class TaskLifecycle {
     providerMetadata?: Record<string, unknown>,
   ): Promise<Task> {
     const actualCost = actualCostFromUsage(task, actualUsage)
-    const processedOutput = await this.dependencies.outputPostProcessor.process(task, providerOutput)
+    const finalizedOutput = await this.dependencies.outputFinalizer.finalize(task, providerOutput)
+    const processedOutput = await this.dependencies.outputPostProcessor.process(task, finalizedOutput)
     const output: NodeExecutionOutput = {
       ...processedOutput,
       variables: {

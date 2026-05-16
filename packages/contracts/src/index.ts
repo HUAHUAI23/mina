@@ -1,5 +1,6 @@
 export * from './modules/accounts/account.schemas'
 export * from './modules/canvas/canvas.schemas'
+export * from './modules/media/media.schemas'
 export * from './modules/posts/post.schemas'
 export * from './modules/pricing/pricing.schemas'
 export * from './modules/tasks/task.schemas'

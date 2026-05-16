@@ -121,6 +121,11 @@ const taskResourceFromRow = (row: TaskResourceRow): TaskResource =>
     url: row.url,
     ...(row.role ? { role: row.role } : {}),
     ...(row.outputIndex !== null ? { outputIndex: row.outputIndex } : {}),
+    ...(row.mediaObjectId ? { mediaObjectId: row.mediaObjectId } : {}),
+    ...(row.slot ? { slot: row.slot } : {}),
+    ...(row.slotItemId ? { slotItemId: row.slotItemId } : {}),
+    ...(row.slotOrder !== null ? { slotOrder: row.slotOrder } : {}),
+    ...(row.source ? { source: row.source } : {}),
     ...(row.metadata ? { metadata: row.metadata } : {}),
   })
 
@@ -133,6 +138,11 @@ const taskResourceInsertFromResource = (resource: TaskResource): TaskResourceIns
   url: resource.url,
   role: resource.role ?? null,
   outputIndex: resource.outputIndex ?? null,
+  mediaObjectId: resource.mediaObjectId ?? null,
+  slot: resource.slot ?? null,
+  slotItemId: resource.slotItemId ?? null,
+  slotOrder: resource.slotOrder ?? null,
+  source: resource.source ?? null,
   metadata: resource.metadata ?? null,
 })
 

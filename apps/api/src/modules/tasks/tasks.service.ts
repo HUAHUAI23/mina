@@ -11,6 +11,7 @@ import type { PricingService } from '../pricing/pricing.service'
 import { TaskLifecycle } from './lifecycle'
 import type { ModelRegistry } from './models/model-registry'
 import type { OutputPostProcessor } from './output/output-post-processor'
+import type { TaskOutputFinalizer } from './output/task-output-finalizer'
 import type { TaskProvider } from './providers/provider'
 import { taskResourceFromInput } from './resources'
 import type { TaskRetryConfig } from './retry'
@@ -39,6 +40,7 @@ export class TasksService {
     private readonly pricingService: PricingService,
     taskProvider: TaskProvider,
     private readonly modelRegistry: ModelRegistry,
+    outputFinalizer: TaskOutputFinalizer,
     outputPostProcessor: OutputPostProcessor,
     private readonly taskEventLog: TaskEventLog = new NoopTaskEventLog(),
   ) {
@@ -49,6 +51,7 @@ export class TasksService {
         retry: retryConfig(),
       },
       taskEventLog,
+      outputFinalizer,
       outputPostProcessor,
       taskProvider,
       taskRepository,

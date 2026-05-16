@@ -12,6 +12,7 @@ import type {
 } from '@mina/contracts/modules/canvas'
 
 import { createInitialNodeStates } from './run-state'
+import { downgradeFlowGroupToNodeGroup } from './group-conversion'
 import {
   findOutputByMediaView,
   slotToInputRole,
@@ -43,6 +44,25 @@ const imageNode = (id: string, parentId?: string): WorkflowCanvasNode => ({
   },
 })
 
+const imageNodeWithMediaSlots = (
+  node: WorkflowCanvasNode,
+  mediaSlots: Extract<
+    WorkflowCanvasNode['data'],
+    { nodeType: 'image_generation' }
+  >['mediaSlots'],
+): WorkflowCanvasNode => {
+  if (node.data.nodeType !== 'image_generation') {
+    throw new Error('Expected image generation node.')
+  }
+  return {
+    ...node,
+    data: {
+      ...node.data,
+      mediaSlots,
+    },
+  }
+}
+
 const flowGroupNode = (id: string): WorkflowCanvasNode => ({
   id,
   type: 'flow_group',
@@ -60,7 +80,9 @@ const mediaEdge = (
   id: string,
   source: string,
   target: string,
-  sourceSelector: MediaSlotConnection['sourceSelector'] = { mode: 'current_media' },
+  sourceSelector: MediaSlotConnection['sourceSelector'] = {
+    mode: 'current_media',
+  },
 ): WorkflowCanvasEdge => ({
   id,
   type: 'media',
@@ -76,7 +98,11 @@ const mediaEdge = (
   },
 })
 
-const mediaInput = (kind: ResourceKind, role: ResourceRole, url: string): MediaInput => ({
+const mediaInput = (
+  kind: ResourceKind,
+  role: ResourceRole,
+  url: string,
+): MediaInput => ({
   kind,
   role,
   url,
@@ -93,29 +119,62 @@ describe('workflow helper semantics', () => {
     expect(slotToResourceKind('firstFrame')).toBe('image')
     expect(slotToResourceKind('referenceAudios')).toBe('audio')
     expect(slotToResourceKind('referenceVideos')).toBe('video')
-    expect(slotToResourceKind('prompt')).toBeUndefined()
   })
 
   test('selects MediaView output by id first, then index, then default output', () => {
     const output: NodeExecutionOutput = {
       resources: [
-        { id: 'out-0', kind: 'image', role: 'generated_image', index: 0, url: 'https://cdn.test/0.png' },
-        { id: 'out-1', kind: 'image', role: 'generated_image', index: 1, url: 'https://cdn.test/1.png' },
+        {
+          id: 'out-0',
+          kind: 'image',
+          role: 'generated_image',
+          index: 0,
+          url: 'https://cdn.test/0.png',
+        },
+        {
+          id: 'out-1',
+          kind: 'image',
+          role: 'generated_image',
+          index: 1,
+          url: 'https://cdn.test/1.png',
+        },
       ],
       variables: {},
     }
 
     expect(findOutputByMediaView(output, 'out-1', 0)?.id).toBe('out-1')
     expect(findOutputByMediaView(output, undefined, 1)?.id).toBe('out-1')
-    expect(findOutputByMediaView(output, undefined, undefined)?.id).toBe('out-0')
+    expect(findOutputByMediaView(output, undefined, undefined)?.id).toBe(
+      'out-0',
+    )
   })
 
   test('builds media envelopes with first frame, tail frame, reference audio, and reference video inputs', () => {
-    const firstFrame = mediaInput('image', 'first_frame', 'https://cdn.test/first.png')
-    const lastFrame = mediaInput('image', 'last_frame', 'https://cdn.test/last.png')
-    const referenceImage = mediaInput('image', 'reference_image', 'https://cdn.test/base.png')
-    const referenceAudio = mediaInput('audio', 'reference_audio', 'https://cdn.test/ref.mp3')
-    const referenceVideo = mediaInput('video', 'reference_video', 'https://cdn.test/ref.mp4')
+    const firstFrame = mediaInput(
+      'image',
+      'first_frame',
+      'https://cdn.test/first.png',
+    )
+    const lastFrame = mediaInput(
+      'image',
+      'last_frame',
+      'https://cdn.test/last.png',
+    )
+    const referenceImage = mediaInput(
+      'image',
+      'reference_image',
+      'https://cdn.test/base.png',
+    )
+    const referenceAudio = mediaInput(
+      'audio',
+      'reference_audio',
+      'https://cdn.test/ref.mp3',
+    )
+    const referenceVideo = mediaInput(
+      'video',
+      'reference_video',
+      'https://cdn.test/ref.mp4',
+    )
 
     const media = buildMediaEnvelope({
       firstFrame: [firstFrame],
@@ -130,13 +189,17 @@ describe('workflow helper semantics', () => {
     expect(media.referenceImages).toEqual([referenceImage])
     expect(media.referenceAudios).toEqual([referenceAudio])
     expect(media.referenceVideos).toEqual([referenceVideo])
-    expect([
-      media.firstFrame,
-      media.lastFrame,
-      ...media.referenceImages,
-      ...media.referenceAudios,
-      ...media.referenceVideos,
-    ].filter((input): input is MediaInput => input !== undefined).map((input) => input.role)).toEqual([
+    expect(
+      [
+        media.firstFrame,
+        media.lastFrame,
+        ...media.referenceImages,
+        ...media.referenceAudios,
+        ...media.referenceVideos,
+      ]
+        .filter((input): input is MediaInput => input !== undefined)
+        .map((input) => input.role),
+    ).toEqual([
       'first_frame',
       'last_frame',
       'reference_image',
@@ -146,7 +209,12 @@ describe('workflow helper semantics', () => {
   })
 
   test('initial flow-group node states include executable descendants only', () => {
-    const nodes = [flowGroupNode('group'), imageNode('a', 'group'), imageNode('b'), flowGroupNode('nested')]
+    const nodes = [
+      flowGroupNode('group'),
+      imageNode('a', 'group'),
+      imageNode('b'),
+      flowGroupNode('nested'),
+    ]
     const states = createInitialNodeStates(nodes, 'a', 'group')
 
     expect(Object.keys(states)).toEqual(['a'])
@@ -154,17 +222,67 @@ describe('workflow helper semantics', () => {
   })
 
   test('flow group validation rejects cross-scope edges', () => {
-    const nodes = [flowGroupNode('group'), imageNode('a', 'group'), imageNode('b')]
+    const nodes = [
+      flowGroupNode('group'),
+      imageNode('a', 'group'),
+      imageNode('b'),
+    ]
 
-    expect(() => validateFlowGroup(nodes, [mediaEdge('a-b', 'a', 'b')], 'group')).toThrow(
-      'Flow group execution does not support cross-scope edges.',
-    )
+    expect(() =>
+      validateFlowGroup(nodes, [mediaEdge('a-b', 'a', 'b')], 'group'),
+    ).toThrow('Flow group execution does not support cross-scope edges.')
   })
 
   test('flow group validation rejects executable cycles', () => {
-    const nodes = [flowGroupNode('group'), imageNode('a', 'group'), imageNode('b', 'group')]
+    const nodes = [
+      flowGroupNode('group'),
+      imageNode('a', 'group'),
+      imageNode('b', 'group'),
+    ]
     const edges = [mediaEdge('a-b', 'a', 'b'), mediaEdge('b-a', 'b', 'a')]
 
-    expect(() => validateFlowGroup(nodes, edges, 'group')).toThrow('Flow group execution graph must be acyclic.')
+    expect(() => validateFlowGroup(nodes, edges, 'group')).toThrow(
+      'Flow group execution graph must be acyclic.',
+    )
+  })
+
+  test('downgrades flow group run_output media slots to current_media node group slots', () => {
+    const nodes: WorkflowCanvasNode[] = [
+      flowGroupNode('group'),
+      imageNode('a', 'group'),
+      imageNodeWithMediaSlots(imageNode('b', 'group'), {
+        inputImages: [
+          {
+            id: 'slot-a',
+            order: 0,
+            required: true,
+            slot: 'inputImages',
+            source: {
+              type: 'node_output',
+              nodeId: 'a',
+              resolve: 'run_output',
+              selector: {
+                resourceKind: 'image',
+                role: 'generated_image',
+                index: 0,
+              },
+            },
+          },
+        ],
+      }),
+    ]
+
+    const converted = downgradeFlowGroupToNodeGroup(nodes, 'group')
+    expect(converted[0]?.type).toBe('node_group')
+    expect(converted[0]?.data.nodeType).toBe('node_group')
+    const target = converted[2]
+    if (!target || target.data.nodeType !== 'image_generation') {
+      throw new Error('Target node missing.')
+    }
+    expect(target.data.mediaSlots?.inputImages?.[0]?.source).toEqual({
+      type: 'node_output',
+      nodeId: 'a',
+      resolve: 'current_media',
+    })
   })
 })

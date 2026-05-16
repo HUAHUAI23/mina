@@ -12,6 +12,7 @@ import { HttpError } from '../../lib/http/http-error'
 import { DEFAULT_ACCOUNT_ID } from '../accounts/accounts.data'
 import type { TaskConfigAssembler } from '../tasks/config/task-config-assembler'
 import type { TasksService } from '../tasks/tasks.service'
+import type { WorkflowMediaResolver } from './media/workflow-media-resolver'
 import { validateCanvas } from './validation'
 import { NoopWorkflowRunEventLog, type WorkflowRunEventLog } from './workflow-events'
 import { WorkflowRunsService } from './workflow-runs.service'
@@ -31,12 +32,14 @@ export class WorkflowsService {
     private readonly workflowRepository: WorkflowRepository,
     tasksService: TasksService,
     taskConfigAssembler: TaskConfigAssembler,
+    workflowMediaResolver: WorkflowMediaResolver,
     workflowRunEventLog: WorkflowRunEventLog = new NoopWorkflowRunEventLog(),
   ) {
     this.workflowRunsService = new WorkflowRunsService(
       workflowRepository,
       tasksService,
       taskConfigAssembler,
+      workflowMediaResolver,
       workflowRunEventLog,
     )
   }
