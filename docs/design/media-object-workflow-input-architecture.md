@@ -1,160 +1,160 @@
-# Mina 媒体对象与 Workflow 输入架构工程指导
+# Mina Media Object and Workflow Input Architecture Guide
 
-## 1. 目标
+## 1. Goal
 
-本文档定义 Mina 后端下一轮媒体资源与 workflow 输入核心重构方案，覆盖：
+This document defines the backend architecture for Mina media resources and workflow inputs. It covers:
 
-1. 用户上传媒体、一次性表单媒体、画布媒体槽媒体、任务输出媒体的统一存储模型。
-2. 对象存储 key 规范，确保用户级聚合、统计、清理和权限边界清晰。
-3. `WorkflowCanvasNode.data.mediaSlots` 的稳定结构，支持本地媒体、媒体对象、上游节点输出、资产库入口，以及槽位内有序混排。
-4. 普通画布运行与流程组运行的媒体解析规则。
-5. 任务输入/输出资源快照与 `media_objects` 的关系。
-6. 任务输出上传、视频封面、provider 输出归一化的工程位置。
+1. A unified storage model for user uploads, one-off form uploads, canvas media slot inputs, and task output media.
+2. Object storage key conventions that keep account-level aggregation, accounting, cleanup, and authorization boundaries clear.
+3. A stable `WorkflowCanvasNode.data.mediaSlots` structure that supports local media, media objects, upstream node outputs, future media library references, and ordered mixed items inside a slot.
+4. Media resolution rules for isolated canvas execution and flow-group execution.
+5. The relationship between task input/output resource snapshots and `media_objects`.
+6. The engineering location for task output mirroring, video first-frame/last-frame/cover generation, and provider output normalization.
 
-本轮不设计前端交互 API 细节，不实现上传表单 API、资产库 UI API、画布表单 API。后端核心结构、运行链路、持久化模型和模块边界需要先稳定。
+This document does not define frontend interaction API details. Upload form APIs, media library UI APIs, and canvas form APIs can be designed later. The backend core structure, runtime flow, persistence model, and module boundaries should be stabilized first.
 
-## 2. 当前架构分析
+## 2. Current Architecture Analysis
 
-当前已经比较合理的部分：
+Parts that are already in a good shape:
 
-1. Provider/model 架构已经拆到 `ModelSpec`、`ModelRegistry`、`ProviderRouter`。
-2. `ModelSpec.prepareConfig(...)` 是 provider/model 参数与媒体能力校验的入口。
-3. `TaskLifecycle` 只通过 `TaskProvider` 调用 provider，不直接依赖 Google/Volcengine。
-4. `ObjectStorage` 已经抽象出 S3 与 in-memory 实现。
-5. `task_resources` 已经能记录任务 input/output 资源索引。
-6. 视频封面后处理已经存在 `OutputPostProcessor` 和 `VideoCoverGenerator`。
+1. Provider and model logic has been split into `ModelSpec`, `ModelRegistry`, and `ProviderRouter`.
+2. `ModelSpec.prepareConfig(...)` is the entry point for provider/model parameter validation and media capability validation.
+3. `TaskLifecycle` calls providers only through `TaskProvider`; it does not depend directly on Google or Volcengine.
+4. `ObjectStorage` already abstracts S3 and in-memory implementations.
+5. `task_resources` can record task input/output resource indexes.
+6. Video output post-processing belongs to the shared output pipeline through `OutputPostProcessor` and `VideoFrameGenerator`.
 
-当前不足：
+Problems this architecture must solve:
 
-1. 媒体文件没有统一主表。上传媒体和任务输出无法统一做存储占用统计、生命周期管理、权限追踪。
-2. 当前对象存储只提供底层能力，没有业务级媒体对象 key 规范。
-3. 当前 workflow 主要从 incoming edges 解析媒体：
+1. Media files need a unified primary table. Upload media and task outputs must support storage accounting, lifecycle management, and permission tracing through the same model.
+2. Object storage needs a business-level media object key convention, not only a low-level storage adapter.
+3. Workflow media inputs must not be derived only from incoming edges:
 
    ```ts
    const inputs = await this.resolveIncomingMediaInputs(run, node)
    ```
 
-   这只能表达“边输入”，不能表达节点媒体槽里本地上传、媒体对象、上游 A、上游 B 混排的顺序。
-4. `workflows.edges` 当前承担了过多媒体输入语义。edge 适合表达节点连接，不适合成为媒体槽有序列表的唯一真实来源。
-5. `task_resources` 当前只记录 `url/kind/role/metadata`，不能稳定追踪输入来自哪个媒体对象、哪个槽位、哪个上游节点输出。
-6. Provider 输出当前多数只是 URL 引用。除视频封面外，没有统一把 provider 输出镜像到 Mina 对象存储。
+   Incoming edges can express "a connection feeds this node", but they cannot naturally express an ordered media slot containing a local upload, media object, upstream A, and upstream B.
+4. `workflows.edges` should not own media input semantics. Edges are suitable for graph connections, visual links, and flow dependencies, not as the single source of truth for ordered media slot state.
+5. `task_resources` must track where each input came from: media object, slot, slot item, slot order, or upstream node output.
+6. Provider outputs should be mirrored into Mina-owned object storage instead of leaving most output resources as provider URL references.
 
-## 3. 设计依据
+## 3. Design Basis
 
-本方案采用以下工程设计原则。
+This architecture uses the following engineering principles.
 
 ### 3.1 Ports & Adapters
 
-核心系统不依赖具体对象存储、provider、外部 API。应用核心通过 port 交互，S3、in-memory、Google、Volcengine 都是 adapter。
+The core system should not depend on a specific object storage, provider, or external API. The application core talks through ports; S3, in-memory storage, Google, and Volcengine are adapters.
 
-落地方式：
+Implementation rules:
 
-1. `MediaObjectService` 依赖 `ObjectStorage` port，不直接依赖 S3 SDK。
-2. `TaskOutputFinalizer` 依赖 `MediaObjectService` 和 `RemoteMediaFetcher` port。
-3. `WorkflowMediaResolver` 只依赖 `MediaObjectRepository`、`TasksService`、`WorkflowRun` 快照，不依赖 provider。
+1. `MediaObjectService` depends on the `ObjectStorage` port, not directly on the S3 SDK.
+2. `TaskOutputFinalizer` depends on `MediaObjectService` and the `RemoteMediaFetcher` port.
+3. `WorkflowMediaResolver` depends on media objects, tasks, and workflow-run snapshots; it does not depend on providers.
 
-参考：Alistair Cockburn, Hexagonal Architecture  
-https://alistair.cockburn.us/hexagonal-architecture
+Reference: Alistair Cockburn, Hexagonal Architecture
+<https://alistair.cockburn.us/hexagonal-architecture>
 
 ### 3.2 Gateway Pattern
 
-外部系统字段不要泄露到核心模型。Provider client 和对象存储 client 都应通过 gateway 封装外部 API。
+External system fields should not leak into core models. Provider clients and object storage clients should be wrapped behind gateways that translate external API details into Mina's internal language.
 
-落地方式：
+Implementation rules:
 
-1. Provider 输出先由 mapper 转成 `NodeExecutionOutput`。
-2. `TaskOutputFinalizer` 再统一处理“外部 URL/data URL -> Mina media_object”。
-3. workflow 和 task 不处理 S3 SDK、Google 文件 API、Volcengine 原始字段。
+1. Provider mappers convert provider responses into `NodeExecutionOutput`.
+2. `TaskOutputFinalizer` then converts external URLs or data URLs into Mina `media_objects`.
+3. Workflow and task code must not handle S3 SDK types, Google file API fields, or Volcengine raw response fields directly.
 
-参考：Martin Fowler, Gateway  
-https://martinfowler.com/articles/gateway-pattern.html
+Reference: Martin Fowler, Gateway
+<https://martinfowler.com/articles/gateway-pattern.html>
 
-### 3.3 Blob / Attachment 分离
+### 3.3 Blob / Attachment Separation
 
-Rails Active Storage 的核心思想是把文件实体和业务引用分开。Mina 不直接照搬表结构，但采用同类边界：
+Rails Active Storage separates file blobs from business references. Mina should not copy the Rails schema directly, but it should use the same boundary:
 
-1. `media_objects` 是文件实体。
-2. workflow media slot、task resource、未来资产库条目都是对文件实体的引用。
+1. `media_objects` is the file entity table.
+2. Workflow media slots, task resources, and future media library items are references to file entities.
 
-参考：Rails Active Storage Overview  
-https://guides.rubyonrails.org/active_storage_overview.html
+Reference: Rails Active Storage Overview
+<https://guides.rubyonrails.org/active_storage_overview.html>
 
-### 3.4 S3 Prefix 组织对象
+### 3.4 S3 Prefix Organization
 
-S3 是扁平对象存储，prefix 只是 key 的前缀，不是目录。但 prefix 可以用于组织、浏览和统计。
+S3 is a flat object store. Prefixes are key prefixes, not real directories, but they are useful for organization, browsing, operational inspection, and cost analysis.
 
-落地方式：
+Implementation rules:
 
-1. 所有用户对象必须在 `users/{accountId}/...` 下。
-2. 媒体对象按 `mediaObjectId` 聚合。
-3. DB 中的 `media_objects.byteSize` 是实时统计 SSOT；S3 prefix 和 Storage Lens 是运维校验与成本分析辅助。
+1. Every user-owned object must live under `users/{accountId}/...`.
+2. Media objects are grouped by `mediaObjectId`.
+3. `media_objects.byteSize` is the application source of truth for live accounting. S3 prefixes and Storage Lens are operational aids, not the product source of truth.
 
-参考：
+References:
 
-1. AWS S3 Organizing objects using prefixes  
-   https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-prefixes.html
-2. AWS S3 Presigned URLs  
-   https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html
-3. AWS S3 Storage Lens prefix metrics  
-   https://repost.aws/knowledge-center/s3-storage-lens-prefix-metrics
+1. AWS S3 organizing objects using prefixes
+   <https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-prefixes.html>
+2. AWS S3 presigned URLs
+   <https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html>
+3. AWS S3 Storage Lens prefix metrics
+   <https://repost.aws/knowledge-center/s3-storage-lens-prefix-metrics>
 
-### 3.5 Discriminated Union
+### 3.5 Discriminated Unions
 
-媒体槽来源有多种形态，必须用 discriminated union，避免一堆 optional 字段互斥导致错误状态。
+Media slot sources have multiple shapes. They should use discriminated unions to avoid invalid states caused by many mutually exclusive optional fields.
 
-落地方式：
+Implementation rules:
 
-1. `NodeMediaSlotItem.source.type` 做 discriminator。
-2. `TaskResourceSource.type` 做 discriminator。
-3. Zod schema 使用 `z.discriminatedUnion(...)`。
+1. `NodeMediaSlotItem.source.type` is the discriminator.
+2. `TaskResourceSource.type` is the discriminator.
+3. Zod schemas use `z.discriminatedUnion(...)`.
 
-参考：
+References:
 
 1. Zod discriminated unions  
-   https://zod.dev/api?id=discriminated-unions
+   <https://zod.dev/api?id=discriminated-unions>
 2. TypeScript narrowing  
-   https://www.typescriptlang.org/docs/handbook/2/narrowing.html
+   <https://www.typescriptlang.org/docs/handbook/2/narrowing.html>
 
-### 3.6 React Flow v12 持久化约束
+### 3.6 React Flow v12 Persistence Rules
 
-Mina contracts 要适配 React Flow v12，但只保存稳定业务字段。
+Mina contracts should work well with React Flow v12, but Mina should persist only stable business fields.
 
-落地方式：
+Implementation rules:
 
-1. 使用 `parentId`，不使用旧 `parentNode`。
-2. 父节点必须排在子节点前。
-3. 子节点 position 相对父节点。
-4. 不持久化 `selected/dragging/measured/positionAbsolute` 等 UI 临时字段。
-5. `mediaSlots` 存在 Mina node data 中，不依赖 React Flow 内部状态。
+1. Use `parentId`; do not use the old `parentNode`.
+2. Parent nodes must appear before child nodes in the nodes array.
+3. Child node positions are relative to the parent.
+4. Do not persist UI-only temporary fields such as `selected`, `dragging`, `measured`, or `positionAbsolute`.
+5. `mediaSlots` lives in Mina node data and does not depend on React Flow internal state.
 
-参考：
+References:
 
 1. React Flow Sub Flows  
-   https://reactflow.dev/learn/layouting/sub-flows
+   <https://reactflow.dev/learn/layouting/sub-flows>
 2. React Flow TypeScript / Types  
-   https://reactflow.dev/api-reference/types
+   <https://reactflow.dev/api-reference/types>
 3. React Flow Save and Restore  
-   https://reactflow.dev/examples/interaction/save-and-restore
+   <https://reactflow.dev/examples/interaction/save-and-restore>
 
-## 4. 核心原则
+## 4. Core Principles
 
-1. 文件本体只归 `media_objects` 管。workflow 和 task 只保存引用和快照。
-2. `media_objects` 不是资产库。它是 Mina 管理的媒体文件主表，一次性上传也属于它。
-3. 资产库是未来可选上层表，例如 `media_library_items`，引用 `media_objects`。
-4. workflow 节点的媒体槽顺序归目标节点 `data.mediaSlots` 管，不归 edge 管。
-5. edge 只表达节点间连接、视觉关系和流程依赖投影。
-6. 普通画布只执行 selected node，来自上游节点的媒体读 source node 当前 `mediaView`。
-7. 流程组执行 DAG，来自上游节点的媒体读本次 `workflow_run.nodeStates[source].output`。
-8. `TaskConfig.media` 是本次任务最终输入快照。
-9. `task_resources` 是任务维度资源索引，必须能追踪 slot、order、source、mediaObjectId。
-10. Provider spec 不知道 workflow，也不处理对象存储上传。
-11. 任务输出上传和视频封面属于通用 output finalizer/post processor，不属于单个 provider spec。
+1. File bytes are owned only by `media_objects`. Workflows and tasks store references and snapshots.
+2. `media_objects` is not the media library. It is Mina's primary table for managed media files, including one-off uploads.
+3. The future media library is an optional higher-level table, for example `media_library_items`, that references `media_objects`.
+4. Workflow node media slot order belongs to the target node's `data.mediaSlots`, not to edges.
+5. Edges express graph connections, visual relationships, and flow dependency projections.
+6. Isolated canvas execution runs only the selected node. Media from upstream nodes is read from the source node's current `mediaView`.
+7. Flow-group execution runs a DAG. Media from upstream nodes is read from the current `workflow_run.nodeStates[source].output`.
+8. `TaskConfig.media` is the final media input snapshot for one task.
+9. `task_resources` is the task-level resource index and must be able to trace slot, order, source, and `mediaObjectId`.
+10. Provider specs do not know about workflow and do not perform object storage uploads.
+11. Task output mirroring and video frame generation belong to shared output finalizer/post-processor services, not to individual provider specs.
 
-## 5. 目标数据模型
+## 5. Target Data Model
 
 ### 5.1 `media_objects`
 
-新增表：
+Add the table:
 
 ```ts
 export const mediaObjects = pgTable(
@@ -205,15 +205,15 @@ export const mediaObjects = pgTable(
 )
 ```
 
-字段说明：
+Field meanings:
 
-1. `origin` 表示文件怎么来的。
-2. `purpose` 表示当前业务用途。
-3. `retention` 表示生命周期策略。
-4. `parentMediaObjectId` 用于视频封面、缩略图、转码版本指向原始对象。
-5. `sourceTaskId/sourceTaskResourceId` 用于任务输出回溯。
+1. `origin` describes how the file entered Mina.
+2. `purpose` describes the current business use.
+3. `retention` describes the lifecycle policy.
+4. `parentMediaObjectId` links derived media such as video frames, covers, thumbnails, and transcodes back to the source media object.
+5. `sourceTaskId/sourceTaskResourceId` supports task output lineage.
 
-不在本轮实现但预留：
+Reserved for later, not required in this iteration:
 
 ```ts
 media_library_items {
@@ -229,33 +229,34 @@ media_library_items {
 }
 ```
 
-### 5.2 对象存储 key 规范
+### 5.2 Object Storage Key Convention
 
-当前底层 key 是：
+The low-level key shape is:
 
 ```text
 users/{accountId}/{scope}/{objectName}
 ```
 
-保留这个账户隔离根，但媒体对象统一使用 `media` scope：
+Keep this account-isolated root. Media objects should use the `media` scope:
 
 ```text
 users/{accountId}/media/{mediaObjectId}/original.{ext}
-users/{accountId}/media/{mediaObjectId}/preview.{ext}
+users/{accountId}/media/{mediaObjectId}/first-frame.jpg
+users/{accountId}/media/{mediaObjectId}/last-frame.jpg
 users/{accountId}/media/{mediaObjectId}/cover.jpg
 users/{accountId}/media/{mediaObjectId}/thumbnail.{ext}
 users/{accountId}/temporary/{uploadSessionId}/original
 ```
 
-规则：
+Rules:
 
-1. `mediaObjectId` 必须由服务端生成，不能由用户输入。
-2. 原始文件使用 `original.{ext}`。
-3. 派生文件使用独立 `mediaObjectId`，并通过 `parentMediaObjectId` 指向原文件。
-4. 上传未完成的对象可以直接使用最终 key，也可以先使用 temporary key。为了简单，本轮推荐直接使用最终 key，状态为 `uploading`，失败或超时由清理任务删除。
-5. 不要把 taskId、workflowId 作为对象存储主路径。它们放在 DB 关系里。对象路径按用户和媒体对象聚合，便于用户级统计与清理。
+1. `mediaObjectId` must be generated by the server. It must not come from user input.
+2. Original files use `original.{ext}`.
+3. Derived files use their own `mediaObjectId` and point to the source file through `parentMediaObjectId`.
+4. Incomplete uploads can either use the final key directly or a temporary key first. For simplicity, use the final key with status `uploading`, and let cleanup jobs delete failed or expired uploads.
+5. Do not put `taskId` or `workflowId` into the primary object storage path. Those relations belong in the database. Object keys are grouped by account and media object to simplify user-level accounting and cleanup.
 
-用户存储占用统计以 DB 为准：
+User storage accounting should use the database as the source of truth:
 
 ```sql
 select
@@ -268,7 +269,7 @@ group by account_id;
 
 ### 5.3 `MediaInput`
 
-增强 contracts 中的 `MediaInput`：
+Enhance `MediaInput` in contracts:
 
 ```ts
 export const MediaInputSourceSchema = z.discriminatedUnion('type', [
@@ -308,15 +309,15 @@ export const MediaInputSchema = z.object({
 })
 ```
 
-兼容策略：
+Rules:
 
-1. 直接把旧 optional source 迁移为 discriminated source。
-2. `mediaObjectId` 是快捷外键，便于 task resource 直接关联。
-3. `source` 描述“为什么这个输入会出现在本次任务里”。
+1. `mediaObjectId` is a fast foreign-key-style shortcut for task resources.
+2. `source` describes why this input exists in this task.
+3. Every workflow-derived media input should carry enough source information for lineage and debugging.
 
 ### 5.4 `NodeOutputResource`
 
-增强输出资源：
+Enhance output resources:
 
 ```ts
 export const NodeOutputResourceSchema = z.object({
@@ -330,15 +331,15 @@ export const NodeOutputResourceSchema = z.object({
 })
 ```
 
-规则：
+Rules:
 
-1. Provider mapper 可以先返回外部 URL 或 data URL。
-2. `TaskOutputFinalizer` 成功镜像后必须补上 `mediaObjectId`，并把 `url` 改为 Mina 管理的 URL。
-3. dev provider 的 `mina://tasks/...` 输出也应在 finalizer 中转换为可测试的 media object，或者明确由 dev finalizer 生成 deterministic media object。不要让测试依赖 provider 外部 URL。
+1. Provider mappers may initially return external URLs or data URLs.
+2. After `TaskOutputFinalizer` mirrors an output successfully, the resource must include `mediaObjectId`, and `url` must be a Mina-managed URL.
+3. Dev provider `mina://tasks/...` output should be converted by the finalizer into deterministic media objects. Tests should not depend on provider external URLs.
 
 ### 5.5 `task_resources`
 
-增强表：
+Enhance the table:
 
 ```ts
 task_resources {
@@ -362,7 +363,7 @@ task_resources {
 }
 ```
 
-索引：
+Indexes:
 
 ```ts
 index('task_resources_task_idx').on(table.taskId)
@@ -370,16 +371,16 @@ index('task_resources_media_object_idx').on(table.mediaObjectId)
 index('task_resources_account_created_idx').on(table.accountId, table.createdAt)
 ```
 
-职责：
+Responsibilities:
 
-1. 记录某次任务实际使用了哪些 input。
-2. 记录某次任务实际产出了哪些 output。
-3. 提供任务资源列表、任务详情、血缘追踪、调试审计。
-4. 不负责文件上传，不是文件主表。
+1. Record which inputs were actually used by one task.
+2. Record which outputs were actually produced by one task.
+3. Support task resource lists, task details, lineage tracing, debugging, and audit trails.
+4. Do not upload files. This table is not the primary file table.
 
-## 6. Workflow `mediaSlots` 设计
+## 6. Workflow `mediaSlots` Design
 
-### 6.1 槽位类型
+### 6.1 Slot Names
 
 ```ts
 export const MediaSlotNameSchema = z.enum([
@@ -392,9 +393,9 @@ export const MediaSlotNameSchema = z.enum([
 ])
 ```
 
-`prompt` 不放入 `mediaSlots`。prompt 是 task draft 的文本字段，不和媒体槽混在一起。
+`prompt` does not belong in `mediaSlots`. The prompt is a text field in the task draft and should not be mixed with media slots.
 
-### 6.2 来源类型
+### 6.2 Source Types
 
 ```ts
 export const NodeOutputSelectorSchema = z.object({
@@ -428,14 +429,14 @@ export const NodeMediaSlotSourceSchema = z.discriminatedUnion('type', [
 ])
 ```
 
-说明：
+Meaning:
 
-1. `media_object` 覆盖一次性上传、画布上传、未来资产库选择。
-2. `external_url` 只作为开发/导入/兼容入口。产品链路应尽量转成 media object。
-3. `node_output/current_media` 用于普通画布。
-4. `node_output/run_output` 用于流程组。
+1. `media_object` covers one-off uploads, canvas uploads, and future media library selections.
+2. `external_url` is only for development, import, or controlled integrations. Product upload flows should convert media into `media_objects`.
+3. `node_output/current_media` is used by isolated canvas execution.
+4. `node_output/run_output` is used by flow-group execution.
 
-### 6.3 槽位 item
+### 6.3 Slot Item
 
 ```ts
 export const NodeMediaSlotItemSchema = z.object({
@@ -447,11 +448,11 @@ export const NodeMediaSlotItemSchema = z.object({
 })
 
 export const NodeMediaSlotsSchema = z
-  .record(MediaSlotNameSchema, z.array(NodeMediaSlotItemSchema))
+  .partialRecord(MediaSlotNameSchema, z.array(NodeMediaSlotItemSchema))
   .default({})
 ```
 
-节点 data：
+Node data:
 
 ```ts
 z.object({
@@ -463,15 +464,15 @@ z.object({
 })
 ```
 
-### 6.4 顺序规则
+### 6.4 Ordering Rules
 
-1. 同一个 slot 内按 `order` 升序。
-2. `order` 相同则按 `id` 字典序兜底，保证 deterministic。
-3. 单值槽位 `firstFrame/lastFrame` 最多一个 ready item。多个 item 直接校验失败，不隐式覆盖。
-4. 多值槽位允许混排本地上传、媒体对象、上游节点输出。
-5. 后端不依赖 edge 遍历顺序。
+1. Items inside the same slot are ordered by `order` ascending.
+2. If `order` is equal, sort by `id` as a deterministic fallback.
+3. Single-value slots such as `firstFrame` and `lastFrame` can have at most one ready item. Multiple items should fail validation instead of being implicitly overwritten.
+4. Multi-value slots may mix local uploads, media objects, and upstream node outputs.
+5. Backend execution must not depend on edge iteration order.
 
-示例：
+Example:
 
 ```json
 {
@@ -512,11 +513,11 @@ z.object({
 }
 ```
 
-用户拖拽排序只修改 `order`，不改 edge。
+Drag-and-drop reordering changes only `order`; it does not change edges.
 
-### 6.5 Edge 角色
+### 6.5 Edge Role
 
-edge 仍保留，但职责收窄：
+Edges are still stored, but their responsibility is narrower:
 
 ```ts
 export const WorkflowEdgeDataSchema = z.object({
@@ -528,24 +529,20 @@ export const WorkflowEdgeDataSchema = z.object({
 })
 ```
 
-规则：
+Rules:
 
-1. edge 表达 React Flow 连接和流程组 DAG 依赖。
-2. edge.source 必须等于 slot item source 的 `nodeId`。
-3. edge.target 必须等于拥有该 slot item 的节点。
-4. edge 不保存 URL，不保存媒体顺序。
-5. workflow 保存时校验 edge 与 `mediaSlots` 一致。
+1. An edge expresses a React Flow connection and a flow-group DAG dependency projection.
+2. `edge.source` must equal the slot item's source `nodeId`.
+3. `edge.target` must equal the node that owns the slot item.
+4. The edge does not store URLs and does not store media ordering.
+5. Workflow persistence validates that edges and `mediaSlots` agree.
+6. Because this is a new project, legacy `media_slot` edge compatibility should not be kept in the runtime schema.
 
-兼容旧结构：
+## 7. Media Resolution Flow
 
-1. 旧 `MediaSlotConnection.sourceSelector.asset.resource` 迁移为 `mediaSlots[source=external_url]` 或 `media_object`。
-2. 旧 `current_media/run_output` edge 迁移为目标节点的 `mediaSlots` item，并保留 edge 指向 item。
+Add `WorkflowMediaResolver` and move media resolution out of `WorkflowNodeExecutor.resolveIncomingMediaInputs`.
 
-## 7. 媒体解析链路
-
-新增 `WorkflowMediaResolver`，替代 `WorkflowNodeExecutor.resolveIncomingMediaInputs` 的职责。
-
-目录建议：
+Suggested directory:
 
 ```text
 apps/api/src/modules/workflows/media/
@@ -555,7 +552,7 @@ apps/api/src/modules/workflows/media/
   media-input-builder.ts
 ```
 
-接口：
+Interface:
 
 ```ts
 export interface ResolveWorkflowNodeMediaInput {
@@ -575,12 +572,12 @@ export class WorkflowMediaResolver {
 }
 ```
 
-### 7.1 解析 `media_object`
+### 7.1 Resolving `media_object`
 
 ```text
 slot item
   -> mediaObjectRepository.findReadyById(accountId, mediaObjectId)
-  -> kind 校验
+  -> validate kind
   -> MediaInput {
        kind,
        url,
@@ -591,27 +588,27 @@ slot item
      }
 ```
 
-如果 `required=true` 且媒体对象不存在或未 ready，节点执行失败。
+If `required=true` and the media object does not exist or is not ready, node execution fails.
 
-### 7.2 解析 `external_url`
+### 7.2 Resolving `external_url`
 
-只用于兼容和开发：
+Use only for development and controlled imports:
 
 ```text
 slot item
-  -> kind 校验
+  -> validate kind
   -> MediaInput { kind, url, role, source: { type: 'external_url' } }
 ```
 
-产品上传链路不应该长期依赖 `external_url`。
+Product upload flows should not rely on `external_url` long term.
 
-### 7.3 普通画布 `node_output/current_media`
+### 7.3 Isolated Canvas `node_output/current_media`
 
-普通画布运行 selected node 时，只执行 selected node。上游媒体来自 source node 当前 `mediaView`：
+When the selected node runs on the ordinary canvas, only that selected node executes. Upstream media comes from the source node's current `mediaView`:
 
 ```text
 B mediaSlots item source=node_output/current_media nodeId=A
-  -> snapshotNodes 找 A
+  -> find A in snapshotNodes
   -> A.data.mediaView.taskId
   -> tasksService.getTaskOutput(taskId)
   -> findOutputByMediaView(output, outputResourceId, outputIndex)
@@ -631,16 +628,16 @@ B mediaSlots item source=node_output/current_media nodeId=A
      }
 ```
 
-如果 source node 没有 `mediaView` 或 output 缺失：
+If the source node has no `mediaView` or the referenced output is missing:
 
-1. `required=true`：节点失败，workflow run failed。
-2. `required=false`：跳过该 item。
+1. `required=true`: the node fails and the workflow run fails.
+2. `required=false`: skip that item.
 
-前端展示也应使用同一语义：B 槽位展示 A 当前 `mediaView` 指向的输出。A 切换 MediaView 后，B 槽位展示随之变化。
+The frontend should use the same semantics. B's media slot displays the output selected by A's current `mediaView`. If A switches MediaView, B's displayed upstream media changes accordingly.
 
-### 7.4 流程组 `node_output/run_output`
+### 7.4 Flow Group `node_output/run_output`
 
-流程组运行时，B 不读取 A 的历史 `mediaView`，只读取本次 run 的 A 输出：
+During flow-group execution, B does not read A's historical `mediaView`. It reads A's output from the current run:
 
 ```text
 B mediaSlots item source=node_output/run_output nodeId=A selector={...}
@@ -664,11 +661,11 @@ B mediaSlots item source=node_output/run_output nodeId=A selector={...}
      }
 ```
 
-如果没有对应输出，流程节点失败，workflow run failed。
+If no matching output exists, the node fails and the workflow run fails.
 
-### 7.5 组装 `MediaEnvelope`
+### 7.5 Building `MediaEnvelope`
 
-`WorkflowNodeExecutor.buildTaskConfigForNode` 目标形态：
+Target shape for `WorkflowNodeExecutor.buildTaskConfigForNode`:
 
 ```ts
 private async buildTaskConfigForNode(run: WorkflowRun, node: WorkflowCanvasNode): Promise<TaskConfig> {
@@ -684,18 +681,18 @@ private async buildTaskConfigForNode(run: WorkflowRun, node: WorkflowCanvasNode)
 }
 ```
 
-`buildMediaEnvelopeFromResolvedItems`：
+`buildMediaEnvelopeFromResolvedItems`:
 
-1. 按 slot 分组。
-2. 每组按 `slotOrder/id` 排序。
-3. 单值槽位只能一个。
-4. 多值槽位输出数组。
+1. Group by slot.
+2. Sort each group by `slotOrder/id`.
+3. Allow only one item in single-value slots.
+4. Output arrays for multi-value slots.
 
-## 8. Workflow 执行核心
+## 8. Workflow Execution Core
 
-### 8.1 普通画布
+### 8.1 Isolated Canvas Execution
 
-运行 selected executable node：
+Running a selected executable node:
 
 ```text
 WorkflowRunExecutor.reconcileRun
@@ -706,55 +703,55 @@ WorkflowRunExecutor.reconcileRun
   -> TasksService.createTask
 ```
 
-规则：
+Rules:
 
-1. 只创建 selected node 的 task。
-2. 不自动执行上游节点。
-3. `node_output/current_media` 必须读 source node `mediaView`。
-4. 多历史任务时只认 `mediaView`，不推断最新任务。
+1. Create a task only for the selected node.
+2. Do not auto-run upstream nodes.
+3. `node_output/current_media` must read the source node's `mediaView`.
+4. If the source node has multiple historical tasks, only `mediaView` matters. Do not infer the latest task.
 
-### 8.2 流程组
+### 8.2 Flow Group Execution
 
-流程组执行 DAG 的依赖来源建议从 `mediaSlots` 推导，而不是仅从 edges 推导：
+Flow-group DAG dependencies should be derived from `mediaSlots`, not only from edges:
 
 ```text
 dependency(A -> B)
-  当 B.mediaSlots 任意 item.source.type=node_output
-  且 item.source.nodeId=A
+  when any B.mediaSlots item has source.type=node_output
+  and item.source.nodeId=A
 ```
 
-edge 作为 UI 投影校验：
+Edges are validated as UI projections:
 
-1. 有 `node_output` item 必须有对应 edge。
-2. 有 media edge 必须有对应 slot item。
-3. 存储时发现不一致拒绝。
+1. Every `node_output` item must have a matching edge.
+2. Every media edge must have a matching slot item.
+3. Persistence rejects inconsistent graphs.
 
-流程执行：
+Execution:
 
 ```text
-1. 找 selectedNode 最近 flow_group。
-2. 取 group 内 executable nodes。
-3. 从 mediaSlots 推导 scoped dependencies。
-4. 检查环。
-5. 没有未成功 predecessor 的节点可以执行。
-6. 节点执行前通过 WorkflowMediaResolver 解析媒体。
-7. 所有 scoped node succeeded/skipped -> run succeeded。
-8. 任一 node failed -> run failed。
+1. Find the nearest flow_group for selectedNode.
+2. Get executable nodes inside that group.
+3. Derive scoped dependencies from mediaSlots.
+4. Reject cycles.
+5. Execute nodes whose predecessors have all succeeded.
+6. Resolve media through WorkflowMediaResolver before each node executes.
+7. All scoped nodes succeeded/skipped -> run succeeded.
+8. Any node failed -> run failed.
 ```
 
-### 8.3 flow_group 转 node_group
+### 8.3 Converting `flow_group` to `node_group`
 
-转换时：
+Conversion rules:
 
-1. `parentId` 和视觉分组保留。
-2. group node type 从 `flow_group` 改为 `node_group`。
-3. 对 group 内 `mediaSlots` 的 `node_output/run_output` 降级为 `node_output/current_media`。
-4. edge 保留为视觉连接。
-5. 后续普通画布运行不自动执行上游。
+1. Preserve `parentId` and visual grouping.
+2. Change the group node type from `flow_group` to `node_group`.
+3. Downgrade `node_output/run_output` items inside the group to `node_output/current_media`.
+4. Keep edges as visual connections.
+5. Later ordinary canvas execution does not auto-run upstream nodes.
 
-## 9. Task 创建与输入资源快照
+## 9. Task Creation and Input Resource Snapshots
 
-`TasksService.createTask` 保持核心职责：
+`TasksService.createTask` keeps these core responsibilities:
 
 ```text
 parse final TaskConfig
@@ -765,15 +762,15 @@ insert task
 insert task_resources input rows
 ```
 
-需要调整的是 `collectInputResources` 返回值的信息量。
+The important change is the amount of information carried by collected input resources.
 
-当前 `ModelSpec.collectInputResources(config): MediaInput[]` 可以保留，但 `MediaInput` 必须带：
+`ModelSpec.collectInputResources(config): MediaInput[]` can remain, but every `MediaInput` should carry:
 
 1. `mediaObjectId`
 2. `source`
-3. `metadata.slot / slotItemId / slotOrder` 或通过外层 resolved item 传入
+3. `metadata.slot / slotItemId / slotOrder`, or equivalent outer resolved-item context.
 
-更清晰的设计是引入：
+A cleaner design is:
 
 ```ts
 export interface TaskInputResourceDescriptor {
@@ -784,7 +781,7 @@ export interface TaskInputResourceDescriptor {
 }
 ```
 
-但为了少改 `ModelSpec`，本轮可以先把 slot 信息放入 `MediaInput.metadata`：
+To keep `ModelSpec` simple in this iteration, slot information can be placed in `MediaInput.metadata`:
 
 ```ts
 metadata: {
@@ -795,78 +792,85 @@ metadata: {
 }
 ```
 
-然后 `taskResourceFromInput` 写入标准列。
+Then `taskResourceFromInput` writes the normalized columns.
 
-推荐最终形态：
+Preferred final shape:
 
 ```ts
 taskResourceFromInput(taskId, accountId, descriptor, index, createId)
 ```
 
-其中 descriptor 明确包含 slot 信息，不依赖 metadata 约定。
+In that shape, `descriptor` explicitly contains slot information and no longer relies on metadata conventions.
 
-## 10. 任务输出上传与归一化
+## 10. Task Output Mirroring and Normalization
 
-### 10.1 职责位置
+### 10.1 Responsibility Location
 
-新增：
+Shared output services:
 
 ```text
 apps/api/src/modules/tasks/output/
   task-output-finalizer.ts
-  output-media-mirror.ts
-  video-cover-generator.ts
+  video-frame-generator.ts
   output-post-processor.ts
 ```
 
-职责：
+Responsibilities:
 
-1. Provider mapper 只负责把 provider response 转成标准 `NodeExecutionOutput`。
-2. `TaskOutputFinalizer` 负责把输出资源转成 Mina 管理的 `media_objects`。
-3. `VideoCoverGenerator` 负责从 finalized video 生成 cover media object。
-4. `OutputPostProcessor` 负责补充 `video_cover` resource 和 output variables。
+1. Provider mappers only convert provider responses into standard `NodeExecutionOutput`.
+2. `TaskOutputFinalizer` converts output resources into Mina-managed `media_objects`.
+3. `VideoFrameGenerator` extracts or creates video `first_frame`, `last_frame`, and `video_cover` media objects from finalized video outputs.
+4. `OutputPostProcessor` adds derived frame resources and output variables.
 
-### 10.2 输出 finalizer 流程
+### 10.2 Output Finalizer Flow
 
 ```text
 TaskLifecycle.completeTask(task, providerOutput)
   -> TaskOutputFinalizer.finalize(task, providerOutput)
      -> for each output resource:
-        -> if resource.mediaObjectId exists and media object ready: keep
+        -> if resource.mediaObjectId exists and media object is ready: keep
         -> if resource.url is data URL: decode and putObject
         -> if resource.url is http(s): fetch and putObject
         -> if resource.url is mina managed URL: resolve media object
         -> create media_objects(origin=task_output, purpose=task_output)
         -> return resource with mediaObjectId and Mina url
   -> OutputPostProcessor.process(task, finalizedOutput)
-     -> video cover media object
+     -> video first_frame / last_frame / video_cover media objects
   -> tasks.output = processedOutput
   -> task_resources output rows
 ```
 
-### 10.3 不同 URL 类型
+### 10.3 Supported URL Types
 
-1. `data:*;base64,...`：直接 decode。
-2. `http/https`：下载，校验 content-type、大小上限、超时。
-3. `memory://`：测试环境通过 in-memory adapter 解析。
-4. `mina://media/{id}`：解析已有 media object。
-5. `mina://tasks/...`：dev provider 专用，finalizer 中转换成 deterministic media object 或测试资源。
+1. `data:*;base64,...`: decode directly.
+2. `http/https`: download with content-type validation, size limits, and timeouts.
+3. `memory://`: resolve through the in-memory adapter in tests.
+4. `mina://media/{id}`: resolve an existing media object.
+5. `mina://tasks/...`: dev provider only; finalizer converts it into a deterministic media object or test resource.
 
-不要让 provider spec 各自实现输出上传。否则 Google/Volcengine 每个模型都会重复并且容易不一致。
+Provider specs must not implement output upload independently. If each Google/Volcengine model mirrors outputs on its own, behavior will drift and bugs will repeat.
 
-### 10.4 视频封面
+### 10.4 Video Frames and Cover
 
-视频封面是独立 `media_object`：
+Every successful video output should have independent image resources for:
+
+1. `first_frame`
+2. `last_frame`
+3. `video_cover`
+
+Each derived image is a separate `media_object`:
 
 ```text
 origin = system_generated
 purpose = preview
-retention = same as parent video
+retention = task_scoped
 parentMediaObjectId = video.mediaObjectId
-storageKey = users/{accountId}/media/{coverMediaObjectId}/cover.jpg
+storageKey = users/{accountId}/media/{frameMediaObjectId}/first-frame.jpg
+storageKey = users/{accountId}/media/{frameMediaObjectId}/last-frame.jpg
+storageKey = users/{accountId}/media/{frameMediaObjectId}/cover.jpg
 ```
 
-输出资源：
+Output resource example:
 
 ```ts
 {
@@ -877,6 +881,7 @@ storageKey = users/{accountId}/media/{coverMediaObjectId}/cover.jpg
   url: coverMediaObject.url,
   mediaObjectId: coverMediaObject.id,
   metadata: {
+    frameRole: 'video_cover',
     frameTimeSeconds: 0,
     sourceVideoResourceId: video.id,
     parentMediaObjectId: video.mediaObjectId
@@ -884,26 +889,26 @@ storageKey = users/{accountId}/media/{coverMediaObjectId}/cover.jpg
 }
 ```
 
-## 11. Media 模块工程结构
+Provider-returned frames can be reused when their metadata clearly ties them to the source video. Missing roles are generated by `OutputPostProcessor`.
 
-新增模块：
+## 11. Media Module Structure
+
+Module layout:
 
 ```text
 apps/api/src/modules/media/
   media-object.ts
   media-object.repository.ts
   media-object.drizzle-repository.ts
-  media-object.in-memory-repository.ts
   media-object.service.ts
   media-storage-key.ts
   media-type.ts
   remote-media-fetcher.ts
-  media-metadata.ts
 ```
 
 ### 11.1 `MediaObjectService`
 
-核心方法：
+Core methods:
 
 ```ts
 class MediaObjectService {
@@ -917,13 +922,13 @@ class MediaObjectService {
 }
 ```
 
-本轮核心需要：
+Core methods needed now:
 
-1. `createFromBuffer`：用于 data URL、视频封面。
-2. `createFromRemoteUrl`：用于 provider http(s) 输出镜像。
-3. `getReadyMediaObject`：用于 workflow mediaSlots 解析。
+1. `createFromBuffer`: used by data URLs and generated video frames.
+2. `createFromRemoteUrl`: used to mirror provider http(s) outputs.
+3. `getReadyMediaObject`: used by workflow media slot resolution.
 
-上传 placeholder / complete API 可以后续实现，但 service 结构先预留。
+Upload placeholder and completion APIs can be added later, but the service should reserve the boundary.
 
 ### 11.2 `RemoteMediaFetcher`
 
@@ -937,12 +942,12 @@ interface RemoteMediaFetcher {
 }
 ```
 
-规则：
+Rules:
 
-1. 统一设置超时。
-2. 统一限制最大大小。
-3. 统一错误类型。
-4. 不在 provider mapper 中直接 fetch。
+1. Apply timeouts consistently.
+2. Apply maximum size limits consistently.
+3. Use controlled error types.
+4. Do not fetch remote media inside provider mappers.
 
 ### 11.3 `media-storage-key.ts`
 
@@ -950,42 +955,44 @@ interface RemoteMediaFetcher {
 export const mediaOriginalObjectName = (mediaObjectId: string, extension: string): string =>
   `${mediaObjectId}/original.${extension}`
 
-export const mediaCoverObjectName = (mediaObjectId: string): string =>
-  `${mediaObjectId}/cover.jpg`
+export type MediaDerivedObjectNameKind = 'first_frame' | 'last_frame' | 'video_cover'
+
+export const mediaDerivedObjectName = (
+  mediaObjectId: string,
+  kind: MediaDerivedObjectNameKind,
+): string => {
+  if (kind === 'first_frame') return `${mediaObjectId}/first-frame.jpg`
+  if (kind === 'last_frame') return `${mediaObjectId}/last-frame.jpg`
+  return `${mediaObjectId}/cover.jpg`
+}
 ```
 
-调用 `ObjectStorage.putObject` 时：
+When calling `ObjectStorage.putObject`:
 
 ```ts
 scope: 'media'
 objectName: `${mediaObjectId}/original.${extension}`
 ```
 
-因此需要把 `StorageObjectScope` 从当前：
-
-```ts
-'assets' | 'task-inputs' | 'task-outputs' | 'temporary' | 'uploads'
-```
-
-调整为至少包含：
+`StorageObjectScope` should at least include:
 
 ```ts
 'media' | 'temporary'
 ```
 
-旧 scope 可以保留兼容，但新业务不再使用 `task-inputs/task-outputs/assets` 存主资源。
+Old scopes can remain if needed by existing code, but new media business flows should not store primary resources under `task-inputs`, `task-outputs`, or `assets`.
 
-## 12. Contracts 调整清单
+## 12. Contract Changes
 
-### 12.1 tasks
+### 12.1 Tasks
 
-`packages/contracts/src/modules/tasks/task.schemas.ts`：
+`packages/contracts/src/modules/tasks/task.schemas.ts`:
 
-1. 增加 `MediaObjectId` 字段。
-2. 修改 `MediaInputSourceSchema` 为 discriminated union。
-3. `MediaInputSchema` 增加 `mediaObjectId`。
-4. `NodeOutputResourceSchema` 增加 `mediaObjectId`。
-5. `TaskResourceSchema` 增加：
+1. Add `mediaObjectId` fields.
+2. Change `MediaInputSourceSchema` to a discriminated union.
+3. Add `mediaObjectId` to `MediaInputSchema`.
+4. Add `mediaObjectId` to `NodeOutputResourceSchema`.
+5. Add the following fields to `TaskResourceSchema`:
 
 ```ts
 mediaObjectId?: string
@@ -995,31 +1002,31 @@ slotOrder?: number
 source?: TaskResourceSource
 ```
 
-注意避免 tasks contract 反向依赖 canvas contract。`MediaSlotNameSchema` 可以放在 tasks contract 或新 `media` contract，canvas/tasks 共同引用。推荐新增：
+Avoid making the tasks contract depend on the canvas contract. Put `MediaSlotNameSchema` in either the tasks contract or a shared media contract. Prefer:
 
 ```text
 packages/contracts/src/modules/media/media.schemas.ts
 ```
 
-### 12.2 canvas
+### 12.2 Canvas
 
-`packages/contracts/src/modules/canvas/canvas.schemas.ts`：
+`packages/contracts/src/modules/canvas/canvas.schemas.ts`:
 
-1. 新增 `NodeMediaSlotsSchema`。
-2. image/video node data 增加 `mediaSlots`。
-3. edge data 从旧 `MediaSlotConnection` 迁移为 `media_link`。
-4. 保留旧 schema 的迁移辅助可以放后端，不一定在 contract 暴露。
+1. Add `NodeMediaSlotsSchema`.
+2. Add `mediaSlots` to image/video node data.
+3. Make edge data use only `media_link`.
+4. Do not expose legacy `MediaSlotConnection` in the contract for a new project.
 
-### 12.3 workflows
+### 12.3 Workflows
 
-`WorkflowRun` snapshot nodes 会自然包含 `mediaSlots`。不需要额外字段。
+`WorkflowRun` snapshot nodes naturally include `mediaSlots`. No additional workflow-run field is required.
 
-## 13. 数据库调整清单
+## 13. Database Changes
 
-`apps/api/src/db/schema.ts`：
+`apps/api/src/db/schema.ts`:
 
-1. 新增 `mediaObjects` 表。
-2. `taskResources` 增加：
+1. Add the `mediaObjects` table.
+2. Add these fields to `taskResources`:
 
 ```ts
 mediaObjectId
@@ -1029,20 +1036,20 @@ slotOrder
 source
 ```
 
-3. `tasks.output` 类型跟随 `NodeExecutionOutput` 增强。
-4. `workflows.nodes` 类型跟随 `WorkflowCanvasNode` 增强。
-5. `workflow_runs.snapshot_nodes` 类型跟随增强。
+3. Enhance `tasks.output` to follow `NodeExecutionOutput`.
+4. Enhance `workflows.nodes` to follow `WorkflowCanvasNode`.
+5. Enhance `workflow_runs.snapshot_nodes` accordingly.
 
-不建议新增专门的 workflow media slot 表。本阶段继续把画布结构存 JSONB，原因：
+Do not add a dedicated workflow media slot table yet. Keep the canvas structure in JSONB for this phase because:
 
-1. React Flow 画布天然是文档结构。
-2. mediaSlots 是 node data 的一部分。
-3. 查询主要按 workflow 获取整张画布，不需要高频按 slot 查询。
-4. 过早拆表会增加一致性复杂度。
+1. A React Flow canvas is naturally a document-shaped structure.
+2. `mediaSlots` is part of node data.
+3. Reads usually fetch the whole workflow canvas.
+4. Splitting too early would increase consistency complexity without a clear query benefit.
 
-## 14. 运行时依赖装配
+## 14. Runtime Dependency Assembly
 
-`apps/api/src/app/dependencies.ts` 目标：
+Target assembly in `apps/api/src/app/dependencies.ts`:
 
 ```ts
 const storage = createObjectStorage()
@@ -1050,53 +1057,53 @@ const mediaObjectRepository = createMediaObjectRepository()
 const mediaObjectService = new MediaObjectService(mediaObjectRepository, storage, remoteMediaFetcher)
 const workflowMediaResolver = new WorkflowMediaResolver(mediaObjectService, tasksService)
 const outputFinalizer = new TaskOutputFinalizer(mediaObjectService)
-const outputPostProcessor = new OutputPostProcessor(new FfmpegVideoCoverGenerator(mediaObjectService))
+const outputPostProcessor = new OutputPostProcessor(new FfmpegVideoFrameGenerator(mediaObjectService))
 ```
 
-注意循环依赖：
+Circular dependency notes:
 
-1. `TasksService` 当前被 `WorkflowMediaResolver` 需要，用于读上游 task output。
-2. `TasksService` 又需要 output finalizer/post processor。
-3. 解决方式：`WorkflowMediaResolver` 注入到 `WorkflowNodeExecutor`，不要注入到 `TasksService`。
-4. `OutputFinalizer` 注入到 `TaskLifecycle` 或 `TasksService` 的 lifecycle dependencies。
+1. `WorkflowMediaResolver` needs `TasksService` to read upstream task outputs.
+2. `TasksService` needs output finalizer and post-processor dependencies.
+3. The solution is to inject `WorkflowMediaResolver` into workflow execution, not into `TasksService`.
+4. Inject `TaskOutputFinalizer` and `OutputPostProcessor` into `TaskLifecycle` or lifecycle dependencies owned by `TasksService`.
 
-## 15. 推荐实施顺序
+## 15. Recommended Implementation Order
 
 ### Step 1: Contracts
 
-1. 新增 media contract。
-2. 增强 task schemas。
-3. 增强 canvas node `mediaSlots`。
-4. 保留旧 edge schema 的临时兼容测试，或一次性迁移测试数据。
+1. Add the media contract.
+2. Enhance task schemas.
+3. Enhance canvas node `mediaSlots`.
+4. Use only `media_link` for edge data.
 
-验证：
+Verification:
 
 ```text
 bun --filter @mina/contracts typecheck
 ```
 
-### Step 2: DB 与 repository
+### Step 2: Database and Repositories
 
-1. 新增 `media_objects` schema。
-2. 增强 `task_resources` schema。
-3. 新增 in-memory 和 drizzle media object repository。
-4. repository 层统一 Zod parse。
+1. Add the `media_objects` schema.
+2. Enhance the `task_resources` schema.
+3. Add in-memory and Drizzle media object repositories.
+4. Parse repository boundaries with Zod.
 
-验证：
+Verification:
 
 ```text
 media object create/get/update tests
 task resources new fields roundtrip tests
 ```
 
-### Step 3: MediaObjectService
+### Step 3: `MediaObjectService`
 
-1. 实现 key 生成。
-2. 实现 `createFromBuffer`。
-3. 实现 `createFromRemoteUrl`。
-4. 实现 storage usage 聚合。
+1. Implement key generation.
+2. Implement `createFromBuffer`.
+3. Implement `createFromRemoteUrl`.
+4. Implement storage usage aggregation.
 
-验证：
+Verification:
 
 ```text
 object key account isolation
@@ -1105,15 +1112,15 @@ remote fetch error maps to controlled error
 usage sums byteSize
 ```
 
-### Step 4: WorkflowMediaResolver
+### Step 4: `WorkflowMediaResolver`
 
-1. 实现 `media_object` 解析。
-2. 实现 `external_url` 解析。
-3. 实现 `current_media` 解析。
-4. 实现 `run_output` 解析。
-5. 实现 slot 排序与单值槽校验。
+1. Resolve `media_object`.
+2. Resolve `external_url`.
+3. Resolve `current_media`.
+4. Resolve `run_output`.
+5. Implement slot sorting and single-value slot validation.
 
-验证：
+Verification:
 
 ```text
 single node local media no edges can run
@@ -1124,181 +1131,183 @@ current_media uses mediaView, not latest task
 run_output uses current workflow run node state
 ```
 
-### Step 5: WorkflowNodeExecutor
+### Step 5: `WorkflowNodeExecutor`
 
-1. 替换 `resolveIncomingMediaInputs`。
-2. 使用 `WorkflowMediaResolver.resolveNodeMedia`。
-3. `buildMediaEnvelope` 改成接收 resolved slot items。
-4. 保留旧 media-selection helper 中 output selector 的纯函数。
+1. Replace `resolveIncomingMediaInputs`.
+2. Use `WorkflowMediaResolver.resolveNodeMedia`.
+3. Change `buildMediaEnvelope` to accept resolved slot items.
+4. Keep pure output-selection helpers where useful.
 
-验证：
+Verification:
 
 ```text
-普通画布 B 只运行 B
-流程组 A -> B 等 A 完成再运行 B
-流程组多起点汇合等待所有 predecessor succeeded
+ordinary canvas B only runs B
+flow group A -> B waits for A before running B
+flow group multi-root join waits for all predecessor nodes to succeed
 ```
 
-### Step 6: Task input resources
+### Step 6: Task Input Resources
 
-1. 增强 `taskResourceFromInput`。
-2. 写入 `mediaObjectId/slot/slotItemId/slotOrder/source`。
-3. `ModelSpec.collectInputResources` 保持简单，必要时从 `MediaInput` 提取扩展字段。
+1. Enhance `taskResourceFromInput`.
+2. Write `mediaObjectId/slot/slotItemId/slotOrder/source`.
+3. Keep `ModelSpec.collectInputResources` simple; extract extended fields from `MediaInput` when needed.
 
-验证：
+Verification:
 
 ```text
 task_resources input contains mediaObjectId and source
 task resources list can explain input lineage
 ```
 
-### Step 7: Output finalizer
+### Step 7: Output Finalizer
 
-1. 新增 `TaskOutputFinalizer`。
-2. 支持 data URL、http(s)、已有 Mina media object。
-3. 创建 output `media_objects`。
-4. 增强 `taskResourceFromOutput`。
-5. 视频封面改为通过 `MediaObjectService` 创建 media object。
+1. Add `TaskOutputFinalizer`.
+2. Support data URLs, http(s), and existing Mina media objects.
+3. Create output `media_objects`.
+4. Enhance `taskResourceFromOutput`.
+5. Create video first-frame, last-frame, and cover resources through `MediaObjectService`.
 
-验证：
+Verification:
 
 ```text
 image output mirrored to media_objects
 video output mirrored to media_objects
-video cover creates child media object
+video first_frame creates child media object
+video last_frame creates child media object
+video_cover creates child media object
 tasks.output resources contain mediaObjectId
 task_resources output contains mediaObjectId
 ```
 
-### Step 8: Storage cleanup and usage
+### Step 8: Storage Cleanup and Usage
 
-1. 添加 orphan/uploading timeout cleanup service。
-2. 添加 account usage query。
-3. 暂不暴露 API，但 service 测试完整。
+1. Add orphan/uploading timeout cleanup service.
+2. Add account usage query.
+3. Do not expose the API yet, but keep service tests complete.
 
-验证：
+Verification:
 
 ```text
 expired uploading media object soft deleted or removed
 storage usage excludes deleted/failed
 ```
 
-## 16. 测试计划
+## 16. Test Plan
 
 ### Contracts
 
-1. `NodeMediaSlotSourceSchema` discriminated union。
-2. `mediaSlots` 支持 mixed ordered items。
-3. 单值槽位业务校验在后端 validation 覆盖。
-4. `MediaInputSourceSchema` 覆盖四种来源。
-5. `NodeOutputResource.mediaObjectId` 可选。
+1. `NodeMediaSlotSourceSchema` discriminated union.
+2. `mediaSlots` supports mixed ordered items.
+3. Single-value slot business validation is covered by backend validation.
+4. `MediaInputSourceSchema` covers all source shapes.
+5. `NodeOutputResource.mediaObjectId` is optional.
 
 ### Media
 
-1. object key 在 account root 下。
-2. path segment 编码防止 `../`。
-3. buffer 创建 media object。
-4. remote URL 创建 media object。
-5. usage 聚合。
-6. deleted/failed 不计入 usage。
+1. Object keys live under the account root.
+2. Path segment encoding prevents `../`.
+3. Buffers create media objects.
+4. Remote URLs create media objects.
+5. Usage is aggregated correctly.
+6. Deleted and failed objects are excluded from usage.
 
 ### Workflow
 
-1. 没有 edge 但有 `media_object` slot item 的节点可运行。
-2. 一个 slot 中 `media_object + node A + node B` 顺序正确。
-3. 普通画布 `current_media` 使用 source node `mediaView`。
-4. 普通画布 source node 没有 `mediaView` 且 required=true 时失败。
-5. 流程组 `run_output` 使用本次 run output。
-6. 流程组缺失 selector output 时失败。
-7. flow_group 转 node_group 后 `run_output` 降级为 `current_media`。
-8. edge 与 mediaSlots 不一致时 workflow 保存失败。
+1. A node with a `media_object` slot item and no edge can run.
+2. A slot with `media_object + node A + node B` preserves order.
+3. Ordinary canvas `current_media` uses the source node's `mediaView`.
+4. Ordinary canvas execution fails when the source node has no `mediaView` and `required=true`.
+5. Flow-group `run_output` uses output from the current run.
+6. Flow-group execution fails when the selected output is missing.
+7. Converting `flow_group` to `node_group` downgrades `run_output` to `current_media`.
+8. Workflow persistence fails when edges and `mediaSlots` disagree.
 
 ### Task
 
-1. task input resources 写入 source。
-2. task output resources 写入 mediaObjectId。
-3. provider 输出 data URL 镜像成功。
-4. provider 输出 http URL 镜像成功。
-5. 输出镜像失败时任务是否失败需要明确：推荐失败，因为 Mina 需要持久化输出。
+1. Task input resources write `source`.
+2. Task output resources write `mediaObjectId`.
+3. Provider data URL outputs mirror successfully.
+4. Provider HTTP outputs mirror successfully.
+5. Output mirroring failures should fail the task, because Mina needs durable output storage.
 
 ### Provider
 
-1. provider spec 不出现 storage/media object 依赖。
-2. Google/Volcengine mapper 仍只返回标准 output。
-3. `TaskOutputFinalizer` 对所有 provider 统一生效。
+1. Provider specs do not depend on storage or media object services.
+2. Google/Volcengine mappers still only return standard output.
+3. `TaskOutputFinalizer` applies uniformly to all providers.
 
-## 17. 风险与取舍
+## 17. Risks and Tradeoffs
 
-### 17.1 为什么不用 edge 保存全部媒体输入
+### 17.1 Why Edges Should Not Store All Media Input State
 
-edge 不能自然表达：
+Edges cannot naturally express this slot state:
 
 ```text
-本地上传图
-来自节点 A
-来自节点 B
-资产库选择
+local uploaded image
+from node A
+from node B
+future media library selection
 ```
 
-这些项在同一个槽位里的顺序属于目标节点表单状态，不属于图连接本身。强行用 edge 表达会导致：
+The order of these items inside one target slot is target node form state, not graph connection state. Forcing edges to own this would cause problems:
 
-1. 本地媒体没有 source node，只能造假 edge。
-2. 排序依赖 edge 顺序，不稳定。
-3. 删除/排序/替换媒体时容易破坏图结构。
+1. Local media has no source node, so it would require fake edges.
+2. Ordering would depend on edge order, which is unstable.
+3. Deleting, sorting, or replacing media would easily corrupt graph structure.
 
-因此顺序必须归 `node.data.mediaSlots`。
+Therefore slot order must belong to `node.data.mediaSlots`.
 
-### 17.2 为什么任务输出要镜像到 Mina 存储
+### 17.2 Why Task Outputs Must Be Mirrored to Mina Storage
 
-如果只保存 provider URL：
+If Mina stores only provider URLs:
 
-1. URL 可能过期。
-2. 无法做用户级存储占用。
-3. 权限不受 Mina 控制。
-4. 任务历史展示不稳定。
-5. 删除用户数据时无法可靠清理。
+1. URLs may expire.
+2. User-level storage accounting is impossible.
+3. Permissions are not controlled by Mina.
+4. Task history display becomes unstable.
+5. User data deletion cannot reliably clean files.
 
-因此最终输出应统一进入 `media_objects`。
+Therefore final outputs should enter `media_objects`.
 
-### 17.3 为什么 `media_objects` 不是资产库
+### 17.3 Why `media_objects` Is Not the Media Library
 
-很多上传是一次性的，不应自动出现在用户素材库。`media_objects` 只是文件主表；资产库是可选索引表。
+Many uploads are one-off resources and should not automatically appear in a user's reusable asset library. `media_objects` is only the primary file table. The media library is an optional indexing and organization table.
 
 ```text
-media_objects          所有 Mina 管理的媒体文件
-media_library_items    用户明确保存/收藏/组织的素材
+media_objects          all Mina-managed media files
+media_library_items    media explicitly saved, collected, or organized by the user
 ```
 
-### 17.4 为什么不立即拆 workflow media slot 表
+### 17.4 Why Not Split Workflow Media Slots Into a Table Now
 
-当前 workflow 主要以整张画布读写，React Flow 数据结构天然是文档模型。拆表会增加同步复杂度，但没有明显查询收益。保留 JSONB 更简单、风险更低。
+The workflow is usually read and written as a full canvas. React Flow data is naturally document-shaped. Splitting media slots into a relational table would increase synchronization complexity without a clear query benefit. JSONB is simpler and lower risk at this stage.
 
-## 18. 验收标准
+## 18. Acceptance Criteria
 
-完成本次核心重构后，应满足：
+After this core architecture is implemented:
 
-1. 用户上传媒体和任务输出媒体都能进入 `media_objects`。
-2. 所有 Mina 管理媒体都在 `users/{accountId}/media/{mediaObjectId}/...` 下。
-3. 用户存储占用可以从 `media_objects.byteSize` 聚合。
-4. 节点没有边但有本地/媒体对象输入时可以创建任务。
-5. 普通画布 A -> B 时，运行 B 只运行 B，B 读取 A 当前 `mediaView`。
-6. 流程组 A -> B 时，B 读取本次 run 中 A 的输出。
-7. 媒体槽内混排顺序由 `mediaSlots[slot][].order` 决定。
-8. `TaskConfig.media` 存最终输入快照。
-9. `task_resources` 能说明输入来自哪个 `mediaObjectId` 或哪个上游节点输出。
-10. Provider spec 不依赖 media object、workflow、storage。
-11. 输出上传失败时有明确失败事件和可诊断错误。
-12. `bun run typecheck`、`bun run test`、`bun run build` 通过。
+1. User-uploaded media and task output media can both enter `media_objects`.
+2. Every Mina-managed media file lives under `users/{accountId}/media/{mediaObjectId}/...`.
+3. User storage usage can be aggregated from `media_objects.byteSize`.
+4. A node can create a task when it has local/media-object input and no edge.
+5. In ordinary canvas A -> B, running B only runs B, and B reads A's current `mediaView`.
+6. In flow-group A -> B, B reads A's output from the current run.
+7. Mixed item order inside a media slot is determined by `mediaSlots[slot][].order`.
+8. `TaskConfig.media` stores the final input snapshot.
+9. `task_resources` can explain whether an input came from a `mediaObjectId` or an upstream node output.
+10. Provider specs do not depend on media objects, workflow, or storage.
+11. Output upload failures produce clear failure events and diagnosable errors.
+12. `bun run typecheck`, `bun run test`, and `bun run build` pass.
 
-## 19. 最终架构摘要
+## 19. Final Architecture Summary
 
 ```text
-用户上传 / provider 输出
+user upload / provider output
   -> ObjectStorage
   -> media_objects
 
 WorkflowCanvasNode.data.mediaSlots
-  -> 描述目标节点每个媒体槽的有序来源
+  -> describes ordered sources for each media slot on the target node
 
 WorkflowMediaResolver
   -> mediaSlots + workflow run snapshot + task output + media_objects
@@ -1318,9 +1327,9 @@ ProviderRouter
   -> provider output
 
 TaskOutputFinalizer / OutputPostProcessor
-  -> media_objects for outputs and covers
+  -> media_objects for outputs, first frames, last frames, and covers
   -> tasks.output
   -> task_resources output snapshot
 ```
 
-核心取舍：**媒体文件归 `media_objects`，媒体槽顺序归目标节点 `mediaSlots`，任务资源归 `task_resources`，provider 差异归 `ModelSpec`。** 这样边界清楚、运行链路简单，也最不容易在后续新增 provider、模型、资产库和上传入口时改坏核心执行逻辑。
+Core tradeoff: **media files belong to `media_objects`, media slot order belongs to the target node's `mediaSlots`, task resource lineage belongs to `task_resources`, and provider differences belong to `ModelSpec`.** This keeps boundaries clear, runtime flow simple, and future provider/model/library/upload additions less likely to break the core execution system.
