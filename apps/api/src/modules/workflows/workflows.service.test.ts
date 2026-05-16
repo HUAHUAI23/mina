@@ -1,9 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import type {
-  MediaSlotConnection,
-  WorkflowCanvasEdge,
-  WorkflowCanvasNode,
-} from '@mina/contracts/modules/canvas'
+import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
+import type { MediaSlotName, NodeOutputSelector } from '@mina/contracts/modules/media'
 
 import { InMemoryObjectStorage } from '../../lib/storage/in-memory-object-storage'
 import { DEFAULT_ACCOUNT_ID } from '../accounts/accounts.data'
@@ -17,7 +14,7 @@ import { ProviderRouter } from '../tasks/models/provider-router'
 import { registerTaskModels } from '../tasks/models/register-models'
 import { OutputPostProcessor } from '../tasks/output/output-post-processor'
 import { TaskOutputFinalizer } from '../tasks/output/task-output-finalizer'
-import { DeterministicVideoCoverGenerator } from '../tasks/output/video-cover-generator'
+import { DeterministicVideoFrameGenerator } from '../tasks/output/video-frame-generator'
 import type { TaskProvider } from '../tasks/providers/provider'
 import { InMemoryTaskRepository } from '../tasks/tasks.repository'
 import { TasksService } from '../tasks/tasks.service'
@@ -48,7 +45,7 @@ const createServices = (taskProvider?: TaskProvider) => {
     modelRegistry,
     new TaskOutputFinalizer(mediaObjectService),
     new OutputPostProcessor(
-      new DeterministicVideoCoverGenerator(mediaObjectService),
+      new DeterministicVideoFrameGenerator(mediaObjectService),
     ),
   )
   const workflowsService = new WorkflowsService(
@@ -149,6 +146,25 @@ const videoNode = (id: string, parentId?: string): WorkflowCanvasNode => ({
   },
 })
 
+const videoNodeWithMediaSlots = (
+  node: WorkflowCanvasNode,
+  mediaSlots: Extract<
+    WorkflowCanvasNode['data'],
+    { nodeType: 'video_generation' }
+  >['mediaSlots'],
+): WorkflowCanvasNode => {
+  if (node.data.nodeType !== 'video_generation') {
+    throw new Error('Expected video generation node.')
+  }
+  return {
+    ...node,
+    data: {
+      ...node.data,
+      mediaSlots,
+    },
+  }
+}
+
 const flowGroupNode = (id: string): WorkflowCanvasNode => ({
   id,
   type: 'flow_group',
@@ -166,8 +182,8 @@ const mediaEdge = (
   id: string,
   source: string,
   target: string,
-  targetSlot: MediaSlotConnection['targetSlot'],
-  sourceSelector: MediaSlotConnection['sourceSelector'],
+  targetSlot: MediaSlotName,
+  targetSlotItemId: string,
 ): WorkflowCanvasEdge => ({
   id,
   type: 'media',
@@ -175,12 +191,40 @@ const mediaEdge = (
   target,
   data: {
     connection: {
-      kind: 'media_slot',
+      kind: 'media_link',
       targetSlot,
-      required: true,
-      sourceSelector,
+      targetSlotItemId,
     },
   },
+})
+
+const nodeOutputSlot = (
+  slot: MediaSlotName,
+  nodeId: string,
+  resolve: 'current_media' | 'run_output',
+  selector?: NodeOutputSelector,
+) => ({
+  id: `slot-${nodeId}-${slot}`,
+  order: 0,
+  required: true,
+  slot,
+  source:
+    resolve === 'run_output'
+      ? {
+          type: 'node_output' as const,
+          nodeId,
+          resolve,
+          selector: selector ?? {
+            resourceKind: 'image' as const,
+            role: 'generated_image' as const,
+            index: 0,
+          },
+        }
+      : {
+          type: 'node_output' as const,
+          nodeId,
+          resolve,
+        },
 })
 
 describe('WorkflowsService execution semantics', () => {
@@ -188,9 +232,14 @@ describe('WorkflowsService execution semantics', () => {
     const { taskRepository, tasksService, workflowsService } = createServices()
     const workflow = await workflowsService.createWorkflow({
       name: 'ordinary media view',
-      nodes: [imageNode('a', 2), videoNode('b')],
+      nodes: [
+        imageNode('a', 2),
+        videoNodeWithMediaSlots(videoNode('b'), {
+          firstFrame: [nodeOutputSlot('firstFrame', 'a', 'current_media')],
+        }),
+      ],
       edges: [
-        mediaEdge('a-b', 'a', 'b', 'firstFrame', { mode: 'current_media' }),
+        mediaEdge('a-b', 'a', 'b', 'firstFrame', 'slot-a-firstFrame'),
       ],
     })
 
@@ -678,9 +727,14 @@ describe('WorkflowsService execution semantics', () => {
     const { workflowsService } = createServices()
     const workflow = await workflowsService.createWorkflow({
       name: 'missing upstream',
-      nodes: [imageNode('a', 1), videoNode('b')],
+      nodes: [
+        imageNode('a', 1),
+        videoNodeWithMediaSlots(videoNode('b'), {
+          firstFrame: [nodeOutputSlot('firstFrame', 'a', 'current_media')],
+        }),
+      ],
       edges: [
-        mediaEdge('a-b', 'a', 'b', 'firstFrame', { mode: 'current_media' }),
+        mediaEdge('a-b', 'a', 'b', 'firstFrame', 'slot-a-firstFrame'),
       ],
     })
 
@@ -737,21 +791,29 @@ describe('WorkflowsService execution semantics', () => {
         flowGroupNode('group'),
         { ...imageNode('a', 2, 'group'), position: { x: 40, y: 80 } },
         { ...imageNode('c', 1, 'group'), position: { x: 40, y: 220 } },
-        { ...videoNode('b', 'group'), position: { x: 420, y: 120 } },
+        {
+          ...videoNodeWithMediaSlots(videoNode('b', 'group'), {
+            firstFrame: [
+              nodeOutputSlot('firstFrame', 'a', 'run_output', {
+                resourceKind: 'image',
+                role: 'generated_image',
+                index: 1,
+              }),
+            ],
+            referenceImages: [
+              nodeOutputSlot('referenceImages', 'c', 'run_output', {
+                resourceKind: 'image',
+                role: 'generated_image',
+                index: 0,
+              }),
+            ],
+          }),
+          position: { x: 420, y: 120 },
+        },
       ],
       edges: [
-        mediaEdge('a-b', 'a', 'b', 'firstFrame', {
-          mode: 'run_output',
-          resourceKind: 'image',
-          role: 'generated_image',
-          index: 1,
-        }),
-        mediaEdge('c-b', 'c', 'b', 'referenceImages', {
-          mode: 'run_output',
-          resourceKind: 'image',
-          role: 'generated_image',
-          index: 0,
-        }),
+        mediaEdge('a-b', 'a', 'b', 'firstFrame', 'slot-a-firstFrame'),
+        mediaEdge('c-b', 'c', 'b', 'referenceImages', 'slot-c-referenceImages'),
       ],
     })
 
@@ -803,7 +865,7 @@ describe('WorkflowsService execution semantics', () => {
       completedRun?.nodeStates.b?.output?.resources.map(
         (resource) => resource.role,
       ),
-    ).toEqual(['generated_video', 'last_frame', 'video_cover'])
+    ).toEqual(['generated_video', 'last_frame', 'first_frame', 'video_cover'])
   })
 
   test('video duration pricing uses model and pricing key rules', async () => {
@@ -904,7 +966,7 @@ describe('WorkflowsService execution semantics', () => {
       modelRegistry,
       new TaskOutputFinalizer(mediaObjectService),
       new OutputPostProcessor(
-        new DeterministicVideoCoverGenerator(mediaObjectService),
+        new DeterministicVideoFrameGenerator(mediaObjectService),
       ),
     )
     const workflowsService = new WorkflowsService(

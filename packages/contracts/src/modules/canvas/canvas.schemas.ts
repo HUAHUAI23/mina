@@ -4,12 +4,7 @@ import {
   NodeMediaSlotsSchema,
   WorkflowMediaLinkConnectionSchema,
 } from '../media/media.schemas'
-import {
-  ResourceKindSchema,
-  ResourceRefSchema,
-  ResourceRoleSchema,
-  TaskDraftConfigSchema,
-} from '../tasks/task.schemas'
+import { TaskDraftConfigSchema } from '../tasks/task.schemas'
 
 export const WorkflowNodeTypeSchema = z.enum([
   'image_generation',
@@ -91,38 +86,8 @@ export const WorkflowCanvasNodeSchema = z.object({
   data: WorkflowNodeDataSchema,
 })
 
-export const MediaSlotConnectionSchema = z.object({
-  kind: z.literal('media_slot'),
-  targetSlot: z.enum([
-    'inputImages',
-    'firstFrame',
-    'lastFrame',
-    'referenceImages',
-    'referenceAudios',
-    'referenceVideos',
-    'prompt',
-  ]),
-  required: z.boolean().default(true),
-  sourceSelector: z.discriminatedUnion('mode', [
-    z.object({ mode: z.literal('current_media') }),
-    z.object({
-      mode: z.literal('run_output'),
-      resourceKind: ResourceKindSchema,
-      role: ResourceRoleSchema,
-      index: z.number().int().min(0),
-    }),
-    z.object({
-      mode: z.literal('asset'),
-      resource: ResourceRefSchema,
-    }),
-    z.object({
-      mode: z.literal('empty'),
-    }),
-  ]),
-})
-
 export const WorkflowEdgeDataSchema = z.object({
-  connection: z.union([WorkflowMediaLinkConnectionSchema, MediaSlotConnectionSchema]),
+  connection: WorkflowMediaLinkConnectionSchema,
 })
 
 export const WorkflowCanvasEdgeSchema = z.object({
@@ -137,7 +102,6 @@ export const WorkflowCanvasEdgeSchema = z.object({
 
 export type FlowGroupNodeConfig = z.infer<typeof FlowGroupNodeConfigSchema>
 export type ImageGenerationNodeConfig = z.infer<typeof ImageGenerationNodeConfigSchema>
-export type MediaSlotConnection = z.infer<typeof MediaSlotConnectionSchema>
 export type NodeGroupNodeConfig = z.infer<typeof NodeGroupNodeConfigSchema>
 export type NodeMediaViewState = z.infer<typeof NodeMediaViewStateSchema>
 export type TextNodeConfig = z.infer<typeof TextNodeConfigSchema>

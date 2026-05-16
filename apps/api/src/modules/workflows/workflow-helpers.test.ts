@@ -5,11 +5,7 @@ import type {
   ResourceKind,
   ResourceRole,
 } from '@mina/contracts/modules/tasks'
-import type {
-  MediaSlotConnection,
-  WorkflowCanvasEdge,
-  WorkflowCanvasNode,
-} from '@mina/contracts/modules/canvas'
+import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 
 import { createInitialNodeStates } from './run-state'
 import { downgradeFlowGroupToNodeGroup } from './group-conversion'
@@ -76,24 +72,16 @@ const flowGroupNode = (id: string): WorkflowCanvasNode => ({
   },
 })
 
-const mediaEdge = (
-  id: string,
-  source: string,
-  target: string,
-  sourceSelector: MediaSlotConnection['sourceSelector'] = {
-    mode: 'current_media',
-  },
-): WorkflowCanvasEdge => ({
+const mediaLinkEdge = (id: string, source: string, target: string, targetSlotItemId: string): WorkflowCanvasEdge => ({
   id,
   type: 'media',
   source,
   target,
   data: {
     connection: {
-      kind: 'media_slot',
+      kind: 'media_link',
       targetSlot: 'inputImages',
-      required: true,
-      sourceSelector,
+      targetSlotItemId,
     },
   },
 })
@@ -229,17 +217,37 @@ describe('workflow helper semantics', () => {
     ]
 
     expect(() =>
-      validateFlowGroup(nodes, [mediaEdge('a-b', 'a', 'b')], 'group'),
+      validateFlowGroup(nodes, [mediaLinkEdge('a-b', 'a', 'b', 'slot-a')], 'group'),
     ).toThrow('Flow group execution does not support cross-scope edges.')
   })
 
   test('flow group validation rejects executable cycles', () => {
     const nodes = [
       flowGroupNode('group'),
-      imageNode('a', 'group'),
-      imageNode('b', 'group'),
+      imageNodeWithMediaSlots(imageNode('a', 'group'), {
+        inputImages: [
+          {
+            id: 'slot-b',
+            order: 0,
+            required: true,
+            slot: 'inputImages',
+            source: { type: 'node_output', nodeId: 'b', resolve: 'current_media' },
+          },
+        ],
+      }),
+      imageNodeWithMediaSlots(imageNode('b', 'group'), {
+        inputImages: [
+          {
+            id: 'slot-a',
+            order: 0,
+            required: true,
+            slot: 'inputImages',
+            source: { type: 'node_output', nodeId: 'a', resolve: 'current_media' },
+          },
+        ],
+      }),
     ]
-    const edges = [mediaEdge('a-b', 'a', 'b'), mediaEdge('b-a', 'b', 'a')]
+    const edges = [mediaLinkEdge('a-b', 'a', 'b', 'slot-a'), mediaLinkEdge('b-a', 'b', 'a', 'slot-b')]
 
     expect(() => validateFlowGroup(nodes, edges, 'group')).toThrow(
       'Flow group execution graph must be acyclic.',

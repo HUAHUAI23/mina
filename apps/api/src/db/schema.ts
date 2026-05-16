@@ -1,10 +1,10 @@
 import type { User } from '@mina/contracts/modules/accounts'
 import type {
-  MediaSlotConnection,
   NodeMediaViewState,
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
 } from '@mina/contracts/modules/canvas'
+import type { WorkflowMediaLinkConnection } from '@mina/contracts/modules/media'
 import type { PricingRule } from '@mina/contracts/modules/pricing'
 import type {
   NodeExecutionOutput,
@@ -288,7 +288,7 @@ export const workflowRunEvents = pgTable(
     nodeId: text('node_id'),
     eventType: text('event_type').notNull(),
     message: text('message'),
-    payload: jsonb('payload').$type<Record<string, unknown> & { connection?: MediaSlotConnection; mediaView?: NodeMediaViewState }>(),
+    payload: jsonb('payload').$type<Record<string, unknown> & { connection?: WorkflowMediaLinkConnection; mediaView?: NodeMediaViewState }>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('workflow_run_events_run_idx').on(table.workflowRunId)],

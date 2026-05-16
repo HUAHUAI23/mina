@@ -140,10 +140,7 @@ const validateMediaSlotEdges = (
         if (edge.source !== source.nodeId || edge.target !== node.id) {
           return false
         }
-        if (edge.data.connection.kind === 'media_link') {
-          return edge.data.connection.targetSlotItemId === item.id
-        }
-        return true
+        return edge.data.connection.targetSlotItemId === item.id
       })
       if (!matchingEdge) {
         throw new HttpError(
@@ -163,9 +160,6 @@ const validateMediaSlotEdges = (
   }
 
   for (const edge of edges) {
-    if (edge.data.connection.kind !== 'media_link') {
-      continue
-    }
     const target = nodeMap.get(edge.target)
     if (!target) {
       continue

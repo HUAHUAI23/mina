@@ -88,6 +88,7 @@ export const NodeExecutionOutputSchema = z.object({
       videoUrls: z.array(z.string()).optional(),
       videoCoverUrls: z.array(z.string()).optional(),
       audioUrls: z.array(z.string()).optional(),
+      firstFrameUrls: z.array(z.string()).optional(),
       lastFrameUrls: z.array(z.string()).optional(),
       actualCost: z.number().nonnegative().optional(),
     })

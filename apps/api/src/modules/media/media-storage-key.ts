@@ -25,4 +25,13 @@ export const extensionFromMimeType = (mimeType: string | undefined, kind: Resour
 export const mediaOriginalObjectName = (mediaObjectId: string, extension: string): string =>
   `${mediaObjectId}/original.${extension}`
 
-export const mediaCoverObjectName = (mediaObjectId: string): string => `${mediaObjectId}/cover.jpg`
+export type MediaDerivedObjectNameKind = 'first_frame' | 'last_frame' | 'video_cover'
+
+export const mediaDerivedObjectName = (
+  mediaObjectId: string,
+  kind: MediaDerivedObjectNameKind,
+): string => {
+  if (kind === 'first_frame') return `${mediaObjectId}/first-frame.jpg`
+  if (kind === 'last_frame') return `${mediaObjectId}/last-frame.jpg`
+  return `${mediaObjectId}/cover.jpg`
+}

@@ -8,6 +8,7 @@ export const buildVariables = (resources: NodeOutputResource[]): NodeExecutionOu
   const videoUrls = resources.filter((resource) => resource.kind === 'video').map((resource) => resource.url)
   const videoCoverUrls = resources.filter((resource) => resource.role === 'video_cover').map((resource) => resource.url)
   const audioUrls = resources.filter((resource) => resource.kind === 'audio').map((resource) => resource.url)
+  const firstFrameUrls = resources.filter((resource) => resource.role === 'first_frame').map((resource) => resource.url)
   const lastFrameUrls = resources.filter((resource) => resource.role === 'last_frame').map((resource) => resource.url)
 
   return {
@@ -15,6 +16,7 @@ export const buildVariables = (resources: NodeOutputResource[]): NodeExecutionOu
     ...(videoUrls.length > 0 ? { videoUrls } : {}),
     ...(videoCoverUrls.length > 0 ? { videoCoverUrls } : {}),
     ...(audioUrls.length > 0 ? { audioUrls } : {}),
+    ...(firstFrameUrls.length > 0 ? { firstFrameUrls } : {}),
     ...(lastFrameUrls.length > 0 ? { lastFrameUrls } : {}),
   }
 }

@@ -12,7 +12,8 @@ import type {
 import type { MediaObjectRepository } from './media-object.repository'
 import {
   extensionFromMimeType,
-  mediaCoverObjectName,
+  mediaDerivedObjectName,
+  type MediaDerivedObjectNameKind,
   mediaOriginalObjectName,
 } from './media-storage-key'
 import { resourceKindFromMimeType } from './media-type'
@@ -30,7 +31,7 @@ export interface CreateMediaObjectFromBufferInput {
   sourceTaskId?: string
   sourceTaskResourceId?: string
   metadata?: Record<string, unknown>
-  objectNameKind?: 'cover' | 'original'
+  objectNameKind?: MediaDerivedObjectNameKind | 'original'
 }
 
 export interface CreateMediaObjectFromRemoteUrlInput {
@@ -74,7 +75,9 @@ export class MediaObjectService {
     const id = createId('media')
     const extension = extensionFromMimeType(input.mimeType, input.kind)
     const objectName =
-      input.objectNameKind === 'cover' ? mediaCoverObjectName(id) : mediaOriginalObjectName(id, extension)
+      input.objectNameKind && input.objectNameKind !== 'original'
+        ? mediaDerivedObjectName(id, input.objectNameKind)
+        : mediaOriginalObjectName(id, extension)
     const stored = await this.storage.putObject({
       accountId: input.accountId,
       body: input.body,

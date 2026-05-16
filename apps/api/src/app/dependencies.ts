@@ -18,7 +18,7 @@ import { ProviderRouter } from '../modules/tasks/models/provider-router'
 import { registerTaskModels } from '../modules/tasks/models/register-models'
 import { OutputPostProcessor } from '../modules/tasks/output/output-post-processor'
 import { TaskOutputFinalizer } from '../modules/tasks/output/task-output-finalizer'
-import { FfmpegVideoCoverGenerator } from '../modules/tasks/output/video-cover-generator'
+import { FfmpegVideoFrameGenerator } from '../modules/tasks/output/video-frame-generator'
 import { DrizzleTaskEventLog, InMemoryTaskEventLog } from '../modules/tasks/task-events'
 import { DrizzleTaskRepository } from '../modules/tasks/tasks.drizzle-repository'
 import { InMemoryTaskRepository } from '../modules/tasks/tasks.repository'
@@ -71,7 +71,7 @@ export const createAppDependencies = (): AppDependencies => {
   const taskConfigAssembler = new TaskConfigAssembler(modelRegistry)
   const taskProvider = new ProviderRouter(modelRegistry)
   const outputFinalizer = new TaskOutputFinalizer(mediaObjectService)
-  const outputPostProcessor = new OutputPostProcessor(new FfmpegVideoCoverGenerator(mediaObjectService))
+  const outputPostProcessor = new OutputPostProcessor(new FfmpegVideoFrameGenerator(mediaObjectService))
   const tasksService = new TasksService(
     repositories.taskRepository,
     pricingService,

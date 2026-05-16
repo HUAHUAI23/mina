@@ -11,7 +11,7 @@ import { ProviderRouter } from './models/provider-router'
 import { registerTaskModels } from './models/register-models'
 import { OutputPostProcessor } from './output/output-post-processor'
 import { TaskOutputFinalizer } from './output/task-output-finalizer'
-import { DeterministicVideoCoverGenerator } from './output/video-cover-generator'
+import { DeterministicVideoFrameGenerator } from './output/video-frame-generator'
 import { InMemoryTaskEventLog } from './task-events'
 import type { TaskProvider } from './providers/provider'
 import { InMemoryTaskRepository } from './tasks.repository'
@@ -88,7 +88,7 @@ const createService = (taskProvider?: TaskProvider) => {
     modelRegistry,
     new TaskOutputFinalizer(mediaObjectService),
     new OutputPostProcessor(
-      new DeterministicVideoCoverGenerator(mediaObjectService),
+      new DeterministicVideoFrameGenerator(mediaObjectService),
     ),
     taskEventLog,
   )
@@ -314,8 +314,12 @@ describe('TasksService event logging', () => {
     expect(completed?.status).toBe('succeeded')
     expect(completed?.output?.resources[0]?.role).toBe('generated_video')
     expect(completed?.output?.resources[0]?.mediaObjectId).toMatch(/^media_/)
-    expect(completed?.output?.resources[1]?.role).toBe('video_cover')
+    expect(completed?.output?.resources[1]?.role).toBe('first_frame')
     expect(completed?.output?.resources[1]?.mediaObjectId).toMatch(/^media_/)
+    expect(completed?.output?.resources[2]?.role).toBe('last_frame')
+    expect(completed?.output?.resources[2]?.mediaObjectId).toMatch(/^media_/)
+    expect(completed?.output?.resources[3]?.role).toBe('video_cover')
+    expect(completed?.output?.resources[3]?.mediaObjectId).toMatch(/^media_/)
 
     const events = await taskEventLog.listEvents(task.id)
     expect(events.map((event) => event.eventType)).toEqual([
