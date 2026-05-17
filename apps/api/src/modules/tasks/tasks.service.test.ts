@@ -150,6 +150,23 @@ describe('TasksService event logging', () => {
     expect(second.id).not.toBe(first.id)
   })
 
+  test('returns the existing task for duplicate idempotency keys', async () => {
+    const { taskEventLog, taskRepository, tasksService } = createService()
+    const input = {
+      accountId: 'account',
+      config: imageConfig(),
+      idempotencyKey: 'workflow_run:run_a:node:image',
+    }
+
+    const first = await tasksService.createTask(input)
+    const second = await tasksService.createTask(input)
+
+    expect(second.id).toBe(first.id)
+    expect(second.idempotencyKey).toBe(input.idempotencyKey)
+    expect(await taskRepository.list()).toHaveLength(1)
+    expect(await taskEventLog.listEvents(first.id)).toHaveLength(1)
+  })
+
   test('starts queued tasks from the background worker path', async () => {
     const { taskEventLog, taskRepository, tasksService } = createService()
     const task = await tasksService.createTask({

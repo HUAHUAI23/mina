@@ -25,8 +25,17 @@ import { InMemoryTaskRepository } from '../modules/tasks/tasks.repository'
 import { TasksService } from '../modules/tasks/tasks.service'
 import { DrizzleWorkflowRunEventLog, InMemoryWorkflowRunEventLog } from '../modules/workflows/workflow-events'
 import { WorkflowMediaResolver } from '../modules/workflows/media/workflow-media-resolver'
-import { DrizzleWorkflowRepository } from '../modules/workflows/workflows.drizzle-repository'
-import { InMemoryWorkflowRepository } from '../modules/workflows/workflows.repository'
+import {
+  DrizzleWorkflowDefinitionRepository,
+  DrizzleWorkflowNodeTaskRepository,
+  DrizzleWorkflowRunNodeStateRepository,
+  DrizzleWorkflowRunRepository,
+} from '../modules/workflows/workflows.drizzle-repository'
+import {
+  InMemoryWorkflowDefinitionRepository,
+  InMemoryWorkflowNodeTaskRepository,
+  InMemoryWorkflowRunRepository,
+} from '../modules/workflows/workflows.repository'
 import { WorkflowsService } from '../modules/workflows/workflows.service'
 
 export interface AppDependencies {
@@ -48,17 +57,33 @@ export const createAppDependencies = (): AppDependencies => {
             taskEventLog: new DrizzleTaskEventLog(db),
             taskRepository: new DrizzleTaskRepository(db),
             workflowRunEventLog: new DrizzleWorkflowRunEventLog(db),
-            workflowRepository: new DrizzleWorkflowRepository(db),
+            workflowRepositories: (() => {
+              const runs = new DrizzleWorkflowRunRepository(db)
+              return {
+                definitions: new DrizzleWorkflowDefinitionRepository(db),
+                nodeStates: new DrizzleWorkflowRunNodeStateRepository(db),
+                nodeTasks: new DrizzleWorkflowNodeTaskRepository(db),
+                runs,
+              }
+            })(),
           }
         })()
-      : {
-          pricingRepository: new InMemoryPricingRepository(),
-          mediaObjectRepository: new InMemoryMediaObjectRepository(),
-          taskEventLog: new InMemoryTaskEventLog(),
-          taskRepository: new InMemoryTaskRepository(),
-          workflowRunEventLog: new InMemoryWorkflowRunEventLog(),
-          workflowRepository: new InMemoryWorkflowRepository(),
-        }
+      : (() => {
+          const runs = new InMemoryWorkflowRunRepository()
+          return {
+            pricingRepository: new InMemoryPricingRepository(),
+            mediaObjectRepository: new InMemoryMediaObjectRepository(),
+            taskEventLog: new InMemoryTaskEventLog(),
+            taskRepository: new InMemoryTaskRepository(),
+            workflowRunEventLog: new InMemoryWorkflowRunEventLog(),
+            workflowRepositories: {
+              definitions: new InMemoryWorkflowDefinitionRepository(),
+              nodeStates: runs,
+              nodeTasks: new InMemoryWorkflowNodeTaskRepository(runs),
+              runs,
+            },
+          }
+        })()
 
   const pricingService = new PricingService(repositories.pricingRepository)
   const storage = createObjectStorage()
@@ -83,7 +108,7 @@ export const createAppDependencies = (): AppDependencies => {
   )
   const workflowMediaResolver = new WorkflowMediaResolver(mediaObjectService, tasksService)
   const workflowsService = new WorkflowsService(
-    repositories.workflowRepository,
+    repositories.workflowRepositories,
     tasksService,
     taskConfigAssembler,
     workflowMediaResolver,

@@ -153,6 +153,7 @@ export const TaskResourceSchema = z.object({
 
 export const TaskSchema = z.object({
   id: z.string().min(1),
+  idempotencyKey: z.string().min(1).optional(),
   accountId: z.string().min(1),
   kind: TaskKindSchema,
   mode: TaskModeSchema,

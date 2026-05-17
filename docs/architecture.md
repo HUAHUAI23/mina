@@ -126,14 +126,15 @@ Mina now has backend contracts and API services for the generation workflow core
 - `media`: managed media object persistence for user uploads, workflow slot inputs, mirrored provider outputs, derived previews, storage usage, and object storage key ownership.
 - `tasks`: durable image/video generation task lifecycle, including standalone task submission, sync image tasks, async video tasks, input/output resource snapshots, output media finalization, idempotent client submission, and task cancellation.
 - `pricing`: model and pricing-key aware estimates for token, image-count, and duration billing.
-- `workflows`: React Flow-compatible workflow definitions, ordered node `mediaSlots`, ordinary canvas node execution, flow-group DAG execution, node run states, and run cancellation.
+- `workflows`: normalized React Flow-compatible workflow definitions, ordered node `mediaSlots`, ordinary canvas node execution, flow-group DAG execution, row-level node run states, scheduler leases, and run cancellation.
 
 The workflow module keeps public services small and splits stable internal rules by responsibility:
 
 - `workflows.service.ts`: workflow definition CRUD, version checks, MediaView updates, and node task link lookup.
 - `workflow-runs.service.ts`: workflow run creation, run lookup/listing, cancellation, isolated-node preflight, and reconciliation entrypoints.
-- `run-executor.ts`: workflow-run reconciliation and flow-group DAG scheduling.
-- `node-executor.ts`: single-node task creation, task observation, node state transitions, and node event recording.
+- `repositories/*`: workflow definition, run, node-state, dependency, and node-task ports with in-memory and Drizzle implementations.
+- `run-executor.ts`: claim-based workflow-run reconciliation using run leases and ready-node queries.
+- `node-executor.ts`: idempotent single-node task creation, task observation, conditional node state transitions, and node event recording.
 - `run-state.ts`: initial node state creation and pure run/node state builders.
 - `graph.ts`: canvas graph traversal and executable/group node predicates.
 - `media-selection.ts`: compatibility exports for media-slot role/kind mapping and output selection.
@@ -146,7 +147,7 @@ The default local runtime uses in-memory repositories so tests and development d
 
 User ownership is represented by `users` and `accounts`. Product data that belongs to a tenant stores `account_id`; `tasks`, `task_resources`, `media_objects`, `workflows`, and `workflow_runs` reference `accounts.id`. Event and link tables remain subordinate to their parent task or workflow run records.
 
-Background work is handled by a Croner-backed `BackgroundTaskScheduler` when `MINA_SCHEDULER_ENABLED=true`. Each tick starts due `queued` tasks, polls due async provider tasks, and then reconciles running workflow runs. The Drizzle task repository claims due queued/running tasks with `FOR UPDATE SKIP LOCKED` before provider calls so multiple schedulers do not process the same task at the same time.
+Background work is handled by a Croner-backed `BackgroundTaskScheduler` when `MINA_SCHEDULER_ENABLED=true`. Each tick starts due `queued` tasks, polls due async provider tasks, and then reconciles running workflow runs. The Drizzle task repository claims due queued/running tasks with `FOR UPDATE SKIP LOCKED` before provider calls. Workflow reconciliation uses the same PostgreSQL coordination model: running workflow runs are claimed by `next_reconcile_at` and expired lease fields, then terminal/release updates include the lease token so another scheduler cannot finish a run it no longer owns.
 
 Task providers are registered as model specs in `ModelRegistry`, then dispatched by `ProviderRouter`. A model spec owns parameter validation, defaults, task mode, pricing input, input resource collection, provider request mapping, and output mapping. Provider polling reports `pending`, `succeeded`, `failed`, or `cancelled`. Pending provider results keep the Mina task in `running` status and update `nextRetryAt`; only terminal provider results complete or fail the task. Transport-level polling errors use retry/backoff counters and are distinct from provider terminal failures.
 
@@ -168,6 +169,8 @@ The task module keeps lifecycle behavior behind small internal files:
 - `providers/dev/*`, `providers/google/*`, and `providers/volcengine/*`: model specs, mappers, and provider clients.
 
 The task API is the canonical execution entrypoint. `POST /api/tasks` creates a durable `queued` task and returns it immediately; clients then poll `GET /api/tasks/:id` or inspect `GET /api/tasks/:id/resources`. Workflow execution uses the same task queue: workflow runs create and link node tasks, then the background scheduler starts tasks and later reconciles node/run state from task terminal status. This keeps direct task submission and canvas execution on one state machine.
+
+Workflow-created node tasks use `tasks.idempotency_key` and the unique `workflow_run_node_tasks(workflow_run_id, node_id)` link as duplicate-start protection. Retrying node start for the same run/node returns the same task instead of creating another provider side effect.
 
 Runtime logs use Pino through `src/lib/logger/logger.ts`. Durable lifecycle logs are stored separately in PostgreSQL:
 

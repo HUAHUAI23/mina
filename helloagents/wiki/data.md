@@ -31,5 +31,33 @@ Task-scoped resource index. It now includes:
 | `source` | Discriminated lineage source |
 | `metadata` | Provider or resolver-specific details |
 
-## Workflow JSON
-Workflow nodes store stable React Flow fields plus Mina node data. Executable node data may include `mediaSlots`, a slot-keyed ordered list of media slot items.
+## Workflow Storage
+Workflow definitions are normalized for large canvas writes:
+
+| Table | Purpose |
+| --- | --- |
+| `workflows` | Workflow-level metadata: account, name, version, deletion, timestamps |
+| `workflow_nodes` | One persisted canvas node per row, including stable React Flow fields and node `data` |
+| `workflow_edges` | One persisted canvas edge per row, including source/target handles and edge `data` |
+
+Important indexes:
+- `workflow_nodes_workflow_sort_idx`
+- `workflow_nodes_workflow_parent_idx`
+- `workflow_nodes_workflow_type_idx`
+- `workflow_edges_source_idx`
+- `workflow_edges_target_idx`
+
+Workflow runs are normalized for concurrent schedulers:
+
+| Table | Purpose |
+| --- | --- |
+| `workflow_runs` | Run metadata, status, selected node/scope, and scheduler lease fields |
+| `workflow_run_nodes` | Immutable node snapshot for a run |
+| `workflow_run_edges` | Immutable edge snapshot for a run |
+| `workflow_run_node_states` | Row-level node execution state, task id, output, error, and timestamps |
+| `workflow_run_node_dependencies` | Run-scoped executable-node dependency snapshot |
+| `workflow_run_node_tasks` | Unique workflow-run/node to task link |
+
+`workflow_runs` no longer stores `snapshot_nodes`, `snapshot_edges`, or `node_states` JSONB. Hot execution updates write individual `workflow_run_node_states` rows.
+
+`tasks.idempotency_key` is optional and unique. Workflow-created node tasks use `workflow_run:{runId}:node:{nodeId}` to make retries and duplicate scheduler ticks return the same task.

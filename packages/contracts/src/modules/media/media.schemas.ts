@@ -16,7 +16,7 @@ export const NodeOutputSelectorSchema = z.object({
   index: z.number().int().min(0),
 })
 
-export const NodeMediaSlotSourceSchema = z.discriminatedUnion('type', [
+export const NodeMediaSlotSourceSchema = z.union([
   z.object({
     type: z.literal('media_object'),
     mediaObjectId: z.string().min(1),

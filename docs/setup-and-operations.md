@@ -30,6 +30,7 @@ Environment variables are validated with `@t3-oss/env-core` and Zod during start
 | `MINA_LOG_LEVEL` | Pino log level | `info` |
 | `MINA_PERSISTENCE_DRIVER` | API persistence driver, either `memory` or `postgres` | `memory` |
 | `MINA_DATABASE_URL` | PostgreSQL URL used when `MINA_PERSISTENCE_DRIVER=postgres` | `postgres://postgres:postgres@localhost:5432/mina` |
+| `MINA_POSTGRES_TEST_DATABASE_URL` | Optional PostgreSQL URL for opt-in Drizzle repository integration tests | empty |
 | `GOOGLE_API_BASE_URL` | Google Gemini/Veo API base URL | `https://generativelanguage.googleapis.com` |
 | `GOOGLE_API_KEY` | Google API key for Gemini image and Veo video providers | empty |
 | `MINA_SCHEDULER_CRON` | Croner expression for task/workflow scheduler ticks | `*/5 * * * * *` |
@@ -151,6 +152,14 @@ Seed default development user, account, and pricing rules:
 ```bash
 MINA_PERSISTENCE_DRIVER=postgres bun --filter @mina/api db:seed
 ```
+
+Run PostgreSQL-backed repository concurrency tests against a disposable database:
+
+```bash
+MINA_POSTGRES_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/mina_test bun --filter @mina/api test ./src/modules/workflows/repositories/drizzle-workflow-repositories.integration.test.ts
+```
+
+The test creates and drops an isolated schema inside the configured database.
 
 ## Operational Notes
 

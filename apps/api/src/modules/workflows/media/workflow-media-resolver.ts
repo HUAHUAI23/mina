@@ -1,11 +1,11 @@
+import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import type { MediaSlotName, NodeMediaSlotItem } from '@mina/contracts/modules/media'
 import type { MediaInput, NodeOutputResource } from '@mina/contracts/modules/tasks'
-import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
-import type { WorkflowRun } from '@mina/contracts/modules/workflows'
+import type { WorkflowRunMode, WorkflowRunNodeState } from '@mina/contracts/modules/workflows'
 
 import type { MediaObjectService } from '../../media/media-object.service'
 import type { TasksService } from '../../tasks/tasks.service'
-import { getNodeMap, isMediaWorkflowNode } from '../graph'
+import { isMediaWorkflowNode } from '../graph'
 import {
   findOutputByMediaView,
   findOutputBySelector,
@@ -16,8 +16,16 @@ import {
 import { mediaSlotItemsForNode, SINGLE_MEDIA_SLOTS, sortedSlotItems } from './node-media-slots'
 
 export interface ResolveWorkflowNodeMediaInput {
+  edges: WorkflowCanvasEdge[]
+  getSourceNode(nodeId: string): Promise<WorkflowCanvasNode | undefined>
+  getSourceNodeState(nodeId: string): Promise<WorkflowRunNodeState | undefined>
   node: WorkflowCanvasNode
-  run: WorkflowRun
+  run: {
+    accountId: string
+    id: string
+    runMode: WorkflowRunMode
+    workflowId: string
+  }
 }
 
 export interface ResolvedWorkflowMediaInput {
@@ -34,7 +42,7 @@ export class WorkflowMediaResolver {
   ) {}
 
   async resolveNodeMedia(input: ResolveWorkflowNodeMediaInput): Promise<ResolvedWorkflowMediaInput[]> {
-    const itemsBySlot = this.itemsBySlot(input.run, input.node)
+    const itemsBySlot = this.itemsBySlot(input.node, input.edges)
     const resolved: ResolvedWorkflowMediaInput[] = []
 
     for (const [slot, items] of Object.entries(itemsBySlot) as Array<[MediaSlotName, NodeMediaSlotItem[]]>) {
@@ -43,7 +51,7 @@ export class WorkflowMediaResolver {
         throw new Error(`Slot "${slot}" accepts at most one ready media item.`)
       }
       for (const item of sortedItems) {
-        const mediaInput = await this.resolveSlotItem(input.run, item)
+        const mediaInput = await this.resolveSlotItem(input, item)
         if (!mediaInput) {
           continue
         }
@@ -69,8 +77,11 @@ export class WorkflowMediaResolver {
     })
   }
 
-  private itemsBySlot(run: WorkflowRun, node: WorkflowCanvasNode): Partial<Record<MediaSlotName, NodeMediaSlotItem[]>> {
-    return mediaSlotItemsForNode(node, run.snapshotEdges).reduce<Partial<Record<MediaSlotName, NodeMediaSlotItem[]>>>(
+  private itemsBySlot(
+    node: WorkflowCanvasNode,
+    edges: WorkflowCanvasEdge[],
+  ): Partial<Record<MediaSlotName, NodeMediaSlotItem[]>> {
+    return mediaSlotItemsForNode(node, edges).reduce<Partial<Record<MediaSlotName, NodeMediaSlotItem[]>>>(
       (accumulator, item) => ({
         ...accumulator,
         [item.slot]: [...(accumulator[item.slot] ?? []), item],
@@ -79,14 +90,17 @@ export class WorkflowMediaResolver {
     )
   }
 
-  private async resolveSlotItem(run: WorkflowRun, item: NodeMediaSlotItem): Promise<MediaInput | null> {
+  private async resolveSlotItem(
+    input: ResolveWorkflowNodeMediaInput,
+    item: NodeMediaSlotItem,
+  ): Promise<MediaInput | null> {
     const expectedKind = slotToResourceKind(item.slot)
     const role = slotToInputRole(item.slot)
 
     if (item.source.type === 'media_object') {
       const mediaObjectId = item.source.mediaObjectId
       const mediaObject = await this.resolveRequired(item, () =>
-        this.mediaObjectService.getReadyMediaObject(run.accountId, mediaObjectId),
+        this.mediaObjectService.getReadyMediaObject(input.run.accountId, mediaObjectId),
       )
       if (!mediaObject) {
         return null
@@ -118,14 +132,14 @@ export class WorkflowMediaResolver {
     }
 
     if (item.source.resolve === 'current_media') {
-      return this.resolveCurrentMedia(run, item, role, expectedKind)
+      return this.resolveCurrentMedia(input, item, role, expectedKind)
     }
 
-    return this.resolveRunOutput(run, item, role, expectedKind)
+    return this.resolveRunOutput(input, item, role, expectedKind)
   }
 
   private async resolveCurrentMedia(
-    run: WorkflowRun,
+    input: ResolveWorkflowNodeMediaInput,
     item: NodeMediaSlotItem,
     role: MediaInput['role'],
     expectedKind: MediaInput['kind'],
@@ -134,7 +148,7 @@ export class WorkflowMediaResolver {
       throw new Error('Invalid current media source.')
     }
 
-    const sourceNode = getNodeMap(run.snapshotNodes).get(item.source.nodeId)
+    const sourceNode = await input.getSourceNode(item.source.nodeId)
     if (!sourceNode || !isMediaWorkflowNode(sourceNode) || !sourceNode.data.mediaView?.taskId) {
       return this.handleMissing(item, 'Source node has no current MediaView output.')
     }
@@ -154,7 +168,7 @@ export class WorkflowMediaResolver {
       ...(resource.mediaObjectId ? { mediaObjectId: resource.mediaObjectId } : {}),
       source: {
         type: 'workflow_current_media',
-        workflowId: run.workflowId,
+        workflowId: input.run.workflowId,
         nodeId: item.source.nodeId,
         taskId: sourceNode.data.mediaView.taskId,
         ...(resource.id ? { outputResourceId: resource.id } : {}),
@@ -165,7 +179,7 @@ export class WorkflowMediaResolver {
   }
 
   private async resolveRunOutput(
-    run: WorkflowRun,
+    input: ResolveWorkflowNodeMediaInput,
     item: NodeMediaSlotItem,
     role: MediaInput['role'],
     expectedKind: MediaInput['kind'],
@@ -174,7 +188,7 @@ export class WorkflowMediaResolver {
       throw new Error('Invalid run output source.')
     }
 
-    const sourceState = run.nodeStates[item.source.nodeId]
+    const sourceState = await input.getSourceNodeState(item.source.nodeId)
     if (sourceState?.status !== 'succeeded' || !sourceState.output) {
       return this.handleMissing(item, 'Source node has no succeeded output in this workflow run.')
     }
@@ -195,8 +209,8 @@ export class WorkflowMediaResolver {
       ...(resource.mediaObjectId ? { mediaObjectId: resource.mediaObjectId } : {}),
       source: {
         type: 'workflow_run_output',
-        workflowId: run.workflowId,
-        workflowRunId: run.id,
+        workflowId: input.run.workflowId,
+        workflowRunId: input.run.id,
         nodeId: item.source.nodeId,
         ...(sourceState.taskId ? { taskId: sourceState.taskId } : {}),
         ...(resource.id ? { outputResourceId: resource.id } : {}),

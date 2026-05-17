@@ -1,11 +1,17 @@
 import type { Task, TaskResource } from '@mina/contracts/modules/tasks'
 
+export interface TaskCreateResult {
+  created: boolean
+  task: Task
+}
+
 export interface TaskRepository {
   appendResources?(taskId: string, resources: TaskResource[]): Promise<void>
   claimQueuedTasksForStart(limit: number, leaseSeconds: number): Promise<Task[]>
   claimRunningAsyncTasksForPolling(limit: number, leaseSeconds: number): Promise<Task[]>
-  create(task: Task, resources: TaskResource[]): Promise<Task>
+  create(task: Task, resources: TaskResource[]): Promise<TaskCreateResult>
   findById(id: string): Promise<Task | undefined>
+  findByIdempotencyKey(idempotencyKey: string): Promise<Task | undefined>
   list(accountId?: string): Promise<Task[]>
   listResources(taskId: string): Promise<TaskResource[]>
   update(task: Task): Promise<Task>
@@ -18,10 +24,17 @@ export class InMemoryTaskRepository implements TaskRepository {
   readonly #tasks = new Map<string, Task>()
   readonly #resources = new Map<string, TaskResource[]>()
 
-  async create(task: Task, resources: TaskResource[]): Promise<Task> {
+  async create(task: Task, resources: TaskResource[]): Promise<TaskCreateResult> {
+    if (task.idempotencyKey) {
+      const existing = await this.findByIdempotencyKey(task.idempotencyKey)
+      if (existing) {
+        return { created: false, task: existing }
+      }
+    }
+
     this.#tasks.set(task.id, cloneTask(task))
     this.#resources.set(task.id, resources.map(cloneResource))
-    return cloneTask(task)
+    return { created: true, task: cloneTask(task) }
   }
 
   async claimQueuedTasksForStart(limit: number, leaseSeconds: number): Promise<Task[]> {
@@ -57,6 +70,11 @@ export class InMemoryTaskRepository implements TaskRepository {
 
   async findById(id: string): Promise<Task | undefined> {
     const task = this.#tasks.get(id)
+    return task ? cloneTask(task) : undefined
+  }
+
+  async findByIdempotencyKey(idempotencyKey: string): Promise<Task | undefined> {
+    const task = Array.from(this.#tasks.values()).find((item) => item.idempotencyKey === idempotencyKey)
     return task ? cloneTask(task) : undefined
   }
 

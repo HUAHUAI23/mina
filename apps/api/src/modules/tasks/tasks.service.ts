@@ -21,6 +21,7 @@ import type { TaskRepository } from './tasks.repository'
 interface CreateTaskInput {
   accountId: string
   config: TaskConfig
+  idempotencyKey?: string
 }
 
 const nowIso = (): string => new Date().toISOString()
@@ -59,6 +60,13 @@ export class TasksService {
   }
 
   async createTask(input: CreateTaskInput): Promise<Task> {
+    if (input.idempotencyKey) {
+      const existing = await this.taskRepository.findByIdempotencyKey(input.idempotencyKey)
+      if (existing) {
+        return existing
+      }
+    }
+
     const spec = this.modelRegistry.get(input.config.kind, input.config.provider, input.config.model)
     const config = spec.parseConfig(input.config)
     const mode = spec.getTaskMode(config)
@@ -67,6 +75,7 @@ export class TasksService {
     const createdAt = nowIso()
     const task: Task = {
       id,
+      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       accountId: input.accountId,
       kind: config.kind,
       mode,
@@ -89,14 +98,18 @@ export class TasksService {
     const resources = spec.collectInputResources(config).map((resource, index) =>
       taskResourceFromInput(id, input.accountId, resource, index, createId),
     )
-    const created = await this.taskRepository.create(task, resources)
-    await this.recordTaskEvent(created, 'task.created', 'Task was created.', {
+    const result = await this.taskRepository.create(task, resources)
+    if (!result.created) {
+      return result.task
+    }
+
+    await this.recordTaskEvent(result.task, 'task.created', 'Task was created.', {
       estimatedCost: pricing.estimatedCost,
       inputResourceCount: resources.length,
       usageAmount: pricing.usageAmount,
       usageMetric: pricing.billingMetric,
     })
-    return created
+    return result.task
   }
 
   async getTask(id: string): Promise<Task> {

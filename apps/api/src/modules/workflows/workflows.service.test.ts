@@ -21,8 +21,22 @@ import { TasksService } from '../tasks/tasks.service'
 import { validateCanvas } from './validation'
 import { InMemoryWorkflowRunEventLog } from './workflow-events'
 import { WorkflowMediaResolver } from './media/workflow-media-resolver'
-import { InMemoryWorkflowRepository } from './workflows.repository'
+import {
+  InMemoryWorkflowDefinitionRepository,
+  InMemoryWorkflowNodeTaskRepository,
+  InMemoryWorkflowRunRepository,
+} from './workflows.repository'
 import { WorkflowsService } from './workflows.service'
+
+const createWorkflowRepositories = () => {
+  const runs = new InMemoryWorkflowRunRepository()
+  return {
+    definitions: new InMemoryWorkflowDefinitionRepository(),
+    nodeStates: runs,
+    nodeTasks: new InMemoryWorkflowNodeTaskRepository(runs),
+    runs,
+  }
+}
 
 const createServices = (taskProvider?: TaskProvider) => {
   const taskRepository = new InMemoryTaskRepository()
@@ -49,7 +63,7 @@ const createServices = (taskProvider?: TaskProvider) => {
     ),
   )
   const workflowsService = new WorkflowsService(
-    new InMemoryWorkflowRepository(),
+    createWorkflowRepositories(),
     tasksService,
     taskConfigAssembler,
     new WorkflowMediaResolver(mediaObjectService, tasksService),
@@ -868,6 +882,64 @@ describe('WorkflowsService execution semantics', () => {
     ).toEqual(['generated_video', 'last_frame', 'first_frame', 'video_cover'])
   })
 
+  test('repeated reconciliation does not create duplicate workflow node tasks', async () => {
+    const { taskRepository, workflowsService } = createServices()
+    const workflow = await workflowsService.createWorkflow({
+      name: 'idempotent reconcile',
+      nodes: [imageNode('image', 1)],
+      edges: [],
+    })
+
+    const run = await workflowsService.createRun(workflow.id, {
+      selectedNodeId: 'image',
+      expectedWorkflowVersion: workflow.version,
+    })
+    const taskId = run.nodeStates.image?.taskId
+    if (!taskId) {
+      throw new Error('Task id was not created.')
+    }
+
+    const first = await workflowsService.reconcileRun(run.id)
+    const second = await workflowsService.reconcileRun(run.id)
+    const links = await workflowsService.getNodeTasks(workflow.id, 'image')
+
+    expect(first.nodeStates.image?.taskId).toBe(taskId)
+    expect(second.nodeStates.image?.taskId).toBe(taskId)
+    expect(links).toHaveLength(1)
+    expect(await taskRepository.list()).toHaveLength(1)
+  })
+
+  test('updating one node state does not overwrite another node state', async () => {
+    const { tasksService, workflowsService } = createServices()
+    const workflow = await workflowsService.createWorkflow({
+      name: 'independent node states',
+      nodes: [
+        flowGroupNode('group'),
+        { ...imageNode('a', 1, 'group'), position: { x: 40, y: 80 } },
+        { ...imageNode('b', 1, 'group'), position: { x: 40, y: 220 } },
+      ],
+      edges: [],
+    })
+
+    const run = await workflowsService.createRun(workflow.id, {
+      selectedNodeId: 'a',
+      expectedWorkflowVersion: workflow.version,
+    })
+    expect(run.nodeStates.a?.status).toBe('running')
+    expect(run.nodeStates.b?.status).toBe('running')
+
+    const taskAId = run.nodeStates.a?.taskId
+    if (!taskAId) {
+      throw new Error('Task A id was not created.')
+    }
+    await tasksService.runTask(taskAId)
+    const reconciled = await workflowsService.reconcileRun(run.id)
+
+    expect(reconciled.nodeStates.a?.status).toBe('succeeded')
+    expect(reconciled.nodeStates.b?.status).toBe('running')
+    expect(reconciled.nodeStates.b?.taskId).toBe(run.nodeStates.b?.taskId)
+  })
+
   test('video duration pricing uses model and pricing key rules', async () => {
     const { tasksService, workflowsService } = createServices()
     const workflow = await workflowsService.createWorkflow({
@@ -970,7 +1042,7 @@ describe('WorkflowsService execution semantics', () => {
       ),
     )
     const workflowsService = new WorkflowsService(
-      new InMemoryWorkflowRepository(),
+      createWorkflowRepositories(),
       tasksService,
       taskConfigAssembler,
       new WorkflowMediaResolver(mediaObjectService, tasksService),

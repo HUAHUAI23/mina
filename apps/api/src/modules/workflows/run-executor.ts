@@ -1,172 +1,202 @@
 import type { WorkflowRun } from '@mina/contracts/modules/workflows'
 
+import { apiEnv } from '../../config/env'
 import { HttpError } from '../../lib/http/http-error'
 import type { TaskConfigAssembler } from '../tasks/config/task-config-assembler'
 import type { TasksService } from '../tasks/tasks.service'
-import {
-  getNodeMap,
-  isDescendantOf,
-  isExecutableNode,
-  sortNodesForExecution,
-} from './graph'
-import { nodeOutputDependenciesForNode } from './media/node-media-slots'
 import type { WorkflowMediaResolver } from './media/workflow-media-resolver'
 import { WorkflowNodeExecutor } from './node-executor'
-import {
-  failedRun,
-  settledFailedRun,
-  succeededRun,
-} from './run-state'
+import type { WorkflowNodeTaskRepository } from './repositories/workflow-node-task.repository'
+import type { WorkflowRunRepository } from './repositories/workflow-run.repository'
+import type { WorkflowRunNodeStateRepository } from './repositories/workflow-run-node-state.repository'
+import type { ClaimedWorkflowRun, WorkflowRunRecord, WorkflowRunSnapshot } from './repositories/workflow-types'
 import { NoopWorkflowRunEventLog, workflowRunEventPayload, type WorkflowRunEventLog } from './workflow-events'
-import type { WorkflowRepository } from './workflows.repository'
+
+const DEFAULT_WORKFLOW_RUN_CLAIM_BATCH_SIZE = 20
+const DEFAULT_WORKFLOW_RUN_LEASE_SECONDS = 30
+const DEFAULT_WORKFLOW_NODE_BATCH_SIZE = 50
+
+interface WorkflowRunExecutorRepositories {
+  nodeStates: WorkflowRunNodeStateRepository
+  nodeTasks: WorkflowNodeTaskRepository
+  runs: WorkflowRunRepository
+}
 
 export class WorkflowRunExecutor {
+  private readonly instanceId = `workflow_scheduler_${crypto.randomUUID()}`
   private readonly nodeExecutor: WorkflowNodeExecutor
 
   constructor(
-    private readonly workflowRepository: WorkflowRepository,
+    private readonly repositories: WorkflowRunExecutorRepositories,
     tasksService: TasksService,
     taskConfigAssembler: TaskConfigAssembler,
     workflowMediaResolver: WorkflowMediaResolver,
     private readonly workflowRunEventLog: WorkflowRunEventLog = new NoopWorkflowRunEventLog(),
   ) {
     this.nodeExecutor = new WorkflowNodeExecutor({
-      failRun: (run, message, nodeId) => this.failRun(run, message, nodeId),
+      nodeStates: repositories.nodeStates,
+      nodeTasks: repositories.nodeTasks,
       taskConfigAssembler,
       tasksService,
       workflowMediaResolver,
-      workflowRepository,
       workflowRunEventLog,
     })
   }
 
   async reconcileRunningRuns(): Promise<WorkflowRun[]> {
-    const runningRuns = await this.workflowRepository.listRunsByStatus('running')
+    const claimed = await this.repositories.runs.claimRunningRuns({
+      instanceId: this.instanceId,
+      limit: DEFAULT_WORKFLOW_RUN_CLAIM_BATCH_SIZE,
+      leaseSeconds: DEFAULT_WORKFLOW_RUN_LEASE_SECONDS,
+    })
     const reconciled: WorkflowRun[] = []
-    for (const run of runningRuns) {
-      reconciled.push(await this.reconcileRun(run.id))
+    for (const run of claimed) {
+      reconciled.push(await this.reconcileClaimedRun(run))
     }
     return reconciled
   }
 
   async reconcileRun(runId: string): Promise<WorkflowRun> {
-    let run = await this.getRun(runId)
+    const run = await this.repositories.runs.findRunById(runId)
+    if (!run) {
+      throw new HttpError(404, 'WORKFLOW_RUN_NOT_FOUND', 'Workflow run not found.')
+    }
     if (run.status !== 'running') {
       return run
     }
 
-    if (run.runMode === 'isolated_node') {
-      const node = getNodeMap(run.snapshotNodes).get(run.selectedNodeId)
-      if (!node) {
-        return this.failRun(run, 'Selected node does not exist in the workflow snapshot.')
-      }
-      const result = await this.nodeExecutor.executeNode(run, node)
-      run = result.run
-      return this.finishRunIfSettled(run)
+    const claimed = await this.repositories.runs.claimRunById({
+      instanceId: this.instanceId,
+      runId,
+      leaseSeconds: DEFAULT_WORKFLOW_RUN_LEASE_SECONDS,
+    })
+    if (!claimed) {
+      return run
     }
-
-    return this.reconcileFlowGroupRun(run)
+    return this.reconcileClaimedRun(claimed)
   }
 
-  private async getRun(runId: string): Promise<WorkflowRun> {
-    const run = await this.workflowRepository.findRunById(runId)
+  private async reconcileClaimedRun(claimedRun: ClaimedWorkflowRun): Promise<WorkflowRun> {
+    const snapshot = await this.repositories.runs.getSnapshot(claimedRun.id)
+    if (!snapshot) {
+      throw new HttpError(404, 'WORKFLOW_RUN_NOT_FOUND', 'Workflow run not found.')
+    }
+    if (snapshot.run.status !== 'running') {
+      return this.runDto(snapshot)
+    }
+
+    let progressed = false
+    let failureMessage: string | undefined
+
+    for (const item of await this.repositories.nodeStates.listRunningNodes({ workflowRunId: claimedRun.id })) {
+      const taskId = item.state.taskId
+      if (!taskId) {
+        continue
+      }
+      const result = await this.nodeExecutor.observeRunningNode({
+        run: snapshot.run,
+        node: item.node,
+        taskId,
+      })
+      progressed = progressed || result.progressed
+      failureMessage = failureMessage ?? result.error
+    }
+
+    if (!failureMessage) {
+      const nodeMap = new Map(snapshot.nodes.map((node) => [node.id, node]))
+      for (const item of await this.repositories.nodeStates.listRunnableNodes({
+        workflowRunId: claimedRun.id,
+        limit: DEFAULT_WORKFLOW_NODE_BATCH_SIZE,
+      })) {
+        const result = await this.nodeExecutor.startNode({
+          run: snapshot.run,
+          node: item.node,
+          edges: snapshot.edges,
+          getSourceNode: async (nodeId) => nodeMap.get(nodeId),
+        })
+        progressed = progressed || result.progressed
+        failureMessage = failureMessage ?? result.error
+        if (failureMessage) {
+          break
+        }
+      }
+    }
+
+    const terminal = await this.finishRunIfSettled(snapshot.run, claimedRun.leaseToken, failureMessage)
+    if (terminal) {
+      return terminal
+    }
+
+    const nextReconcileAt = progressed
+      ? new Date().toISOString()
+      : new Date(Date.now() + apiEnv.taskPollDefaultIntervalSeconds * 1000).toISOString()
+    await this.repositories.runs.releaseRunLease({
+      runId: claimedRun.id,
+      leaseToken: claimedRun.leaseToken,
+      nextReconcileAt,
+    })
+    return this.getRunOrThrow(claimedRun.id)
+  }
+
+  private async finishRunIfSettled(
+    run: WorkflowRunRecord,
+    leaseToken: string,
+    failureMessage: string | undefined,
+  ): Promise<WorkflowRun | undefined> {
+    const timestamp = new Date().toISOString()
+    const summary = await this.repositories.nodeStates.summarizeRunStates(run.id)
+
+    if (failureMessage || summary.failed > 0) {
+      const failed = await this.repositories.runs.markRunFailed({
+        runId: run.id,
+        leaseToken,
+        error: failureMessage ?? 'One or more workflow nodes failed.',
+        timestamp,
+      })
+      if (!failed) {
+        return this.getRunOrThrow(run.id)
+      }
+      await this.recordWorkflowRunEvent(failed, 'workflow.run.failed', failureMessage ?? 'Workflow run failed.', {
+        error: failed.error ?? failureMessage ?? 'One or more workflow nodes failed.',
+      })
+      return this.getRunOrThrow(run.id)
+    }
+
+    if (summary.total > 0 && summary.pending === 0 && summary.running === 0) {
+      const succeeded = await this.repositories.runs.markRunSucceeded({
+        runId: run.id,
+        leaseToken,
+        timestamp,
+      })
+      if (!succeeded) {
+        return this.getRunOrThrow(run.id)
+      }
+      await this.recordWorkflowRunEvent(succeeded, 'workflow.run.succeeded', 'Workflow run completed successfully.')
+      return this.getRunOrThrow(run.id)
+    }
+
+    return undefined
+  }
+
+  private async getRunOrThrow(runId: string): Promise<WorkflowRun> {
+    const run = await this.repositories.runs.findRunById(runId)
     if (!run) {
       throw new HttpError(404, 'WORKFLOW_RUN_NOT_FOUND', 'Workflow run not found.')
     }
     return run
   }
 
-  private async reconcileFlowGroupRun(initialRun: WorkflowRun): Promise<WorkflowRun> {
-    let run = initialRun
-    const nodeMap = getNodeMap(run.snapshotNodes)
-    const scopedNodes = sortNodesForExecution(
-      run.snapshotNodes.filter(
-        (node) =>
-          isExecutableNode(node) &&
-          run.scopeGroupNodeId !== undefined &&
-          isDescendantOf(node.id, run.scopeGroupNodeId, nodeMap),
-      ),
-    )
-    const scopedNodeIds = new Set(scopedNodes.map((node) => node.id))
-
-    let progressed = true
-    while (progressed && run.status === 'running') {
-      progressed = false
-
-      for (const node of scopedNodes) {
-        const state = run.nodeStates[node.id]
-        if (!state || state.status === 'succeeded' || state.status === 'failed') {
-          continue
-        }
-
-        if (state.status === 'running') {
-          const result = await this.nodeExecutor.executeNode(run, node)
-          run = result.run
-          progressed = progressed || result.progressed
-          continue
-        }
-
-        const predecessors = nodeOutputDependenciesForNode(node, run.snapshotEdges)
-          .filter((nodeId) => scopedNodeIds.has(nodeId))
-          .map((nodeId) => nodeMap.get(nodeId))
-          .filter((predecessor): predecessor is NonNullable<typeof predecessor> =>
-            predecessor !== undefined && isExecutableNode(predecessor),
-          )
-        const allPredecessorsSucceeded = predecessors.every(
-          (predecessor) => run.nodeStates[predecessor.id]?.status === 'succeeded',
-        )
-
-        if (!allPredecessorsSucceeded) {
-          continue
-        }
-
-        const result = await this.nodeExecutor.executeNode(run, node)
-        run = result.run
-        progressed = progressed || result.progressed
-      }
+  private runDto(snapshot: WorkflowRunSnapshot): WorkflowRun {
+    return {
+      ...snapshot.run,
+      snapshotNodes: snapshot.nodes,
+      snapshotEdges: snapshot.edges,
+      nodeStates: {},
     }
-
-    return this.finishRunIfSettled(run)
-  }
-
-  private async finishRunIfSettled(run: WorkflowRun): Promise<WorkflowRun> {
-    if (run.status !== 'running') {
-      return run
-    }
-
-    const states = Object.values(run.nodeStates)
-    if (states.length > 0 && states.every((state) => state.status === 'succeeded' || state.status === 'skipped')) {
-      const succeeded = await this.workflowRepository.updateRun(succeededRun(run))
-      await this.recordWorkflowRunEvent(succeeded, 'workflow.run.succeeded', 'Workflow run completed successfully.')
-      return succeeded
-    }
-
-    if (states.some((state) => state.status === 'failed')) {
-      const failed = await this.workflowRepository.updateRun(settledFailedRun(run))
-      await this.recordWorkflowRunEvent(failed, 'workflow.run.failed', 'Workflow run failed.', {
-        error: failed.error ?? 'One or more workflow nodes failed.',
-      })
-      return failed
-    }
-
-    return run
-  }
-
-  private async failRun(run: WorkflowRun, message: string, nodeId?: string): Promise<WorkflowRun> {
-    const failed = await this.workflowRepository.updateRun(failedRun(run, message, nodeId))
-    if (nodeId) {
-      await this.recordWorkflowRunEvent(failed, 'workflow.node.failed', message, {
-        nodeId,
-      })
-    }
-    await this.recordWorkflowRunEvent(failed, 'workflow.run.failed', message, {
-      ...(nodeId ? { nodeId } : {}),
-    })
-    return failed
   }
 
   private async recordWorkflowRunEvent(
-    run: WorkflowRun,
+    run: WorkflowRunRecord,
     eventType: string,
     message: string,
     payload: Record<string, unknown> = {},
@@ -176,7 +206,12 @@ export class WorkflowRunExecutor {
       message,
       ...(typeof payload.nodeId === 'string' ? { nodeId: payload.nodeId } : {}),
       payload: {
-        ...workflowRunEventPayload(run),
+        ...workflowRunEventPayload({
+          ...run,
+          snapshotNodes: [],
+          snapshotEdges: [],
+          nodeStates: {},
+        }),
         ...payload,
       },
       workflowRunId: run.id,

@@ -1,102 +1,156 @@
+import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import type { MediaSlotName } from '@mina/contracts/modules/media'
 import type { MediaInput, TaskConfig } from '@mina/contracts/modules/tasks'
-import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
-import type { WorkflowRun } from '@mina/contracts/modules/workflows'
 
 import type { TaskConfigAssembler } from '../tasks/config/task-config-assembler'
 import type { TasksService } from '../tasks/tasks.service'
 import type { WorkflowMediaResolver } from './media/workflow-media-resolver'
-import { workflowNodeRunningState, workflowNodeSucceededState } from './run-state'
+import type { WorkflowNodeTaskRepository } from './repositories/workflow-node-task.repository'
+import type { WorkflowRunNodeStateRepository } from './repositories/workflow-run-node-state.repository'
+import type { WorkflowRunRecord } from './repositories/workflow-types'
 import { buildMediaEnvelope } from './task-config'
 import { workflowRunEventPayload, type WorkflowRunEventLog } from './workflow-events'
-import type { WorkflowRepository } from './workflows.repository'
 
-export interface ExecuteNodeResult {
-  run: WorkflowRun
+export interface StartNodeInput {
+  edges: WorkflowCanvasEdge[]
+  getSourceNode(nodeId: string): Promise<WorkflowCanvasNode | undefined>
+  node: WorkflowCanvasNode
+  run: WorkflowRunRecord
+}
+
+export interface StartNodeResult {
+  error?: string
   progressed: boolean
 }
 
 interface WorkflowNodeExecutorDependencies {
-  failRun(run: WorkflowRun, message: string, nodeId?: string): Promise<WorkflowRun>
+  nodeStates: WorkflowRunNodeStateRepository
+  nodeTasks: WorkflowNodeTaskRepository
   taskConfigAssembler: TaskConfigAssembler
   tasksService: TasksService
   workflowMediaResolver: WorkflowMediaResolver
-  workflowRepository: WorkflowRepository
   workflowRunEventLog: WorkflowRunEventLog
 }
 
 export class WorkflowNodeExecutor {
   constructor(private readonly dependencies: WorkflowNodeExecutorDependencies) {}
 
-  async executeNode(run: WorkflowRun, node: WorkflowCanvasNode): Promise<ExecuteNodeResult> {
-    const currentState = run.nodeStates[node.id]
-    if (currentState?.status === 'succeeded') {
-      return { run, progressed: false }
-    }
-
-    if (currentState?.status === 'running' && currentState.taskId) {
-      const task = await this.dependencies.tasksService.getTask(currentState.taskId)
-      if (task.status === 'succeeded' && task.output) {
-        const nextRun = await this.dependencies.workflowRepository.updateRunNodeState(
-          run.id,
-          node.id,
-          workflowNodeSucceededState(currentState, task.output),
-        )
-        await this.recordWorkflowRunEvent(nextRun, 'workflow.node.succeeded', 'Workflow node completed successfully.', {
-          nodeId: node.id,
-          outputResourceCount: task.output.resources.length,
-          taskId: task.id,
-        })
-        return { run: nextRun, progressed: true }
-      }
-
-      if (task.status === 'failed' || task.status === 'cancelled') {
-        const failedRun = await this.dependencies.failRun(run, `Task ${task.id} ended with status ${task.status}.`, node.id)
-        return { run: failedRun, progressed: true }
-      }
-
-      return { run, progressed: false }
-    }
-
-    try {
-      const taskConfig = await this.buildTaskConfigForNode(run, node)
-      const task = await this.dependencies.tasksService.createTask({
-        accountId: run.accountId,
-        config: taskConfig,
+  async observeRunningNode(input: {
+    node: WorkflowCanvasNode
+    run: WorkflowRunRecord
+    taskId: string
+  }): Promise<StartNodeResult> {
+    const task = await this.dependencies.tasksService.getTask(input.taskId)
+    const timestamp = new Date().toISOString()
+    if (task.status === 'succeeded' && task.output) {
+      const updated = await this.dependencies.nodeStates.markNodeSucceeded({
+        workflowRunId: input.run.id,
+        nodeId: input.node.id,
+        taskId: task.id,
+        output: task.output,
+        completedAt: timestamp,
       })
-      await this.dependencies.workflowRepository.linkNodeTask({
-        workflowRunId: run.id,
-        nodeId: node.id,
+      if (!updated) {
+        return { progressed: false }
+      }
+      await this.recordWorkflowRunEvent(input.run, 'workflow.node.succeeded', 'Workflow node completed successfully.', {
+        nodeId: input.node.id,
+        outputResourceCount: task.output.resources.length,
         taskId: task.id,
       })
+      return { progressed: true }
+    }
+
+    if (task.status === 'failed' || task.status === 'cancelled') {
+      const message = `Task ${task.id} ended with status ${task.status}.`
+      const updated = await this.dependencies.nodeStates.markNodeFailed({
+        workflowRunId: input.run.id,
+        nodeId: input.node.id,
+        taskId: task.id,
+        error: message,
+        completedAt: timestamp,
+      })
+      if (!updated) {
+        return { progressed: false }
+      }
+      await this.recordWorkflowRunEvent(input.run, 'workflow.node.failed', message, {
+        nodeId: input.node.id,
+        taskId: task.id,
+      })
+      return { error: message, progressed: true }
+    }
+
+    return { progressed: false }
+  }
+
+  async startNode(input: StartNodeInput): Promise<StartNodeResult> {
+    try {
+      const canStart = await this.dependencies.nodeStates.tryMarkNodeStarting({
+        workflowRunId: input.run.id,
+        nodeId: input.node.id,
+      })
+      if (!canStart) {
+        return { progressed: false }
+      }
+
+      const taskConfig = await this.buildTaskConfigForNode(input)
+      const task = await this.dependencies.tasksService.createTask({
+        accountId: input.run.accountId,
+        config: taskConfig,
+        idempotencyKey: `workflow_run:${input.run.id}:node:${input.node.id}`,
+      })
+      await this.dependencies.nodeTasks.linkNodeTask({
+        workflowRunId: input.run.id,
+        nodeId: input.node.id,
+        taskId: task.id,
+      })
+
+      const startedAt = new Date().toISOString()
+      const marked = await this.dependencies.nodeStates.markNodeRunning({
+        workflowRunId: input.run.id,
+        nodeId: input.node.id,
+        taskId: task.id,
+        startedAt,
+      })
+      if (!marked) {
+        return { progressed: false }
+      }
+
       const inputResourceCount = (await this.dependencies.tasksService.listTaskResources(task.id)).filter(
         (resource) => resource.direction === 'input',
       ).length
-      await this.recordWorkflowRunEvent(run, 'workflow.node.task_created', 'Workflow node task was created.', {
+      await this.recordWorkflowRunEvent(input.run, 'workflow.node.task_created', 'Workflow node task was created.', {
         inputResourceCount,
-        nodeId: node.id,
+        nodeId: input.node.id,
+        taskId: task.id,
+      })
+      await this.recordWorkflowRunEvent(input.run, 'workflow.node.started', 'Workflow node started running.', {
+        nodeId: input.node.id,
         taskId: task.id,
       })
 
-      const nextRun = await this.dependencies.workflowRepository.updateRunNodeState(
-        run.id,
-        node.id,
-        workflowNodeRunningState(task.id),
-      )
-      await this.recordWorkflowRunEvent(nextRun, 'workflow.node.started', 'Workflow node started running.', {
-        nodeId: node.id,
-        taskId: task.id,
-      })
-
-      return { run: nextRun, progressed: true }
+      return { progressed: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Workflow node execution failed.'
-      const failedRun = await this.dependencies.failRun(run, message, node.id)
-      return { run: failedRun, progressed: true }
+      const updated = await this.dependencies.nodeStates.markNodeFailed({
+        workflowRunId: input.run.id,
+        nodeId: input.node.id,
+        error: message,
+        expectedStatus: 'pending',
+        completedAt: new Date().toISOString(),
+      })
+      if (!updated) {
+        return { progressed: false }
+      }
+      await this.recordWorkflowRunEvent(input.run, 'workflow.node.failed', message, {
+        nodeId: input.node.id,
+      })
+      return { error: message, progressed: true }
     }
   }
 
-  private async buildTaskConfigForNode(run: WorkflowRun, node: WorkflowCanvasNode): Promise<TaskConfig> {
+  private async buildTaskConfigForNode(input: StartNodeInput): Promise<TaskConfig> {
+    const { node, run } = input
     if (node.data.nodeType !== 'image_generation' && node.data.nodeType !== 'video_generation') {
       throw new Error('Node is not executable.')
     }
@@ -107,7 +161,18 @@ export class WorkflowNodeExecutor {
       throw new Error('Executable node task kind does not match node type.')
     }
 
-    const inputs = await this.dependencies.workflowMediaResolver.resolveNodeMedia({ run, node })
+    const inputs = await this.dependencies.workflowMediaResolver.resolveNodeMedia({
+      node,
+      edges: input.edges,
+      getSourceNode: input.getSourceNode,
+      getSourceNodeState: (nodeId) => this.dependencies.nodeStates.getNodeState(run.id, nodeId),
+      run: {
+        id: run.id,
+        workflowId: run.workflowId,
+        accountId: run.accountId,
+        runMode: run.runMode,
+      },
+    })
     const inputsBySlot = inputs.reduce<Partial<Record<MediaSlotName, MediaInput[]>>>(
       (accumulator, item) => ({
         ...accumulator,
@@ -122,7 +187,7 @@ export class WorkflowNodeExecutor {
   }
 
   private async recordWorkflowRunEvent(
-    run: WorkflowRun,
+    run: WorkflowRunRecord,
     eventType: string,
     message: string,
     payload: Record<string, unknown> = {},
@@ -132,7 +197,12 @@ export class WorkflowNodeExecutor {
       message,
       ...(typeof payload.nodeId === 'string' ? { nodeId: payload.nodeId } : {}),
       payload: {
-        ...workflowRunEventPayload(run),
+        ...workflowRunEventPayload({
+          ...run,
+          snapshotNodes: [],
+          snapshotEdges: [],
+          nodeStates: {},
+        }),
         ...payload,
       },
       workflowRunId: run.id,

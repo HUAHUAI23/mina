@@ -15,3 +15,4 @@ export const createDbClient = (databaseUrl = apiEnv.databaseUrl) => {
 }
 
 export type MinaDbClient = ReturnType<typeof createDbClient>
+export type MinaDbTransaction = Parameters<Parameters<MinaDbClient['transaction']>[0]>[0]

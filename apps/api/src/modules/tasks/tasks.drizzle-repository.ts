@@ -4,7 +4,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or } from 'drizzle
 
 import type { MinaDbClient } from '../../db/client'
 import { taskResources, tasks } from '../../db/schema'
-import type { TaskRepository } from './tasks.repository'
+import type { TaskCreateResult, TaskRepository } from './tasks.repository'
 
 type TaskRow = typeof tasks.$inferSelect
 type TaskInsert = typeof tasks.$inferInsert
@@ -20,6 +20,7 @@ const leaseUntil = (date: Date, leaseSeconds: number): Date => new Date(date.get
 const taskFromRow = (row: TaskRow): Task =>
   TaskSchema.parse({
     id: row.id,
+    ...(row.idempotencyKey ? { idempotencyKey: row.idempotencyKey } : {}),
     accountId: row.accountId,
     kind: row.kind,
     mode: row.mode,
@@ -53,6 +54,7 @@ const taskFromRow = (row: TaskRow): Task =>
 
 const taskInsertFromTask = (task: Task): TaskInsert => ({
   id: task.id,
+  idempotencyKey: task.idempotencyKey ?? null,
   accountId: task.accountId,
   kind: task.kind,
   mode: task.mode,
@@ -83,6 +85,7 @@ const taskInsertFromTask = (task: Task): TaskInsert => ({
 })
 
 const taskUpdateFromTask = (task: Task): Partial<TaskInsert> => ({
+  idempotencyKey: task.idempotencyKey ?? null,
   accountId: task.accountId,
   kind: task.kind,
   mode: task.mode,
@@ -214,19 +217,49 @@ export class DrizzleTaskRepository implements TaskRepository {
     return rows.map(taskFromRow)
   }
 
-  async create(task: Task, resources: TaskResource[]): Promise<Task> {
+  async create(task: Task, resources: TaskResource[]): Promise<TaskCreateResult> {
+    if (task.idempotencyKey) {
+      const existing = await this.findByIdempotencyKey(task.idempotencyKey)
+      if (existing) {
+        return { created: false, task: existing }
+      }
+    }
+
     await this.db.transaction(async (tx) => {
-      await tx.insert(tasks).values(taskInsertFromTask(task))
+      const inserted = await tx
+        .insert(tasks)
+        .values(taskInsertFromTask(task))
+        .onConflictDoNothing({
+          target: tasks.idempotencyKey,
+        })
+        .returning({ id: tasks.id })
+
+      if (inserted.length === 0) {
+        return
+      }
+
       if (resources.length > 0) {
         await tx.insert(taskResources).values(resources.map(taskResourceInsertFromResource))
       }
     })
 
-    return task
+    if (task.idempotencyKey) {
+      const existing = await this.findByIdempotencyKey(task.idempotencyKey)
+      if (existing && existing.id !== task.id) {
+        return { created: false, task: existing }
+      }
+    }
+
+    return { created: true, task }
   }
 
   async findById(id: string): Promise<Task | undefined> {
     const [row] = await this.db.select().from(tasks).where(eq(tasks.id, id)).limit(1)
+    return row ? taskFromRow(row) : undefined
+  }
+
+  async findByIdempotencyKey(idempotencyKey: string): Promise<Task | undefined> {
+    const [row] = await this.db.select().from(tasks).where(eq(tasks.idempotencyKey, idempotencyKey)).limit(1)
     return row ? taskFromRow(row) : undefined
   }
 

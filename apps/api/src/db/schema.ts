@@ -1,8 +1,9 @@
 import type { User } from '@mina/contracts/modules/accounts'
 import type {
   NodeMediaViewState,
-  WorkflowCanvasEdge,
-  WorkflowCanvasNode,
+  WorkflowEdgeData,
+  WorkflowNodeData,
+  WorkflowNodeType,
 } from '@mina/contracts/modules/canvas'
 import type { WorkflowMediaLinkConnection } from '@mina/contracts/modules/media'
 import type { PricingRule } from '@mina/contracts/modules/pricing'
@@ -20,7 +21,7 @@ import type {
   WorkflowRunNodeState,
   WorkflowRunStatus,
 } from '@mina/contracts/modules/workflows'
-import { index, integer, jsonb, numeric, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
+import { index, integer, jsonb, numeric, pgTable, primaryKey, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
 
 export type MediaObjectStatus = 'uploading' | 'ready' | 'failed' | 'deleted'
 export type MediaObjectOrigin = 'user_upload' | 'task_output' | 'external_import' | 'system_generated'
@@ -94,6 +95,7 @@ export const tasks = pgTable(
   'tasks',
   {
     id: text('id').primaryKey(),
+    idempotencyKey: text('idempotency_key'),
     accountId: text('account_id')
       .notNull()
       .references(() => accounts.id),
@@ -128,6 +130,7 @@ export const tasks = pgTable(
     index('tasks_queued_start_idx').on(table.status, table.createdAt),
     index('tasks_async_poll_idx').on(table.status, table.mode, table.externalTaskId),
     index('tasks_account_created_idx').on(table.accountId, table.createdAt),
+    uniqueIndex('tasks_idempotency_key_uidx').on(table.idempotencyKey),
   ],
 )
 
@@ -222,12 +225,60 @@ export const workflows = pgTable(
       .references(() => accounts.id),
     name: text('name').notNull(),
     version: integer('version').notNull(),
-    nodes: jsonb('nodes').$type<WorkflowCanvasNode[]>().notNull(),
-    edges: jsonb('edges').$type<WorkflowCanvasEdge[]>().notNull(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     ...timestamps(),
   },
   (table) => [index('workflows_account_updated_idx').on(table.accountId, table.updatedAt)],
+)
+
+export const workflowNodes = pgTable(
+  'workflow_nodes',
+  {
+    workflowId: text('workflow_id')
+      .notNull()
+      .references(() => workflows.id),
+    nodeId: text('node_id').notNull(),
+    type: text('type').$type<WorkflowNodeType>().notNull(),
+    positionX: numeric('position_x', { precision: 14, scale: 3 }).notNull(),
+    positionY: numeric('position_y', { precision: 14, scale: 3 }).notNull(),
+    parentId: text('parent_id'),
+    extent: text('extent').$type<'parent'>(),
+    width: numeric('width', { precision: 14, scale: 3 }),
+    height: numeric('height', { precision: 14, scale: 3 }),
+    data: jsonb('data').$type<WorkflowNodeData>().notNull(),
+    sortOrder: integer('sort_order').notNull(),
+    ...timestamps(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workflowId, table.nodeId] }),
+    index('workflow_nodes_workflow_sort_idx').on(table.workflowId, table.sortOrder),
+    index('workflow_nodes_workflow_parent_idx').on(table.workflowId, table.parentId),
+    index('workflow_nodes_workflow_type_idx').on(table.workflowId, table.type),
+  ],
+)
+
+export const workflowEdges = pgTable(
+  'workflow_edges',
+  {
+    workflowId: text('workflow_id')
+      .notNull()
+      .references(() => workflows.id),
+    edgeId: text('edge_id').notNull(),
+    type: text('type').notNull().default('media'),
+    sourceNodeId: text('source_node_id').notNull(),
+    targetNodeId: text('target_node_id').notNull(),
+    sourceHandle: text('source_handle'),
+    targetHandle: text('target_handle'),
+    data: jsonb('data').$type<WorkflowEdgeData>().notNull(),
+    sortOrder: integer('sort_order').notNull(),
+    ...timestamps(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workflowId, table.edgeId] }),
+    index('workflow_edges_workflow_sort_idx').on(table.workflowId, table.sortOrder),
+    index('workflow_edges_source_idx').on(table.workflowId, table.sourceNodeId),
+    index('workflow_edges_target_idx').on(table.workflowId, table.targetNodeId),
+  ],
 )
 
 export const workflowRuns = pgTable(
@@ -244,18 +295,107 @@ export const workflowRuns = pgTable(
     runMode: text('run_mode').$type<WorkflowRunMode>().notNull(),
     selectedNodeId: text('selected_node_id').notNull(),
     scopeGroupNodeId: text('scope_group_node_id'),
-    snapshotNodes: jsonb('snapshot_nodes').$type<WorkflowCanvasNode[]>().notNull(),
-    snapshotEdges: jsonb('snapshot_edges').$type<WorkflowCanvasEdge[]>().notNull(),
-    nodeStates: jsonb('node_states').$type<Record<string, WorkflowRunNodeState>>().notNull(),
     status: text('status').$type<WorkflowRunStatus>().notNull(),
     error: text('error'),
+    nextReconcileAt: timestamp('next_reconcile_at', { withTimezone: true }),
+    leaseUntil: timestamp('lease_until', { withTimezone: true }),
+    leasedBy: text('leased_by'),
+    leaseToken: text('lease_token'),
     startedAt: timestamp('started_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     ...timestamps(),
   },
   (table) => [
-    index('workflow_runs_status_updated_idx').on(table.status, table.updatedAt),
+    index('workflow_runs_claim_idx').on(table.status, table.nextReconcileAt, table.leaseUntil, table.updatedAt),
     index('workflow_runs_account_created_idx').on(table.accountId, table.createdAt),
+    index('workflow_runs_workflow_created_idx').on(table.workflowId, table.createdAt),
+  ],
+)
+
+export const workflowRunNodes = pgTable(
+  'workflow_run_nodes',
+  {
+    workflowRunId: text('workflow_run_id')
+      .notNull()
+      .references(() => workflowRuns.id),
+    nodeId: text('node_id').notNull(),
+    type: text('type').$type<WorkflowNodeType>().notNull(),
+    positionX: numeric('position_x', { precision: 14, scale: 3 }).notNull(),
+    positionY: numeric('position_y', { precision: 14, scale: 3 }).notNull(),
+    parentId: text('parent_id'),
+    extent: text('extent').$type<'parent'>(),
+    width: numeric('width', { precision: 14, scale: 3 }),
+    height: numeric('height', { precision: 14, scale: 3 }),
+    data: jsonb('data').$type<WorkflowNodeData>().notNull(),
+    sortOrder: integer('sort_order').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workflowRunId, table.nodeId] }),
+    index('workflow_run_nodes_run_sort_idx').on(table.workflowRunId, table.sortOrder),
+    index('workflow_run_nodes_run_parent_idx').on(table.workflowRunId, table.parentId),
+  ],
+)
+
+export const workflowRunEdges = pgTable(
+  'workflow_run_edges',
+  {
+    workflowRunId: text('workflow_run_id')
+      .notNull()
+      .references(() => workflowRuns.id),
+    edgeId: text('edge_id').notNull(),
+    type: text('type').notNull().default('media'),
+    sourceNodeId: text('source_node_id').notNull(),
+    targetNodeId: text('target_node_id').notNull(),
+    sourceHandle: text('source_handle'),
+    targetHandle: text('target_handle'),
+    data: jsonb('data').$type<WorkflowEdgeData>().notNull(),
+    sortOrder: integer('sort_order').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workflowRunId, table.edgeId] }),
+    index('workflow_run_edges_run_sort_idx').on(table.workflowRunId, table.sortOrder),
+    index('workflow_run_edges_run_source_idx').on(table.workflowRunId, table.sourceNodeId),
+    index('workflow_run_edges_run_target_idx').on(table.workflowRunId, table.targetNodeId),
+  ],
+)
+
+export const workflowRunNodeStates = pgTable(
+  'workflow_run_node_states',
+  {
+    workflowRunId: text('workflow_run_id')
+      .notNull()
+      .references(() => workflowRuns.id),
+    nodeId: text('node_id').notNull(),
+    status: text('status').$type<WorkflowRunNodeState['status']>().notNull(),
+    taskId: text('task_id').references(() => tasks.id),
+    output: jsonb('output').$type<NodeExecutionOutput>(),
+    error: text('error'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workflowRunId, table.nodeId] }),
+    index('workflow_run_node_states_run_status_idx').on(table.workflowRunId, table.status),
+    index('workflow_run_node_states_task_idx').on(table.taskId),
+  ],
+)
+
+export const workflowRunNodeDependencies = pgTable(
+  'workflow_run_node_dependencies',
+  {
+    workflowRunId: text('workflow_run_id')
+      .notNull()
+      .references(() => workflowRuns.id),
+    nodeId: text('node_id').notNull(),
+    dependsOnNodeId: text('depends_on_node_id').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workflowRunId, table.nodeId, table.dependsOnNodeId] }),
+    index('workflow_run_node_dependencies_node_idx').on(table.workflowRunId, table.nodeId),
+    index('workflow_run_node_dependencies_predecessor_idx').on(table.workflowRunId, table.dependsOnNodeId),
   ],
 )
 
