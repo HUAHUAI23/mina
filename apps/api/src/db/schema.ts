@@ -21,12 +21,29 @@ import type {
   WorkflowRunNodeState,
   WorkflowRunStatus,
 } from '@mina/contracts/modules/workflows'
-import { index, integer, jsonb, numeric, pgTable, primaryKey, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  numeric,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core'
 
 export type MediaObjectStatus = 'uploading' | 'ready' | 'failed' | 'deleted'
 export type MediaObjectOrigin = 'user_upload' | 'task_output' | 'external_import' | 'system_generated'
 export type MediaObjectPurpose = 'task_input' | 'task_output' | 'workflow_slot' | 'temporary' | 'preview'
 export type MediaObjectRetention = 'temporary' | 'task_scoped' | 'project_scoped' | 'library'
+export type OAuthClientType = 'public' | 'confidential'
+export type OAuthConsentStatus = 'granted' | 'revoked'
+export type OAuthGrantType = 'authorization_code' | 'refresh_token' | 'client_credentials'
+export type OAuthProvider = 'google' | 'github'
+export type OAuthResponseType = 'code'
+export type SessionRevocationReason = 'logout' | 'rotation' | 'security' | 'expired'
 
 const timestamps = () => ({
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -37,13 +54,170 @@ export const users = pgTable(
   'users',
   {
     id: text('id').primaryKey(),
+    username: text('username'),
     email: text('email').notNull(),
     displayName: text('display_name'),
     role: text('role').$type<User['role']>().notNull().default('user'),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     ...timestamps(),
   },
-  (table) => [uniqueIndex('users_email_uidx').on(table.email)],
+  (table) => [uniqueIndex('users_email_uidx').on(table.email), uniqueIndex('users_username_uidx').on(table.username)],
+)
+
+export const userPasswordCredentials = pgTable(
+  'user_password_credentials',
+  {
+    userId: text('user_id')
+      .primaryKey()
+      .references(() => users.id),
+    passwordHash: text('password_hash').notNull(),
+    passwordVersion: integer('password_version').notNull().default(1),
+    mustResetPassword: boolean('must_reset_password').notNull().default(false),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    ...timestamps(),
+  },
+)
+
+export const oauthAccounts = pgTable(
+  'oauth_accounts',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    provider: text('provider').$type<OAuthProvider>().notNull(),
+    providerAccountId: text('provider_account_id').notNull(),
+    email: text('email'),
+    profile: jsonb('profile').$type<Record<string, unknown>>(),
+    accessTokenHash: text('access_token_hash'),
+    refreshTokenHash: text('refresh_token_hash'),
+    tokenType: text('token_type'),
+    scope: text('scope'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    ...timestamps(),
+  },
+  (table) => [
+    index('oauth_accounts_user_idx').on(table.userId),
+    uniqueIndex('oauth_accounts_provider_account_uidx').on(table.provider, table.providerAccountId),
+  ],
+)
+
+export const oauthClients = pgTable(
+  'oauth_clients',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id').references(() => accounts.id),
+    clientId: text('client_id').notNull(),
+    clientSecretHash: text('client_secret_hash'),
+    clientType: text('client_type').$type<OAuthClientType>().notNull(),
+    name: text('name').notNull(),
+    redirectUris: jsonb('redirect_uris').$type<string[]>().notNull(),
+    allowedGrantTypes: jsonb('allowed_grant_types').$type<OAuthGrantType[]>().notNull(),
+    allowedResponseTypes: jsonb('allowed_response_types').$type<OAuthResponseType[]>().notNull(),
+    allowedScopes: jsonb('allowed_scopes').$type<string[]>().notNull(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    ...timestamps(),
+  },
+  (table) => [
+    index('oauth_clients_account_idx').on(table.accountId),
+    uniqueIndex('oauth_clients_client_id_uidx').on(table.clientId),
+  ],
+)
+
+export const oauthAuthorizationCodes = pgTable(
+  'oauth_authorization_codes',
+  {
+    id: text('id').primaryKey(),
+    codeHash: text('code_hash').notNull(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClients.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    redirectUri: text('redirect_uri').notNull(),
+    scope: text('scope').notNull(),
+    codeChallenge: text('code_challenge'),
+    codeChallengeMethod: text('code_challenge_method'),
+    nonce: text('nonce'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    ...timestamps(),
+  },
+  (table) => [
+    uniqueIndex('oauth_authorization_codes_hash_uidx').on(table.codeHash),
+    index('oauth_authorization_codes_client_user_idx').on(table.clientId, table.userId),
+    index('oauth_authorization_codes_expires_idx').on(table.expiresAt),
+  ],
+)
+
+export const oauthRefreshTokens = pgTable(
+  'oauth_refresh_tokens',
+  {
+    id: text('id').primaryKey(),
+    tokenHash: text('token_hash').notNull(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClients.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    scope: text('scope').notNull(),
+    parentTokenId: text('parent_token_id'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    revocationReason: text('revocation_reason').$type<SessionRevocationReason>(),
+    ...timestamps(),
+  },
+  (table) => [
+    uniqueIndex('oauth_refresh_tokens_hash_uidx').on(table.tokenHash),
+    index('oauth_refresh_tokens_client_user_idx').on(table.clientId, table.userId),
+    index('oauth_refresh_tokens_expires_idx').on(table.expiresAt),
+  ],
+)
+
+export const oauthConsents = pgTable(
+  'oauth_consents',
+  {
+    id: text('id').primaryKey(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClients.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    scope: text('scope').notNull(),
+    status: text('status').$type<OAuthConsentStatus>().notNull(),
+    grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    ...timestamps(),
+  },
+  (table) => [
+    uniqueIndex('oauth_consents_client_user_scope_uidx').on(table.clientId, table.userId, table.scope),
+    index('oauth_consents_user_idx').on(table.userId),
+  ],
+)
+
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    revocationReason: text('revocation_reason').$type<SessionRevocationReason>(),
+    userAgent: text('user_agent'),
+    ipAddress: text('ip_address'),
+    ...timestamps(),
+  },
+  (table) => [
+    uniqueIndex('sessions_token_hash_uidx').on(table.tokenHash),
+    index('sessions_user_idx').on(table.userId),
+    index('sessions_expiry_idx').on(table.expiresAt),
+  ],
 )
 
 export const accounts = pgTable(

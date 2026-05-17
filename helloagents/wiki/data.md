@@ -3,6 +3,21 @@
 ## Drizzle Workflow
 Drizzle Kit uses `apps/api/src/db/schema.ts` as the source of truth. Database command entrypoints live under `apps/api/scripts/db`, while reusable schema and connection helpers live under `apps/api/src/db`. In active development, `db:push` syncs the current schema directly to PostgreSQL without writing migration files. `db:reset:push` drops Mina-owned tables and immediately re-syncs the schema. `db:create`, `db:drop`, and `db:migration:test` are available for recreating the configured development database and testing generated migrations. The Drizzle config filters introspection/push to Mina-owned tables in the `public` schema.
 
+Application business persistence is PostgreSQL-only. Accounts, sessions, pricing rules, media objects, tasks, workflow definitions, workflow runs, node state, node task links, and lifecycle events are stored through Drizzle repositories.
+
+## Auth
+
+| Table | Purpose |
+| --- | --- |
+| `users` | User profile, username, email, role, soft deletion, timestamps |
+| `user_password_credentials` | Local username/password credential hash and password policy metadata |
+| `sessions` | First-party session id, user id, token hash, expiry, and revocation metadata |
+| `oauth_accounts` | External provider account links and hashed provider token artifacts |
+| `oauth_clients` | OAuth client metadata, redirect URIs, grant/response types, and scopes |
+| `oauth_authorization_codes` | Hashed OAuth authorization codes with PKCE challenge fields |
+| `oauth_refresh_tokens` | Hashed refresh tokens with parent-token linkage and revocation metadata |
+| `oauth_consents` | User/client/scope consent state |
+
 ## `media_objects`
 Managed media file entity table.
 

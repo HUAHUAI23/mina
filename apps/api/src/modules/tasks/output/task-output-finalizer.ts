@@ -113,7 +113,7 @@ export class TaskOutputFinalizer {
       return { ...resource, mediaObjectId: mediaObject.id, url: mediaObject.url }
     }
 
-    if (/^https?:\/\//.test(resource.url) || resource.url.startsWith('memory://')) {
+    if (/^https?:\/\//.test(resource.url)) {
       const mediaObject = await this.mediaObjectService.createFromRemoteUrl({
         accountId: task.accountId,
         kind: resource.kind,

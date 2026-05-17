@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { PricingRule } from '@mina/contracts/modules/pricing'
 
-import { InMemoryPricingRepository } from './pricing.repository'
+import { FakePricingRepository } from '../../test/fakes'
 import { PricingService } from './pricing.service'
 
 const activeFrom = new Date('2026-01-01T00:00:00.000Z').toISOString()
@@ -22,7 +22,7 @@ const createRule = (overrides: Partial<PricingRule>): PricingRule => ({
 describe('PricingService', () => {
   test('uses the matching pricing key for specialized model pricing', async () => {
     const pricingService = new PricingService(
-      new InMemoryPricingRepository([
+      new FakePricingRepository([
         createRule({ id: 'price_default', priority: 1, unitPrice: 2 }),
         createRule({
           id: 'price_1080p_10s',
@@ -47,7 +47,7 @@ describe('PricingService', () => {
   })
 
   test('falls back to generic model pricing when no pricing key is defined on the rule', async () => {
-    const pricingService = new PricingService(new InMemoryPricingRepository([createRule({ unitPrice: 3 })]))
+    const pricingService = new PricingService(new FakePricingRepository([createRule({ unitPrice: 3 })]))
 
     const estimate = await pricingService.estimate({
       taskKind: 'video_generation',

@@ -1,14 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 
-import { InMemoryObjectStorage } from '../../lib/storage/in-memory-object-storage'
 import { assertAccountStorageKey } from '../../lib/storage/storage-key'
-import { InMemoryMediaObjectRepository } from './media-object.repository'
+import { FakeMediaObjectRepository, FakeObjectStorage } from '../../test/fakes'
 import { MediaObjectService } from './media-object.service'
 import type { RemoteMediaFetcher } from './remote-media-fetcher'
 
 const createService = (fetcher?: RemoteMediaFetcher) => {
-  const repository = new InMemoryMediaObjectRepository()
-  const storage = new InMemoryObjectStorage()
+  const repository = new FakeMediaObjectRepository()
+  const storage = new FakeObjectStorage()
   const service = new MediaObjectService(
     repository,
     storage,
@@ -38,7 +37,7 @@ describe('MediaObjectService', () => {
     expect(mediaObject.status).toBe('ready')
     expect(mediaObject.byteSize).toBe(11)
     expect(mediaObject.storageKey).toBe(`users/account_1/media/${mediaObject.id}/original.png`)
-    expect(mediaObject.url).toBe(`memory://mina-memory-storage/${mediaObject.storageKey}`)
+    expect(mediaObject.url).toBe(`fake://mina-test-storage/${mediaObject.storageKey}`)
     expect(mediaObject.checksum).toHaveLength(64)
     expect(() => assertAccountStorageKey('account_1', mediaObject.storageKey)).not.toThrow()
   })
@@ -84,7 +83,7 @@ describe('MediaObjectService', () => {
       status: 'uploading',
       bucket: 'bucket',
       storageKey: 'users/account_1/media/media_uploading/original.png',
-      url: 'memory://bucket/users/account_1/media/media_uploading/original.png',
+      url: 'fake://bucket/users/account_1/media/media_uploading/original.png',
       byteSize: 100,
       origin: 'user_upload',
       purpose: 'temporary',
@@ -100,7 +99,7 @@ describe('MediaObjectService', () => {
       status: 'failed',
       bucket: 'bucket',
       storageKey: 'users/account_1/media/media_failed/original.png',
-      url: 'memory://bucket/users/account_1/media/media_failed/original.png',
+      url: 'fake://bucket/users/account_1/media/media_failed/original.png',
       byteSize: 200,
       origin: 'user_upload',
       purpose: 'temporary',

@@ -1,8 +1,5 @@
 export type { WorkflowDefinitionRepository } from './repositories/workflow-definition.repository'
-export { InMemoryWorkflowDefinitionRepository } from './repositories/in-memory-workflow-definition.repository'
-export { InMemoryWorkflowRunRepository } from './repositories/in-memory-workflow-run.repository'
 export type { WorkflowNodeTaskLink } from './repositories/workflow-node-task.repository'
-export { InMemoryWorkflowNodeTaskRepository } from './repositories/in-memory-workflow-node-task.repository'
 export type { WorkflowRunRepository } from './repositories/workflow-run.repository'
 export type { WorkflowRunNodeStateRepository } from './repositories/workflow-run-node-state.repository'
 export type { WorkflowRunDependencyRepository } from './repositories/workflow-run-dependency.repository'

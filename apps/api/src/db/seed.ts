@@ -1,14 +1,16 @@
 import { sql } from 'drizzle-orm'
 
 import { createDefaultAccount, createDefaultUser } from '../modules/accounts/accounts.data'
+import { hashPassword } from '../modules/accounts/password'
 import { createDefaultPricingRules } from '../modules/pricing/pricing.repository'
 import { createDbClient } from './client'
-import { accounts, pricingRules, users } from './schema'
+import { accounts, pricingRules, userPasswordCredentials, users } from './schema'
 
 const db = createDbClient()
 
 const defaultUser = createDefaultUser()
 const defaultAccount = createDefaultAccount()
+const defaultPasswordHash = await hashPassword('mina-demo-password')
 const pricingRuleValues = createDefaultPricingRules().map((rule) => ({
   id: rule.id,
   taskKind: rule.taskKind,
@@ -27,6 +29,7 @@ await db
   .insert(users)
   .values({
     id: defaultUser.id,
+    username: defaultUser.username ?? null,
     email: defaultUser.email,
     displayName: defaultUser.displayName ?? null,
     role: defaultUser.role,
@@ -37,6 +40,7 @@ await db
     target: users.id,
     set: {
       email: sql`excluded.email`,
+      username: sql`excluded.username`,
       displayName: sql`excluded.display_name`,
       role: sql`excluded.role`,
       updatedAt: new Date(),
@@ -59,6 +63,22 @@ await db
       ownerUserId: sql`excluded.owner_user_id`,
       name: sql`excluded.name`,
       storageRootPrefix: sql`excluded.storage_root_prefix`,
+      updatedAt: new Date(),
+    },
+  })
+
+await db
+  .insert(userPasswordCredentials)
+  .values({
+    userId: defaultUser.id,
+    passwordHash: defaultPasswordHash,
+  })
+  .onConflictDoUpdate({
+    target: userPasswordCredentials.userId,
+    set: {
+      passwordHash: sql`excluded.password_hash`,
+      passwordVersion: sql`${userPasswordCredentials.passwordVersion} + 1`,
+      mustResetPassword: false,
       updatedAt: new Date(),
     },
   })

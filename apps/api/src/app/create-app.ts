@@ -10,6 +10,7 @@ import { HttpError, createErrorPayload } from '../lib/http/http-error'
 import { appLogger } from '../lib/logger/logger'
 import { createApiRouter } from './api-router'
 import { createAppDependencies, type AppDependencies } from './dependencies'
+import { createOpenApiRouter } from './openapi'
 
 export const createApp = (dependencies: AppDependencies = createAppDependencies()) => {
   const app = new Hono()
@@ -32,6 +33,7 @@ export const createApp = (dependencies: AppDependencies = createAppDependencies(
   )
 
   app.route('/', apiRouter)
+  app.route('/', createOpenApiRouter())
 
   app.notFound((c) => c.json(createErrorPayload('NOT_FOUND', 'Route not found.'), 404))
 

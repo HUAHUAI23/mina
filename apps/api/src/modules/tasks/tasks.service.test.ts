@@ -1,10 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 import type { TaskConfig } from '@mina/contracts/modules/tasks'
 
-import { InMemoryObjectStorage } from '../../lib/storage/in-memory-object-storage'
-import { InMemoryMediaObjectRepository } from '../media/media-object.repository'
+import {
+  FakeMediaObjectRepository,
+  FakeObjectStorage,
+  FakePricingRepository,
+  FakeTaskEventLog,
+  FakeTaskRepository,
+} from '../../test/fakes'
 import { MediaObjectService } from '../media/media-object.service'
-import { InMemoryPricingRepository } from '../pricing/pricing.repository'
 import { PricingService } from '../pricing/pricing.service'
 import { ModelRegistry } from './models/model-registry'
 import { ProviderRouter } from './models/provider-router'
@@ -12,9 +16,7 @@ import { registerTaskModels } from './models/register-models'
 import { OutputPostProcessor } from './output/output-post-processor'
 import { TaskOutputFinalizer } from './output/task-output-finalizer'
 import { DeterministicVideoFrameGenerator } from './output/video-frame-generator'
-import { InMemoryTaskEventLog } from './task-events'
 import type { TaskProvider } from './providers/provider'
-import { InMemoryTaskRepository } from './tasks.repository'
 import { TasksService } from './tasks.service'
 
 const imageConfig = (count = 1): TaskConfig => ({
@@ -69,12 +71,12 @@ const videoOutput = (taskId: string) => ({
 })
 
 const createService = (taskProvider?: TaskProvider) => {
-  const taskEventLog = new InMemoryTaskEventLog()
-  const taskRepository = new InMemoryTaskRepository()
+  const taskEventLog = new FakeTaskEventLog()
+  const taskRepository = new FakeTaskRepository()
   const modelRegistry = registerTaskModels(new ModelRegistry())
   const mediaObjectService = new MediaObjectService(
-    new InMemoryMediaObjectRepository(),
-    new InMemoryObjectStorage(),
+    new FakeMediaObjectRepository(),
+    new FakeObjectStorage(),
     {
       fetch: async () => {
         throw new Error('fetcher not configured')
@@ -83,7 +85,7 @@ const createService = (taskProvider?: TaskProvider) => {
   )
   const tasksService = new TasksService(
     taskRepository,
-    new PricingService(new InMemoryPricingRepository()),
+    new PricingService(new FakePricingRepository()),
     taskProvider ?? new ProviderRouter(modelRegistry),
     modelRegistry,
     new TaskOutputFinalizer(mediaObjectService),

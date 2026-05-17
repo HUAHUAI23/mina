@@ -2,11 +2,8 @@ import { describe, expect, test } from 'bun:test'
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import type { MediaSlotName, NodeOutputSelector } from '@mina/contracts/modules/media'
 
-import { InMemoryObjectStorage } from '../../lib/storage/in-memory-object-storage'
 import { DEFAULT_ACCOUNT_ID } from '../accounts/accounts.data'
-import { InMemoryMediaObjectRepository } from '../media/media-object.repository'
 import { MediaObjectService } from '../media/media-object.service'
-import { InMemoryPricingRepository } from '../pricing/pricing.repository'
 import { PricingService } from '../pricing/pricing.service'
 import { TaskConfigAssembler } from '../tasks/config/task-config-assembler'
 import { ModelRegistry } from '../tasks/models/model-registry'
@@ -16,36 +13,39 @@ import { OutputPostProcessor } from '../tasks/output/output-post-processor'
 import { TaskOutputFinalizer } from '../tasks/output/task-output-finalizer'
 import { DeterministicVideoFrameGenerator } from '../tasks/output/video-frame-generator'
 import type { TaskProvider } from '../tasks/providers/provider'
-import { InMemoryTaskRepository } from '../tasks/tasks.repository'
 import { TasksService } from '../tasks/tasks.service'
 import { validateCanvas } from './validation'
-import { InMemoryWorkflowRunEventLog } from './workflow-events'
 import { WorkflowMediaResolver } from './media/workflow-media-resolver'
 import {
-  InMemoryWorkflowDefinitionRepository,
-  InMemoryWorkflowNodeTaskRepository,
-  InMemoryWorkflowRunRepository,
-} from './workflows.repository'
+  FakeMediaObjectRepository,
+  FakeObjectStorage,
+  FakePricingRepository,
+  FakeTaskRepository,
+  FakeWorkflowDefinitionRepository,
+  FakeWorkflowNodeTaskRepository,
+  FakeWorkflowRunEventLog,
+  FakeWorkflowRunRepository,
+} from '../../test/fakes'
 import { WorkflowsService } from './workflows.service'
 
 const createWorkflowRepositories = () => {
-  const runs = new InMemoryWorkflowRunRepository()
+  const runs = new FakeWorkflowRunRepository()
   return {
-    definitions: new InMemoryWorkflowDefinitionRepository(),
+    definitions: new FakeWorkflowDefinitionRepository(),
     nodeStates: runs,
-    nodeTasks: new InMemoryWorkflowNodeTaskRepository(runs),
+    nodeTasks: new FakeWorkflowNodeTaskRepository(runs),
     runs,
   }
 }
 
 const createServices = (taskProvider?: TaskProvider) => {
-  const taskRepository = new InMemoryTaskRepository()
-  const workflowRunEventLog = new InMemoryWorkflowRunEventLog()
+  const taskRepository = new FakeTaskRepository()
+  const workflowRunEventLog = new FakeWorkflowRunEventLog()
   const modelRegistry = registerTaskModels(new ModelRegistry())
   const taskConfigAssembler = new TaskConfigAssembler(modelRegistry)
   const mediaObjectService = new MediaObjectService(
-    new InMemoryMediaObjectRepository(),
-    new InMemoryObjectStorage(),
+    new FakeMediaObjectRepository(),
+    new FakeObjectStorage(),
     {
       fetch: async () => {
         throw new Error('fetcher not configured')
@@ -54,7 +54,7 @@ const createServices = (taskProvider?: TaskProvider) => {
   )
   const tasksService = new TasksService(
     taskRepository,
-    new PricingService(new InMemoryPricingRepository()),
+    new PricingService(new FakePricingRepository()),
     taskProvider ?? new ProviderRouter(modelRegistry),
     modelRegistry,
     new TaskOutputFinalizer(mediaObjectService),
@@ -1019,12 +1019,12 @@ describe('WorkflowsService execution semantics', () => {
         status: 'failed',
       }),
     }
-    const workflowRunEventLog = new InMemoryWorkflowRunEventLog()
+    const workflowRunEventLog = new FakeWorkflowRunEventLog()
     const modelRegistry = registerTaskModels(new ModelRegistry())
     const taskConfigAssembler = new TaskConfigAssembler(modelRegistry)
     const mediaObjectService = new MediaObjectService(
-      new InMemoryMediaObjectRepository(),
-      new InMemoryObjectStorage(),
+      new FakeMediaObjectRepository(),
+      new FakeObjectStorage(),
       {
         fetch: async () => {
           throw new Error('fetcher not configured')
@@ -1032,8 +1032,8 @@ describe('WorkflowsService execution semantics', () => {
       },
     )
     const tasksService = new TasksService(
-      new InMemoryTaskRepository(),
-      new PricingService(new InMemoryPricingRepository()),
+      new FakeTaskRepository(),
+      new PricingService(new FakePricingRepository()),
       failingProvider,
       modelRegistry,
       new TaskOutputFinalizer(mediaObjectService),

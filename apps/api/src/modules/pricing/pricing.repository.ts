@@ -163,15 +163,3 @@ export const createDefaultPricingRules = (): PricingRule[] => [
     priority: 10,
   },
 ]
-
-export class InMemoryPricingRepository implements PricingRepository {
-  readonly #rules: PricingRule[]
-
-  constructor(rules: PricingRule[] = createDefaultPricingRules()) {
-    this.#rules = rules.map((rule) => ({ ...rule }))
-  }
-
-  async listRules(): Promise<PricingRule[]> {
-    return this.#rules.map((rule) => ({ ...rule }))
-  }
-}

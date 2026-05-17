@@ -1,7 +1,7 @@
 # API
 
 ## Current Public Surface
-The API currently exposes health, posts, tasks, and workflow routes. Media object upload and asset-library UI APIs are intentionally not exposed in this implementation phase.
+The API currently exposes health, auth, tasks, and workflow routes. Media object upload and asset-library UI APIs are intentionally not exposed in this implementation phase.
 
 ## Task APIs
 - `POST /api/tasks`: create a durable queued task.

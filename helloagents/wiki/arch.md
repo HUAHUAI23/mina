@@ -14,7 +14,8 @@ flowchart TD
   Resolver --> Media
   Resolver --> Tasks
   Media --> Storage[ObjectStorage]
-  Media --> DB[(media_objects)]
+  Api --> DB[(PostgreSQL)]
+  Media --> DB
 ```
 
 ## Key Decisions
@@ -23,6 +24,7 @@ flowchart TD
 | ADR-MEDIA-001 | Store file entities in `media_objects`; workflow/task records store references and snapshots. | Accepted | Media, Tasks, Workflows |
 | ADR-WF-001 | Own media input order in target node `data.mediaSlots`, not in edge order. | Accepted | Workflows |
 | ADR-TASK-001 | Mirror provider outputs through a shared `TaskOutputFinalizer`, not provider-specific storage code. | Accepted | Tasks, Media |
+| ADR-DATA-001 | Use PostgreSQL-backed Drizzle repositories for application business runtime; keep fakes only in tests. | Accepted | API |
 
 ## Runtime Flow
 ```mermaid

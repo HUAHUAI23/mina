@@ -17,6 +17,8 @@ This file records important project changes.
 
 ### Changed
 - Upgraded Drizzle packages to the v1 RC line and scoped Drizzle Kit push/introspection to Mina-owned public tables.
+- Switched API business runtime to PostgreSQL-only repositories and removed production in-memory persistence/storage adapters; tests now use explicit fakes.
+- Removed the obsolete demo posts business module, `/api/posts` routes, shared post contracts, web post feature, seed data, and `posts` Drizzle table.
 - Task resource snapshots now record `mediaObjectId`, slot coordinates, order, and structured lineage source.
 - Flow-group scheduling now derives executable dependencies from node-output media slot sources.
 - Workflow reconciliation now claims due running runs before processing and updates individual `workflow_run_node_states` rows instead of rewriting run-level JSON state.

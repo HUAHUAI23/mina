@@ -1,22 +1,10 @@
 :root {
-  color: #0f172a;
-  font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+  color: var(--foreground);
+  font-family: var(--font-sans);
   line-height: 1.5;
   font-synthesis: none;
   font-weight: 400;
   text-rendering: optimizeLegibility;
-
-  --app-panel: rgba(255, 255, 255, 0.8);
-  --app-panel-border: rgba(15, 23, 42, 0.08);
-  --app-accent: #125b50;
-  --app-warning: #b42318;
-  --app-text-muted: rgba(15, 23, 42, 0.7);
-  --app-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
-
-  background:
-    radial-gradient(circle at top left, rgba(18, 91, 80, 0.2), transparent 35%),
-    radial-gradient(circle at top right, rgba(201, 138, 76, 0.16), transparent 30%),
-    linear-gradient(180deg, #fdf9f4 0%, #f4eadf 100%);
 }
 
 * {
@@ -32,6 +20,7 @@ body,
 
 body {
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 button,
@@ -44,203 +33,479 @@ button {
   cursor: pointer;
 }
 
-.shell {
-  margin: 0 auto;
-  max-width: 1200px;
-  padding: 48px 20px 72px;
+button:disabled {
+  cursor: not-allowed;
 }
 
-.panel {
-  backdrop-filter: blur(24px);
-  background: var(--app-panel);
-  border: 1px solid var(--app-panel-border);
-  border-radius: 28px;
-  box-shadow: var(--app-shadow);
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.sr-only {
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.mina-shell {
+  background:
+    radial-gradient(var(--canvas-dot) 1px, transparent 1px),
+    linear-gradient(180deg, var(--surface) 0%, var(--surface-container-low) 100%);
+  background-size: 24px 24px, auto;
+  color: var(--foreground);
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.mina-nav-island {
+  align-self: stretch;
+  background: var(--surface-container-lowest);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-floating);
+  display: flex;
+  flex-direction: column;
+  gap: 34px;
+  margin: 34px 0 34px 34px;
+  min-height: calc(100vh - 68px);
   padding: 28px;
 }
 
-.hero {
-  display: grid;
-  gap: 28px;
-  margin-bottom: 24px;
-}
-
-.hero-copy h1 {
-  font-size: clamp(2.5rem, 6vw, 4.5rem);
-  letter-spacing: -0.04em;
-  line-height: 0.95;
-  margin: 0 0 16px;
-  max-width: 11ch;
-}
-
-.hero-description,
-.section-heading p,
-.post-body,
-.post-meta {
-  color: var(--app-text-muted);
-}
-
-.hero-description {
-  font-size: 1.05rem;
-  margin: 0;
-  max-width: 64ch;
-}
-
-.hero-label,
-.eyebrow {
-  color: var(--app-accent);
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  margin: 0 0 12px;
-  text-transform: uppercase;
-}
-
-.hero-metrics {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
-
-.metric-card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.65));
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  border-radius: 20px;
-  padding: 18px;
-}
-
-.metric-card span {
-  color: var(--app-text-muted);
-  display: block;
-  font-size: 0.82rem;
-  margin-bottom: 8px;
-  text-transform: uppercase;
-}
-
-.metric-card strong {
-  display: block;
-  font-size: 1.05rem;
-  line-height: 1.25;
-}
-
-.workspace-grid {
-  display: grid;
-  gap: 24px;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-}
-
-.section-heading {
-  align-items: end;
+.mina-brand {
+  align-items: center;
   display: flex;
-  gap: 16px;
-  justify-content: space-between;
-  margin-bottom: 20px;
+  gap: 14px;
 }
 
-.section-heading h2 {
-  font-size: 1.5rem;
-  margin: 0;
+.mina-brand-mark {
+  align-items: center;
+  background: var(--foreground);
+  border-radius: 9px;
+  color: var(--primary-foreground);
+  display: flex;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
 }
 
-.section-heading p {
-  margin: 0;
-  max-width: 32ch;
+.mina-brand-mark span {
+  font-family: var(--font-display);
+  font-size: 0.48rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
 }
 
-.post-form {
+.mina-brand-name {
+  font-family: var(--font-display);
+  font-size: 1.28rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.mina-nav-section {
   display: grid;
-  gap: 18px;
+  gap: 17px;
 }
 
-.field {
+.mina-section-label {
+  color: var(--foreground-quaternary);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.32em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.mina-nav-list,
+.mina-project-list {
   display: grid;
   gap: 8px;
 }
 
-.field span {
-  font-size: 0.92rem;
-  font-weight: 600;
+.mina-nav-link {
+  align-items: center;
+  border-radius: var(--radius-lg);
+  color: var(--foreground-tertiary);
+  display: flex;
+  gap: 14px;
+  min-height: 44px;
+  padding: 0 16px;
 }
 
-.form-footer {
+.mina-nav-link[data-active='true'] {
+  background: var(--surface-container-low);
+  box-shadow: inset 0 0 0 1px var(--outline-ghost);
+  color: var(--foreground);
+  font-weight: 750;
+}
+
+.mina-nav-link:hover {
+  background: var(--surface-container-low);
+  color: var(--foreground);
+}
+
+.mina-nav-link span {
+  font-family: var(--font-display);
+  font-size: 0.94rem;
+}
+
+.mina-project-link {
+  align-items: center;
+  border-radius: var(--radius-md);
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  padding: 4px 0;
+}
+
+.mina-project-link:hover .mina-project-copy strong {
+  color: var(--foreground);
+}
+
+.mina-project-thumb {
+  align-items: center;
+  background: var(--surface-container-low);
+  border-radius: 8px;
+  color: var(--primary-foreground);
+  display: flex;
+  flex: 0 0 auto;
+  font-family: var(--font-display);
+  font-size: 0.38rem;
+  font-weight: 800;
+  height: 38px;
+  justify-content: center;
+  letter-spacing: 0.08em;
+  width: 38px;
+}
+
+.mina-project-thumb[data-tone='dark'] {
+  background: var(--foreground);
+}
+
+.mina-project-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mina-project-copy strong,
+.mina-project-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mina-project-copy strong {
+  color: var(--foreground-secondary);
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.mina-project-copy span {
+  color: var(--foreground-quaternary);
+  font-size: 0.68rem;
+}
+
+.mina-new-project {
+  background: var(--foreground);
+  border: 0;
+  border-radius: var(--radius-lg);
+  color: var(--primary-foreground);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  margin-top: auto;
+  min-height: 44px;
+  text-transform: uppercase;
+}
+
+.mina-new-project:hover {
+  background: var(--foreground-secondary);
+}
+
+.mina-canvas {
+  display: grid;
+  grid-template-rows: auto minmax(360px, 1fr) auto auto;
+  min-height: 100vh;
+  min-width: 0;
+  padding: 38px 58px 30px;
+}
+
+.mina-topbar {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.mina-profile {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+}
+
+.mina-profile div:first-child {
+  display: grid;
+  gap: 1px;
+  justify-items: end;
+}
+
+.mina-profile strong {
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+.mina-profile span {
+  color: var(--foreground-tertiary);
+  font-size: 0.72rem;
+}
+
+.mina-avatar {
+  align-items: center;
+  background: var(--foreground);
+  border-radius: 999px;
+  color: var(--primary-foreground);
+  display: flex;
+  font-size: 0.78rem;
+  font-weight: 800;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.mina-hero {
+  align-content: center;
+  display: grid;
+  gap: 42px;
+  justify-items: center;
+  padding: 68px 0 48px;
+  text-align: center;
+}
+
+.mina-mode-pill,
+.mina-tone-pill {
+  align-items: center;
+  background: var(--surface-container-lowest);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--outline-ghost);
+  color: var(--foreground-quaternary);
+  display: inline-flex;
+  font-size: 0.66rem;
+  font-weight: 800;
+  gap: 9px;
+  letter-spacing: 0.28em;
+  line-height: 1;
+  margin: 0;
+  padding: 8px 14px;
+  text-transform: uppercase;
+}
+
+.mina-mode-pill span {
+  background: var(--foreground-tertiary);
+  border-radius: 999px;
+  height: 7px;
+  width: 7px;
+}
+
+.mina-hero h1,
+.mina-hero p:last-child {
+  font-family: var(--font-display);
+  font-size: clamp(4.4rem, 8vw, 7.6rem);
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 0.95;
+  margin: 0;
+}
+
+.mina-hero p:last-child {
+  color: var(--foreground-faint);
+  max-width: 9.5ch;
+}
+
+.mina-composer {
+  background: var(--surface-container-lowest);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-floating);
+  display: grid;
+  gap: 12px;
+  justify-self: center;
+  margin-bottom: 22px;
+  max-width: 820px;
+  padding: 20px 22px;
+  width: min(100%, 820px);
+}
+
+.mina-composer textarea {
+  background: transparent;
+  border: 0;
+  color: var(--foreground);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  min-height: 32px;
+  outline: 0;
+  resize: none;
+}
+
+.mina-composer textarea::placeholder {
+  color: var(--foreground-quaternary);
+}
+
+.mina-composer-actions {
   align-items: center;
   display: flex;
   gap: 16px;
   justify-content: space-between;
 }
 
-.helper-text {
-  color: var(--app-text-muted);
-  margin: 0;
-}
-
-.helper-text[data-tone="error"] {
-  color: var(--app-warning);
-}
-
-.post-list {
-  display: grid;
-  gap: 14px;
-}
-
-.post-card {
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 22px;
-  padding: 20px;
-}
-
-.post-card-header {
-  align-items: start;
+.mina-icon-actions,
+.mina-submit-actions {
+  align-items: center;
   display: flex;
-  gap: 16px;
-  justify-content: space-between;
-  margin-bottom: 16px;
+  gap: 8px;
 }
 
-.post-card h3 {
-  font-size: 1.18rem;
-  margin: 0;
+.mina-icon-actions button,
+.mina-submit {
+  align-items: center;
+  border: 0;
+  display: flex;
+  justify-content: center;
 }
 
-.post-body {
-  margin: 0 0 16px;
+.mina-icon-actions button {
+  background: transparent;
+  border-radius: 999px;
+  color: var(--foreground-quaternary);
+  height: 38px;
+  width: 38px;
 }
 
-.post-meta {
-  font-size: 0.9rem;
-  margin: 0;
+.mina-icon-actions button:hover {
+  background: var(--surface-container-low);
+  color: var(--foreground);
 }
 
-.empty-state {
-  background: rgba(255, 255, 255, 0.55);
-  border: 1px dashed rgba(15, 23, 42, 0.14);
-  border-radius: 22px;
-  padding: 24px;
+.mina-tone-pill {
+  background: var(--surface-container-low);
+  padding: 10px 16px;
 }
 
-.empty-state h3 {
-  margin: 0 0 8px;
+.mina-submit {
+  background: var(--foreground);
+  border-radius: var(--radius-xl);
+  color: var(--primary-foreground);
+  height: 48px;
+  width: 48px;
 }
 
-.empty-state p {
-  color: var(--app-text-muted);
-  margin: 0;
+.mina-submit:hover {
+  background: var(--foreground-secondary);
 }
 
-@media (max-width: 800px) {
-  .shell {
-    padding-top: 24px;
+.mina-verify-note {
+  color: color-mix(in oklch, var(--foreground-quaternary) 45%, transparent);
+  font-size: 0.64rem;
+  font-weight: 800;
+  justify-self: end;
+  letter-spacing: 0.4em;
+  padding-right: 10px;
+  text-transform: uppercase;
+}
+
+@media (max-width: 1024px) {
+  .mina-shell {
+    grid-template-columns: 1fr;
   }
 
-  .panel {
+  .mina-nav-island {
+    align-items: center;
+    display: grid;
+    gap: 16px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    margin: 18px;
+    min-height: 0;
+    padding: 18px;
+  }
+
+  .mina-nav-section:first-of-type {
+    min-width: 0;
+  }
+
+  .mina-nav-section:last-of-type {
+    display: none;
+  }
+
+  .mina-nav-list {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+  }
+
+  .mina-nav-link {
+    flex: 0 0 auto;
+  }
+
+  .mina-new-project {
+    margin: 0;
+    padding: 0 18px;
+  }
+
+  .mina-canvas {
+    min-height: calc(100vh - 134px);
     padding: 22px;
   }
+}
 
-  .section-heading,
-  .form-footer,
-  .post-card-header {
-    align-items: start;
-    flex-direction: column;
+@media (max-width: 720px) {
+  .mina-nav-island {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .mina-brand {
+    justify-content: space-between;
+  }
+
+  .mina-section-label,
+  .mina-new-project,
+  .mina-profile div:first-child,
+  .mina-tone-pill {
+    display: none;
+  }
+
+  .mina-canvas {
+    grid-template-rows: auto minmax(320px, 1fr) auto auto;
+    padding: 18px;
+  }
+
+  .mina-topbar {
+    justify-content: end;
+  }
+
+  .mina-hero {
+    gap: 28px;
+    padding: 46px 0 34px;
+  }
+
+  .mina-hero h1,
+  .mina-hero p:last-child {
+    font-size: clamp(3.2rem, 18vw, 5.8rem);
+  }
+
+  .mina-composer-actions {
+    align-items: stretch;
+  }
+
+  .mina-verify-note {
+    justify-self: center;
+    padding: 0;
+    text-align: center;
   }
 }

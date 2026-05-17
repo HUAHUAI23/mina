@@ -1,5 +1,5 @@
+import type { ApiError } from '@mina/contracts/schemas/api-error'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
-import type { ApiError } from '@mina/contracts/modules/posts'
 
 export class HttpError extends Error {
   constructor(

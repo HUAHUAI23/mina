@@ -1,6 +1,7 @@
 import { createEnv } from '@t3-oss/env-core'
 import { z } from 'zod'
 
+import { DEFAULT_DATABASE_URL } from './defaults'
 import './load-env'
 
 const DEFAULT_ALLOWED_ORIGIN = 'http://localhost:3000'
@@ -28,11 +29,10 @@ const env = createEnv({
   server: {
     MINA_ALLOWED_ORIGIN: z.string().trim().min(1).default(DEFAULT_ALLOWED_ORIGIN),
     MINA_API_PORT: z.coerce.number().int().positive().default(DEFAULT_API_PORT),
-    MINA_DATABASE_URL: z.url().optional(),
+    MINA_DATABASE_URL: z.url().default(DEFAULT_DATABASE_URL),
     GOOGLE_API_BASE_URL: z.url().default(DEFAULT_GOOGLE_API_BASE_URL),
     GOOGLE_API_KEY: optionalNonEmptyStringSchema,
     MINA_LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
-    MINA_PERSISTENCE_DRIVER: z.enum(['memory', 'postgres']).default('memory'),
     MINA_S3_ACCESS_KEY_ID: optionalNonEmptyStringSchema,
     MINA_S3_BUCKET: optionalNonEmptyStringSchema,
     MINA_S3_ENDPOINT: z.url().optional(),
@@ -42,7 +42,7 @@ const env = createEnv({
     MINA_S3_SECRET_ACCESS_KEY: optionalNonEmptyStringSchema,
     MINA_SCHEDULER_CRON: z.string().trim().min(1).default(DEFAULT_SCHEDULER_CRON),
     MINA_SCHEDULER_ENABLED: booleanEnvSchema,
-    MINA_STORAGE_DRIVER: z.enum(['memory', 's3']).default('memory'),
+    MINA_STORAGE_DRIVER: z.literal('s3').default('s3'),
     MINA_STORAGE_ROOT_PREFIX: z.string().trim().min(1).default(DEFAULT_STORAGE_ROOT_PREFIX),
     MINA_TASK_MAX_RUNNING_SECONDS: z.coerce.number().int().positive().default(DEFAULT_TASK_MAX_RUNNING_SECONDS),
     MINA_TASK_POLL_BATCH_SIZE: z.coerce.number().int().positive().default(DEFAULT_TASK_POLL_BATCH_SIZE),
@@ -79,7 +79,6 @@ export const apiEnv = {
   googleApiBaseUrl: env.GOOGLE_API_BASE_URL,
   googleApiKey: env.GOOGLE_API_KEY,
   logLevel: env.MINA_LOG_LEVEL,
-  persistenceDriver: env.MINA_PERSISTENCE_DRIVER,
   s3AccessKeyId: env.MINA_S3_ACCESS_KEY_ID,
   s3Bucket: env.MINA_S3_BUCKET,
   s3Endpoint: env.MINA_S3_ENDPOINT,

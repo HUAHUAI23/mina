@@ -2,6 +2,7 @@ import { createEnv } from '@t3-oss/env-core'
 import { defineConfig, loadEnv, searchForWorkspaceRoot } from 'vite'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
+import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import { z } from 'zod'
 
 export default defineConfig(({ mode }) => {
@@ -15,7 +16,15 @@ export default defineConfig(({ mode }) => {
   const apiPort = String(env.MINA_API_PORT)
 
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      tanstackRouter({
+        generatedRouteTree: './src/routeTree.gen.ts',
+        routesDirectory: './src/routes',
+        target: 'react',
+      }),
+      react(),
+      tailwindcss(),
+    ],
     server: {
       host: '0.0.0.0',
       port: 3000,

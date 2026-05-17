@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { ApiError, DeletePostResponse, PostListResponse, PostResponse } from '@mina/contracts/modules/posts'
+import type { AuthResponse } from '@mina/contracts/modules/accounts'
 import type {
   CancelTaskResponse,
   TaskListResponse,
@@ -14,11 +14,12 @@ import type {
   WorkflowRunListResponse,
   WorkflowRunResponse,
 } from '@mina/contracts/modules/workflows'
+import type { ApiError } from '@mina/contracts/schemas/api-error'
 
-import { createApp } from './app/create-app'
+import { createTestApp } from './test/app'
 
 describe('mina api', () => {
-  const app = createApp()
+  const app = createTestApp()
 
   test('GET /api/health returns an operational payload', async () => {
     const response = await app.request('/api/health')
@@ -33,77 +34,86 @@ describe('mina api', () => {
     expect(payload.service).toBe('@mina/api')
   })
 
-  test('POST /api/posts creates a typed record', async () => {
-    const response = await app.request('/api/posts', {
+  test(
+    'POST /api/auth/register creates a user session with username password auth',
+    async () => {
+      const app = createTestApp()
+      const response = await app.request('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          displayName: 'Mina Admin',
+          email: 'admin@example.com',
+          password: 'correct horse battery staple',
+          username: 'mina_admin',
+        }),
+      })
+      const payload = (await response.json()) as AuthResponse
+
+      expect(response.status).toBe(201)
+      expect(payload.user.email).toBe('admin@example.com')
+      expect(payload.user.username).toBe('mina_admin')
+      expect(payload.session.token.length).toBeGreaterThanOrEqual(32)
+    },
+    10_000,
+  )
+
+  test(
+    'POST /api/auth/login authenticates with username and password',
+    async () => {
+      const app = createTestApp()
+      await app.request('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: 'director@example.com',
+          password: 'correct horse battery staple',
+          username: 'director',
+        }),
+      })
+
+      const response = await app.request('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          identifier: 'director',
+          password: 'correct horse battery staple',
+        }),
+      })
+      const payload = (await response.json()) as AuthResponse
+
+      expect(response.status).toBe(200)
+      expect(payload.user.username).toBe('director')
+      expect(payload.session.userId).toBe(payload.user.id)
+    },
+    10_000,
+  )
+
+  test('POST /api/auth/login rejects invalid credentials', async () => {
+    const response = await app.request('/api/auth/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        title: 'Testing the refactored API',
-        body: 'This payload is long enough to satisfy the shared zod contract.',
+        identifier: 'missing',
+        password: 'incorrect password',
       }),
     })
-
-    const payload = (await response.json()) as PostResponse
-
-    expect(response.status).toBe(201)
-    expect(payload.item.id).toBeGreaterThan(0)
-    expect(payload.item.title).toBe('Testing the refactored API')
-  })
-
-  test('GET /api/posts lists typed records', async () => {
-    const response = await app.request('/api/posts')
-    const payload = (await response.json()) as PostListResponse
-
-    expect(response.status).toBe(200)
-    expect(payload.items.length).toBeGreaterThan(0)
-  })
-
-  test('GET /api/posts/:id returns a typed record', async () => {
-    const response = await app.request('/api/posts/1')
-    const payload = (await response.json()) as PostResponse
-
-    expect(response.status).toBe(200)
-    expect(payload.item.id).toBe(1)
-  })
-
-  test('DELETE /api/posts/:id deletes an existing record', async () => {
-    const app = createApp()
-    const createResponse = await app.request('/api/posts', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        title: 'Delete route coverage',
-        body: 'This payload is long enough to create a post for deletion.',
-      }),
-    })
-    const created = (await createResponse.json()) as PostResponse
-
-    const response = await app.request(`/api/posts/${created.item.id}`, {
-      method: 'DELETE',
-    })
-    const payload = (await response.json()) as DeletePostResponse
-
-    expect(response.status).toBe(200)
-    expect(payload.success).toBe(true)
-  })
-
-  test('DELETE /api/posts/:id returns 404 for unknown records', async () => {
-    const response = await app.request('/api/posts/9999', {
-      method: 'DELETE',
-    })
-
     const payload = (await response.json()) as ApiError
 
-    expect(response.status).toBe(404)
-    expect(payload.error.code).toBe('POST_NOT_FOUND')
+    expect(response.status).toBe(401)
+    expect(payload.error.code).toBe('INVALID_CREDENTIALS')
   })
 
   test('POST /api/tasks creates an independently runnable task', async () => {
-    const app = createApp()
+    const app = createTestApp()
     const response = await app.request('/api/tasks', {
       method: 'POST',
       headers: {
@@ -129,7 +139,7 @@ describe('mina api', () => {
   })
 
   test('task routes expose list, detail, resources, and cancellation payloads', async () => {
-    const app = createApp()
+    const app = createTestApp()
     const createResponse = await app.request('/api/tasks', {
       method: 'POST',
       headers: {
@@ -229,7 +239,7 @@ describe('mina api', () => {
   })
 
   test('workflow routes expose CRUD, node tasks, runs, run detail, and cancellation payloads', async () => {
-    const app = createApp()
+    const app = createTestApp()
     const createResponse = await app.request('/api/workflows', {
       method: 'POST',
       headers: {

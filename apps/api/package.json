@@ -27,13 +27,15 @@
     "db:seed": "bun src/db/seed.ts",
     "db:studio": "drizzle-kit studio --config drizzle.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "NODE_ENV=test MINA_PERSISTENCE_DRIVER=memory MINA_STORAGE_DRIVER=memory bun test"
+    "test": "NODE_ENV=test MINA_STORAGE_DRIVER=s3 bun test"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "catalog:",
     "@aws-sdk/s3-request-presigner": "catalog:",
     "@hono/standard-validator": "catalog:",
+    "@hono/zod-openapi": "^1.4.0",
     "@mina/contracts": "workspace:*",
+    "@scalar/hono-api-reference": "^0.10.16",
     "@t3-oss/env-core": "catalog:",
     "croner": "catalog:",
     "dotenv": "catalog:",

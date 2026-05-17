@@ -8,7 +8,7 @@ This repository is structured for:
 2. Stable package ownership
 3. Shared runtime contracts between the API and the web app
 4. Type-safe development with strict TypeScript defaults
-5. Gradual backend evolution from in-memory repositories to real database adapters
+5. PostgreSQL-backed business runtime with explicit infrastructure adapters
 
 ## Top-Level Structure
 
@@ -26,6 +26,7 @@ This repository is structured for:
 │           ├── app
 │           ├── config
 │           ├── features
+│           ├── routes
 │           └── lib
 ├── docs
 └── packages
@@ -52,6 +53,7 @@ The Vite + React application.
 - `src/app/`: providers, app shell, and shared app-level styling
 - `src/config/`: client-safe environment parsing
 - `src/features/<feature>/`: feature-specific API calls, hooks, and components
+- `src/routes/`: TanStack Router file-based route entries and generated route tree
 - `src/lib/`: reusable client-side utilities
 
 ### `packages/contracts`
@@ -113,11 +115,42 @@ Owns persistence behavior:
 - record lookup
 - inserts
 - deletes
-- future database integration
+- database integration through Drizzle repositories
 
 ### Data Layer
 
 Owns static seed data or adapter bootstrapping.
+
+## Task And Workflow Core
+
+## Accounts And Auth
+
+The accounts module owns username/password registration and login through the same backend layering as the rest of the API:
+
+```text
+auth route -> AccountsService -> AccountsRepository
+```
+
+Current runtime uses PostgreSQL-backed account repositories for username/password registration, password login, and session issuance. Password hashes are created with Bun's password hashing API using Argon2id. Session tokens are returned to clients once, while only token hashes are persisted in the `sessions` table.
+
+The PostgreSQL schema in `apps/api/src/db/schema.ts` includes the forward-compatible auth tables before full OAuth runtime integration:
+
+- `user_password_credentials`: local password credentials separated from profile data.
+- `sessions`: first-party application sessions with hashed tokens, expiry, and revocation fields.
+- `oauth_accounts`: external provider account links with hashed provider tokens.
+- `oauth_clients`: OAuth client metadata, redirect URIs, grant types, response types, and scopes.
+- `oauth_authorization_codes`: hashed authorization codes with PKCE challenge fields and one-time consumption.
+- `oauth_refresh_tokens`: hashed refresh tokens with parent-token linkage for rotation.
+- `oauth_consents`: user/client/scope consent state.
+
+The schema follows the security posture from OAuth 2.0 Security Best Current Practice: no implicit-flow runtime assumptions, hashed bearer artifacts at rest, PKCE-ready authorization code records, refresh-token rotation support, and explicit revocation metadata.
+
+The public auth API currently exposes:
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+
+Full OAuth provider login, client registration, consent UI, refresh token exchange, and administrator-only public resource workflows are intentionally not implemented yet.
 
 ## Task And Workflow Core
 
@@ -132,7 +165,7 @@ The workflow module keeps public services small and splits stable internal rules
 
 - `workflows.service.ts`: workflow definition CRUD, version checks, MediaView updates, and node task link lookup.
 - `workflow-runs.service.ts`: workflow run creation, run lookup/listing, cancellation, isolated-node preflight, and reconciliation entrypoints.
-- `repositories/*`: workflow definition, run, node-state, dependency, and node-task ports with in-memory and Drizzle implementations.
+- `repositories/*`: workflow definition, run, node-state, dependency, and node-task ports with Drizzle implementations.
 - `run-executor.ts`: claim-based workflow-run reconciliation using run leases and ready-node queries.
 - `node-executor.ts`: idempotent single-node task creation, task observation, conditional node state transitions, and node event recording.
 - `run-state.ts`: initial node state creation and pure run/node state builders.
@@ -143,7 +176,7 @@ The workflow module keeps public services small and splits stable internal rules
 - `validation.ts`: persisted canvas validation, media slot/edge consistency checks, and flow-group scope/cycle validation.
 - `group-conversion.ts`: pure helper for converting `flow_group` nodes to visual-only `node_group` nodes and downgrading `run_output` media slot sources to `current_media`.
 
-The default local runtime uses in-memory repositories so tests and development do not require PostgreSQL. Set `MINA_PERSISTENCE_DRIVER=postgres` to use the Drizzle-backed task, pricing, workflow, and media object repositories against the PostgreSQL schema in `apps/api/src/db/schema.ts`.
+The application runtime is PostgreSQL-only for business persistence. `createAppDependencies()` wires account, pricing, media, task, workflow, and event services to Drizzle repositories backed by the PostgreSQL schema in `apps/api/src/db/schema.ts`. Unit and route tests use fakes under `apps/api/src/test` rather than production in-memory repositories.
 
 User ownership is represented by `users` and `accounts`. Product data that belongs to a tenant stores `account_id`; `tasks`, `task_resources`, `media_objects`, `workflows`, and `workflow_runs` reference `accounts.id`. Event and link tables remain subordinate to their parent task or workflow run records.
 
@@ -159,7 +192,7 @@ The task module keeps lifecycle behavior behind small internal files:
 - `models/model-spec.ts`: model-owned config, pricing, resource, and provider lifecycle contract.
 - `models/provider-router.ts`: `TaskProvider` dispatch to the selected model spec.
 - `config/task-config-assembler.ts`: workflow draft config plus media envelope preparation through model specs.
-- `output/task-output-finalizer.ts`: mirrors provider outputs from data URLs, HTTP(S), memory URLs, `mina://media/{id}`, and dev `mina://tasks/...` outputs into managed media objects before task success is persisted.
+- `output/task-output-finalizer.ts`: mirrors provider outputs from data URLs, HTTP(S), `mina://media/{id}`, and dev `mina://tasks/...` outputs into managed media objects before task success is persisted.
 - `output/output-post-processor.ts`: generic output invariants, including required `video_cover` resources for successful video tasks.
 - `output/video-cover-generator.ts`: creates video cover resources through `MediaObjectService`, with deterministic fallback for non-HTTP test/dev video URLs.
 - `pricing.ts`: actual-cost calculation from provider usage.
@@ -222,12 +255,16 @@ React Flow compatibility rules:
 The web app follows this sequence:
 
 ```text
-feature component -> shared UI primitive -> hook -> feature api client -> shared http utility -> typed Hono client
+TanStack route -> feature component -> shared UI primitive -> hook -> feature api client -> shared http utility -> typed Hono client
 ```
 
 This ensures that UI components do not depend on low-level transport details.
 
 The web app imports shared design-system CSS from `@mina/ui/globals.css` and composes shadcn/ui primitives through package entrypoints such as `@mina/ui/components/button`.
+
+Routes are file-based through TanStack Router under `apps/web/src/routes`. The generated `apps/web/src/routeTree.gen.ts` is committed so `tsc` can typecheck before Vite runs. Web scripts run `tsr generate` before typecheck, dev, and build to keep the generated tree synchronized.
+
+The current Plaza screen is the first implemented UI surface. It follows `apps/web/DESIGN.md` with a floating navigation island, editorial canvas, static dot-grid surface, and prompt composer. The page avoids expensive visual effects such as `backdrop-filter`, `filter`, `drop-shadow`, `mix-blend-mode`, masks, and animation-heavy opacity/transform combinations.
 
 ## API Contract Boundary
 
@@ -237,6 +274,11 @@ The web app does not import server implementation files. It only imports:
 2. The typed route surface from `@mina/api/client`
 
 This keeps the client aligned with the API surface without coupling it to Bun-specific runtime code.
+
+API documentation is exposed from the API process:
+
+- `GET /openapi.json`: OpenAPI 3.1 document for current public endpoints.
+- `GET /docs`: Scalar-powered interactive API reference.
 
 ## Environment Strategy
 
@@ -254,6 +296,5 @@ The API uses Bun tests against `app.request(...)`, which allows route-level beha
 
 The account, task, pricing, media object, and workflow modules have Drizzle-backed schema coverage. The remaining persistence work is:
 
-1. Add a Drizzle-backed posts repository if posts become product data.
-2. Add integration tests that run migrations against a disposable PostgreSQL database.
-3. Move the existing scheduler loop from the API process to a separate worker process if API-process scheduling is not enough operationally.
+1. Add integration tests that run migrations against a disposable PostgreSQL database.
+2. Move the existing scheduler loop from the API process to a separate worker process if API-process scheduling is not enough operationally.

@@ -18,8 +18,6 @@ export interface WorkflowRunEventLog {
 
 const createId = (prefix: string): string => `${prefix}_${crypto.randomUUID()}`
 
-const cloneEvent = (event: WorkflowRunEventInput): WorkflowRunEventInput => structuredClone(event)
-
 export const workflowRunEventPayload = (run: WorkflowRun): Record<string, unknown> => ({
   accountId: run.accountId,
   runMode: run.runMode,
@@ -32,18 +30,6 @@ export const workflowRunEventPayload = (run: WorkflowRun): Record<string, unknow
 
 export class NoopWorkflowRunEventLog implements WorkflowRunEventLog {
   async record(_input: WorkflowRunEventInput): Promise<void> {}
-}
-
-export class InMemoryWorkflowRunEventLog implements WorkflowRunEventLog {
-  readonly #events: WorkflowRunEventInput[] = []
-
-  async listEvents(workflowRunId: string): Promise<WorkflowRunEventInput[]> {
-    return this.#events.filter((event) => event.workflowRunId === workflowRunId).map(cloneEvent)
-  }
-
-  async record(input: WorkflowRunEventInput): Promise<void> {
-    this.#events.push(cloneEvent(input))
-  }
 }
 
 export class DrizzleWorkflowRunEventLog implements WorkflowRunEventLog {

@@ -2,7 +2,7 @@
 
 ## Stack
 - Runtime: Bun 1.3.x
-- API: Hono, Drizzle ORM v1 RC, PostgreSQL-ready repositories, in-memory local adapters
+- API: Hono, Drizzle ORM v1 RC, PostgreSQL-backed business repositories
 - Web: Vite, React, shared `@mina/ui`
 - Contracts: Zod schemas in `@mina/contracts`
 
@@ -15,7 +15,7 @@
 ## Verification
 - Main gates: `bun run typecheck`, `bun run test`, `bun run build`, `bun run check:boundaries`.
 - API feature work should add Bun tests at service or request level.
-- Regular API tests force in-memory persistence/storage so they are not coupled to development database contents.
+- Regular API tests use explicit fakes under `apps/api/src/test` so production runtime remains PostgreSQL-only.
 
 ## Database Workflow
 - During active development, use `bun --filter @mina/api db:push` to sync `apps/api/src/db/schema.ts` directly to the configured PostgreSQL database without writing migration files.

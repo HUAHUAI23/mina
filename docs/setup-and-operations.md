@@ -28,14 +28,13 @@ Environment variables are validated with `@t3-oss/env-core` and Zod during start
 | `MINA_API_PORT` | Bun API port | `3001` |
 | `MINA_ALLOWED_ORIGIN` | CORS origin for the API | `http://localhost:3000` |
 | `MINA_LOG_LEVEL` | Pino log level | `info` |
-| `MINA_PERSISTENCE_DRIVER` | API persistence driver, either `memory` or `postgres` | `memory` |
-| `MINA_DATABASE_URL` | PostgreSQL URL used when `MINA_PERSISTENCE_DRIVER=postgres` | `postgres://postgres:postgres@localhost:5432/mina` |
+| `MINA_DATABASE_URL` | PostgreSQL URL used by the API runtime and database tooling | `postgres://postgres:postgres@localhost:5432/mina` |
 | `MINA_POSTGRES_TEST_DATABASE_URL` | Optional PostgreSQL URL for opt-in Drizzle repository integration tests | empty |
 | `GOOGLE_API_BASE_URL` | Google Gemini/Veo API base URL | `https://generativelanguage.googleapis.com` |
 | `GOOGLE_API_KEY` | Google API key for Gemini image and Veo video providers | empty |
 | `MINA_SCHEDULER_CRON` | Croner expression for task/workflow scheduler ticks | `*/5 * * * * *` |
 | `MINA_SCHEDULER_ENABLED` | Enables the background task/workflow scheduler outside tests | `false` |
-| `MINA_STORAGE_DRIVER` | Object storage driver, either `memory` or `s3` | `memory` |
+| `MINA_STORAGE_DRIVER` | Object storage driver. Runtime accepts `s3`. | `s3` |
 | `MINA_STORAGE_ROOT_PREFIX` | Root prefix for per-account object storage keys | `users` |
 | `MINA_TASK_MAX_RUNNING_SECONDS` | Maximum wall-clock time for a running provider task before it fails | `21600` |
 | `MINA_TASK_POLL_BATCH_SIZE` | Maximum async provider tasks claimed per scheduler tick | `25` |
@@ -70,6 +69,8 @@ bun run dev
 - Web: `http://localhost:3000`
 - API: `http://localhost:3001`
 - Health: `http://localhost:3001/api/health`
+- API reference: `http://localhost:3001/docs`
+- OpenAPI JSON: `http://localhost:3001/openapi.json`
 
 Task and workflow execution require the background scheduler:
 
@@ -82,6 +83,16 @@ Without the scheduler, `POST /api/tasks` and `POST /api/workflows/:id/runs` stil
 ## UI System
 
 The shared UI package lives in `packages/ui` and is consumed by `apps/web`.
+
+The web app uses TanStack Router file-based routes under `apps/web/src/routes`. The generated route tree lives at `apps/web/src/routeTree.gen.ts`.
+
+Generate the route tree manually when adding or renaming route files:
+
+```bash
+bun --filter @mina/web routes:generate
+```
+
+The web `dev`, `typecheck`, and `build` scripts run route generation automatically.
 
 Add all currently available shadcn/ui primitives from the web workspace config:
 
@@ -111,7 +122,7 @@ bun run typecheck
 bun run test
 ```
 
-The API test script forces in-memory persistence and storage so regular tests do not depend on the current development database contents.
+The API test suite uses explicit fakes under `apps/api/src/test` for unit and route coverage. Application runtime dependencies still require PostgreSQL-backed repositories; the test script only overrides `MINA_STORAGE_DRIVER=s3` so stale local `.env` values cannot select a removed storage adapter.
 
 ### Production Build
 
@@ -133,22 +144,30 @@ bun run check:boundaries
 
 This verifies backend contract imports, API/domain layering, and web-to-API package boundaries.
 
+### API Documentation Smoke Check
+
+Verify the API docs endpoints without starting a separate server:
+
+```bash
+bun -e "import { createApp } from './apps/api/src/app/create-app.ts'; const app = createApp(); console.log((await app.request('/openapi.json')).status); console.log((await app.request('/docs')).status)"
+```
+
 ## Database
 
-The API can run against in-memory repositories or PostgreSQL repositories.
+The API runtime uses PostgreSQL-backed Drizzle repositories for business persistence.
 
 Database command entrypoints live under `apps/api/scripts/db`; reusable schema and connection helpers stay under `apps/api/src/db`.
 
 During active development, sync the current Drizzle schema directly to the configured database without writing migration files:
 
 ```bash
-MINA_PERSISTENCE_DRIVER=postgres bun --filter @mina/api db:push
+bun --filter @mina/api db:push
 ```
 
 Reset Mina-owned development tables and then sync the current schema:
 
 ```bash
-MINA_PERSISTENCE_DRIVER=postgres bun --filter @mina/api db:reset:push
+bun --filter @mina/api db:reset:push
 ```
 
 Create or drop the configured development database itself:
@@ -167,19 +186,19 @@ bun --filter @mina/api db:generate
 Apply migrations to the configured database:
 
 ```bash
-MINA_PERSISTENCE_DRIVER=postgres bun --filter @mina/api db:migrate
+bun --filter @mina/api db:migrate
 ```
 
 To test the full migration workflow from an empty database, drop the configured database, recreate it, generate migrations, and apply them:
 
 ```bash
-MINA_PERSISTENCE_DRIVER=postgres bun --filter @mina/api db:migration:test
+bun --filter @mina/api db:migration:test
 ```
 
-Seed default development user, account, and pricing rules:
+Seed default development user, password credential, account, and pricing rules:
 
 ```bash
-MINA_PERSISTENCE_DRIVER=postgres bun --filter @mina/api db:seed
+bun --filter @mina/api db:seed
 ```
 
 Run PostgreSQL-backed repository concurrency tests against a disposable database:
@@ -194,8 +213,8 @@ The test creates and drops an isolated schema inside the configured database.
 
 1. The web app proxies `/api/*` to the local Bun API during development.
 2. In production, set `VITE_API_BASE_URL` to the deployed API origin if the frontend and backend are split.
-3. The posts module uses an in-memory repository, so post data resets when the process restarts.
-4. The task/workflow core defaults to in-memory repositories for local development. Set `MINA_PERSISTENCE_DRIVER=postgres` to use the Drizzle-backed task, pricing, and workflow repositories.
+3. `POST /api/auth/register` and `POST /api/auth/login` use the PostgreSQL-backed accounts repository. OAuth tables are present in the Drizzle schema, but OAuth runtime flows are not implemented yet.
+4. The task/workflow core uses Drizzle repositories for tasks, media objects, pricing rules, workflow definitions, workflow runs, node states, node task links, and lifecycle events.
 5. Set `MINA_SCHEDULER_ENABLED=true` to run the Croner-backed task starter, async task poller, and workflow reconciler in the API process. A future standalone worker can run the same service loop.
 6. `POST /api/tasks` creates a standalone `queued` task and returns immediately. Use `GET /api/tasks/:id` for status and `GET /api/tasks/:id/resources` for persisted input/output resources.
 7. Workflow runs create and link node tasks, then rely on the scheduler/worker path to start providers and reconcile nodes from task status. Workflow creation does not block on provider execution.
