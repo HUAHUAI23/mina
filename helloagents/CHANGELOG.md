@@ -5,6 +5,8 @@ This file records important project changes.
 ## [Unreleased]
 
 ### Added
+- Added `db:create`, `db:drop`, and `db:migration:test` commands for testing the full Drizzle generate/migrate workflow from a recreated development database.
+- Added a standard `db:reset:push` command that drops Mina-owned development tables and immediately re-syncs the Drizzle schema.
 - Added a development-only Drizzle `db:push` workflow for syncing schema changes without writing migration files.
 - Added managed media objects, media object persistence, storage usage aggregation, and account-scoped media storage keys.
 - Added workflow `mediaSlots` contracts and backend resolution for media objects, external URLs, current MediaView outputs, and current workflow-run outputs.

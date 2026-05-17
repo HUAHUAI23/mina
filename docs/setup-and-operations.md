@@ -111,6 +111,8 @@ bun run typecheck
 bun run test
 ```
 
+The API test script forces in-memory persistence and storage so regular tests do not depend on the current development database contents.
+
 ### Production Build
 
 ```bash
@@ -135,10 +137,25 @@ This verifies backend contract imports, API/domain layering, and web-to-API pack
 
 The API can run against in-memory repositories or PostgreSQL repositories.
 
+Database command entrypoints live under `apps/api/scripts/db`; reusable schema and connection helpers stay under `apps/api/src/db`.
+
 During active development, sync the current Drizzle schema directly to the configured database without writing migration files:
 
 ```bash
 MINA_PERSISTENCE_DRIVER=postgres bun --filter @mina/api db:push
+```
+
+Reset Mina-owned development tables and then sync the current schema:
+
+```bash
+MINA_PERSISTENCE_DRIVER=postgres bun --filter @mina/api db:reset:push
+```
+
+Create or drop the configured development database itself:
+
+```bash
+bun --filter @mina/api db:create
+bun --filter @mina/api db:drop
 ```
 
 Generate Drizzle migrations after the schema is finalized:
@@ -151,6 +168,12 @@ Apply migrations to the configured database:
 
 ```bash
 MINA_PERSISTENCE_DRIVER=postgres bun --filter @mina/api db:migrate
+```
+
+To test the full migration workflow from an empty database, drop the configured database, recreate it, generate migrations, and apply them:
+
+```bash
+MINA_PERSISTENCE_DRIVER=postgres bun --filter @mina/api db:migration:test
 ```
 
 Seed default development user, account, and pricing rules:
