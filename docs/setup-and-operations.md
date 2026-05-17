@@ -135,7 +135,13 @@ This verifies backend contract imports, API/domain layering, and web-to-API pack
 
 The API can run against in-memory repositories or PostgreSQL repositories.
 
-Generate Drizzle migrations after schema changes:
+During active development, sync the current Drizzle schema directly to the configured database without writing migration files:
+
+```bash
+MINA_PERSISTENCE_DRIVER=postgres bun --filter @mina/api db:push
+```
+
+Generate Drizzle migrations after the schema is finalized:
 
 ```bash
 bun --filter @mina/api db:generate

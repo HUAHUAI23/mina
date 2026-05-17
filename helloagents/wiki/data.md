@@ -1,5 +1,8 @@
 # Data Model
 
+## Drizzle Workflow
+Drizzle Kit uses `apps/api/src/db/schema.ts` as the source of truth. In active development, `db:push` syncs the current schema directly to PostgreSQL without writing migration files. The Drizzle config filters introspection/push to Mina-owned tables in the `public` schema.
+
 ## `media_objects`
 Managed media file entity table.
 

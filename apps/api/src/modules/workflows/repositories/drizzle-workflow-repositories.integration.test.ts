@@ -5,7 +5,7 @@ import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 
 import type { MinaDbClient } from '../../../db/client'
-import * as schema from '../../../db/schema'
+import { normalizePostgresUrl } from '../../../db/database-url'
 import { DrizzleTaskRepository } from '../../tasks/tasks.drizzle-repository'
 import { DrizzleWorkflowDefinitionRepository } from './drizzle-workflow-definition.repository'
 import { DrizzleWorkflowNodeTaskRepository } from './drizzle-workflow-node-task.repository'
@@ -18,13 +18,20 @@ type SqlClient = ReturnType<typeof postgres>
 
 const quoteIdentifier = (value: string): string => `"${value.replaceAll('"', '""')}"`
 
+const scopedDatabaseUrl = (schemaName: string): string => {
+  const url = new URL(normalizePostgresUrl(databaseUrl!))
+  url.searchParams.set('search_path', schemaName)
+  return url.toString()
+}
+
 const createScopedSqlClient = async (schemaName: string): Promise<SqlClient> => {
-  const sql = postgres(databaseUrl!, { max: 1, prepare: false })
+  const sql = postgres(scopedDatabaseUrl(schemaName), { max: 1, prepare: false })
   await sql.unsafe(`SET search_path TO ${quoteIdentifier(schemaName)}`)
   return sql
 }
 
-const createDb = (sql: SqlClient): MinaDbClient => drizzle(sql, { schema }) as MinaDbClient
+const createDb = (schemaName: string): MinaDbClient =>
+  drizzle({ connection: { url: scopedDatabaseUrl(schemaName), prepare: false } }) as MinaDbClient
 
 const createTestSchema = async (sql: SqlClient): Promise<void> => {
   const statements = [
@@ -369,7 +376,7 @@ if (!databaseUrl) {
     }> => {
       const workerSql = await createScopedSqlClient(schemaName)
       return {
-        repository: new DrizzleWorkflowRunRepository(createDb(workerSql)),
+        repository: new DrizzleWorkflowRunRepository(createDb(schemaName)),
         sql: workerSql,
       }
     }
@@ -379,7 +386,7 @@ if (!databaseUrl) {
       await sql.unsafe(`CREATE SCHEMA ${quoteIdentifier(schemaName)}`)
       await sql.unsafe(`SET search_path TO ${quoteIdentifier(schemaName)}`)
       await createTestSchema(sql)
-      db = createDb(sql)
+      db = createDb(schemaName)
       definitions = new DrizzleWorkflowDefinitionRepository(db)
       runs = new DrizzleWorkflowRunRepository(db)
       nodeStates = new DrizzleWorkflowRunNodeStateRepository(db)
@@ -496,8 +503,8 @@ if (!databaseUrl) {
       const workerBSql = await createScopedSqlClient(schemaName)
 
       try {
-        const workerA = new DrizzleTaskRepository(createDb(workerASql))
-        const workerB = new DrizzleTaskRepository(createDb(workerBSql))
+        const workerA = new DrizzleTaskRepository(createDb(schemaName))
+        const workerB = new DrizzleTaskRepository(createDb(schemaName))
         const [first, second] = await Promise.all([
           workerA.create(taskInput('task_idempotency_a', key), []),
           workerB.create(taskInput('task_idempotency_b', key), []),
@@ -520,7 +527,7 @@ if (!databaseUrl) {
 
       const startNode = async (suffix: string) => {
         const scopedSql = await createScopedSqlClient(schemaName)
-        const scopedDb = createDb(scopedSql)
+        const scopedDb = createDb(schemaName)
         try {
           const scopedStates = new DrizzleWorkflowRunNodeStateRepository(scopedDb)
           const scopedTasks = new DrizzleTaskRepository(scopedDb)

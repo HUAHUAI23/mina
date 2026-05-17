@@ -1,9 +1,10 @@
 import { createEnv } from '@t3-oss/env-core'
 import { z } from 'zod'
 
+import './load-env'
+
 const DEFAULT_ALLOWED_ORIGIN = 'http://localhost:3000'
 const DEFAULT_API_PORT = 3001
-export const DEFAULT_DATABASE_URL = 'postgres://postgres:postgres@localhost:5432/mina'
 const DEFAULT_SCHEDULER_CRON = '*/5 * * * * *'
 const DEFAULT_S3_REGION = 'us-east-1'
 const DEFAULT_STORAGE_ROOT_PREFIX = 'users'
