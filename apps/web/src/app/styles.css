@@ -14,13 +14,14 @@
 html,
 body,
 #root {
+  height: 100%;
   margin: 0;
-  min-height: 100%;
+  overflow: hidden;
+  width: 100%;
 }
 
 body {
-  min-height: 100vh;
-  overflow-x: hidden;
+  min-height: 100dvh;
 }
 
 button,
@@ -62,11 +63,13 @@ a {
   color: var(--foreground);
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  width: 100vw;
 }
 
 .mina-nav-island {
-  align-self: stretch;
+  align-self: auto;
   background: var(--surface-container-lowest);
   border-radius: var(--radius-2xl);
   box-shadow: var(--shadow-floating);
@@ -74,7 +77,8 @@ a {
   flex-direction: column;
   gap: 34px;
   margin: 34px 0 34px 34px;
-  min-height: calc(100vh - 68px);
+  min-height: 0;
+  overflow: hidden;
   padding: 28px;
 }
 
@@ -230,11 +234,12 @@ a {
   background: var(--foreground-secondary);
 }
 
-.mina-canvas {
+.mina-workspace {
   display: grid;
-  grid-template-rows: auto minmax(360px, 1fr) auto auto;
-  min-height: 100vh;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
   min-width: 0;
+  overflow: hidden;
   padding: 38px 58px 30px;
 }
 
@@ -279,12 +284,403 @@ a {
   width: 44px;
 }
 
+.mina-route-frame {
+  display: grid;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mina-projects-page,
+.mina-canvas-page {
+  display: grid;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.mina-projects-page {
+  align-content: start;
+  gap: 22px;
+  padding: clamp(18px, 3dvh, 32px) 4px 18px;
+}
+
+.mina-canvas-page {
+  align-content: start;
+  gap: 22px;
+  padding: clamp(18px, 3dvh, 34px) 4px 18px;
+}
+
+.mina-page-header,
+.mina-section-heading {
+  align-items: end;
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.mina-page-header h1,
+.mina-section-heading h1,
+.mina-section-heading h2 {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4vw, 3.3rem);
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+  margin: 0;
+}
+
+.mina-section-heading h2 {
+  font-size: 1.35rem;
+}
+
+.mina-page-header p,
+.mina-section-heading p {
+  color: var(--foreground-tertiary);
+  font-size: 0.86rem;
+  margin: 10px 0 0;
+  max-width: 520px;
+}
+
+.mina-page-kicker {
+  color: var(--foreground-quaternary);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.28em;
+  line-height: 1;
+  margin: 0 0 14px;
+  text-transform: uppercase;
+}
+
+.mina-page-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
+.mina-primary-action,
+.mina-secondary-action,
+.mina-link-action {
+  align-items: center;
+  border: 0;
+  display: inline-flex;
+  font-weight: 800;
+  gap: 8px;
+  justify-content: center;
+}
+
+.mina-primary-action,
+.mina-secondary-action {
+  border-radius: 999px;
+  min-height: 44px;
+  padding: 0 18px;
+}
+
+.mina-primary-action {
+  background: var(--foreground);
+  color: var(--primary-foreground);
+}
+
+.mina-secondary-action {
+  background: var(--surface-container-high);
+  color: var(--foreground-secondary);
+}
+
+.mina-link-action {
+  background: transparent;
+  color: var(--foreground-tertiary);
+  font-size: 0.68rem;
+  letter-spacing: 0.24em;
+  padding: 0;
+  text-transform: uppercase;
+}
+
+.mina-project-grid {
+  display: grid;
+  align-items: start;
+  gap: 26px;
+  grid-template-columns: repeat(auto-fill, 178px);
+  justify-content: start;
+}
+
+.mina-folder-card,
+.mina-canvas-card,
+.mina-upload-slot,
+.mina-collection-card,
+.mina-recent-canvas-card,
+.mina-new-canvas-card {
+  border-radius: var(--radius-2xl);
+  min-width: 0;
+}
+
+.mina-folder-card {
+  background: var(--surface-container-low);
+  box-shadow: 0 14px 32px -24px oklch(0.26 0.01 247 / 24%);
+  display: flex;
+  flex-direction: column;
+  height: 238px;
+  justify-content: space-between;
+  padding: 20px;
+  position: relative;
+}
+
+.mina-canvas-card,
+.mina-recent-canvas-card {
+  height: 238px;
+}
+
+.mina-folder-stack {
+  background: var(--surface-container-high);
+  border-radius: var(--radius-2xl);
+  inset: -7px 14px auto;
+  height: 28px;
+  position: absolute;
+  z-index: -1;
+}
+
+.mina-folder-icon,
+.mina-collection-icon {
+  align-items: center;
+  background: var(--surface-container-lowest);
+  border-radius: var(--radius-xl);
+  color: var(--foreground-tertiary);
+  display: flex;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.mina-folder-card[data-accent='cool'] .mina-folder-icon,
+.mina-collection-card[data-accent='cool'] .mina-collection-icon {
+  background: color-mix(in oklch, var(--surface-container-high) 70%, var(--primary));
+}
+
+.mina-folder-card h2,
+.mina-canvas-card h2,
+.mina-collection-card h2,
+.mina-recent-canvas-card h3 {
+  color: var(--foreground);
+  font-family: var(--font-display);
+  font-size: 0.96rem;
+  line-height: 1.18;
+  margin: 0;
+}
+
+.mina-folder-card p,
+.mina-canvas-card p,
+.mina-collection-card p,
+.mina-recent-canvas-card p {
+  align-items: center;
+  color: var(--foreground-tertiary);
+  display: flex;
+  font-size: 0.66rem;
+  gap: 6px;
+  margin: 8px 0 0;
+  text-transform: uppercase;
+}
+
+.mina-canvas-card {
+  background: var(--surface-container-lowest);
+  box-shadow: var(--shadow-floating);
+  overflow: hidden;
+}
+
+.mina-canvas-preview,
+.mina-recent-preview {
+  min-height: 144px;
+  overflow: hidden;
+  position: relative;
+}
+
+.mina-canvas-preview::before,
+.mina-recent-preview::before {
+  background:
+    radial-gradient(circle at 18% 18%, oklch(0.92 0.015 302), transparent 34%),
+    radial-gradient(circle at 82% 26%, oklch(0.62 0.01 286), transparent 34%),
+    linear-gradient(135deg, oklch(0.94 0.004 247), oklch(0.72 0.008 247));
+  content: '';
+  inset: 0;
+  position: absolute;
+}
+
+.mina-canvas-preview[data-tone='forest']::before,
+.mina-recent-preview[data-tone='interior']::before {
+  background:
+    radial-gradient(circle at 36% 28%, oklch(0.92 0.005 150), transparent 30%),
+    linear-gradient(135deg, oklch(0.32 0.005 247), oklch(0.76 0.008 247));
+}
+
+.mina-canvas-preview[data-tone='paper']::before,
+.mina-recent-preview[data-tone='type']::before {
+  background:
+    repeating-linear-gradient(105deg, oklch(0.88 0.004 84), oklch(0.88 0.004 84) 2px, transparent 2px, transparent 11px),
+    linear-gradient(135deg, oklch(0.98 0.003 84), oklch(0.8 0.006 84));
+}
+
+.mina-recent-preview[data-tone='wave']::before {
+  background:
+    radial-gradient(circle at 24% 26%, oklch(0.98 0.002 247), transparent 28%),
+    radial-gradient(circle at 74% 72%, oklch(0.55 0.01 286), transparent 38%),
+    linear-gradient(135deg, oklch(0.91 0.004 247), oklch(0.66 0.006 247));
+}
+
+.mina-canvas-preview span,
+.mina-recent-preview span {
+  background: oklch(1 0 0 / 88%);
+  border-radius: 999px;
+  color: var(--foreground-secondary);
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  padding: 6px 10px;
+  position: absolute;
+  right: 12px;
+  text-transform: uppercase;
+  top: 12px;
+}
+
+.mina-canvas-card-copy {
+  align-items: start;
+  display: flex;
+  justify-content: space-between;
+  padding: 16px;
+}
+
+.mina-canvas-card-copy button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--foreground-quaternary);
+  display: flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.mina-upload-slot,
+.mina-new-canvas-card {
+  align-items: center;
+  background: transparent;
+  border: 1.5px dashed color-mix(in oklch, var(--outline-ghost) 75%, var(--foreground-quaternary));
+  color: var(--foreground-tertiary);
+  display: flex;
+  flex-direction: column;
+  font-weight: 800;
+  gap: 12px;
+  justify-content: center;
+  min-height: 238px;
+}
+
+.mina-upload-slot span,
+.mina-new-canvas-card span {
+  align-items: center;
+  background: var(--surface-container-lowest);
+  border-radius: 999px;
+  display: flex;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.mina-canvas-section {
+  display: grid;
+  gap: 20px;
+}
+
+.mina-collection-grid,
+.mina-recent-canvas-grid {
+  display: grid;
+  align-items: start;
+  gap: 26px;
+}
+
+.mina-collection-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.mina-recent-canvas-grid {
+  grid-template-columns: repeat(auto-fill, 178px);
+  justify-content: start;
+}
+
+.mina-collection-card {
+  background: var(--surface-container-lowest);
+  box-shadow: var(--shadow-floating);
+  min-height: 210px;
+  padding: 26px;
+}
+
+.mina-collection-card-top {
+  align-items: start;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 44px;
+}
+
+.mina-avatar-stack {
+  display: flex;
+}
+
+.mina-avatar-stack span {
+  background: linear-gradient(135deg, var(--surface-container-high), var(--foreground-quaternary));
+  border: 2px solid var(--surface-container-lowest);
+  border-radius: 999px;
+  height: 30px;
+  margin-left: -8px;
+  width: 30px;
+}
+
+.mina-recent-canvas-card {
+  background: var(--surface-container-lowest);
+  box-shadow: var(--shadow-floating);
+  overflow: hidden;
+}
+
+.mina-recent-preview {
+  min-height: 144px;
+}
+
+.mina-recent-canvas-card > div:last-child {
+  padding: 16px;
+}
+
+.mina-floating-spark {
+  align-items: center;
+  align-self: end;
+  background: var(--foreground);
+  border: 0;
+  border-radius: 999px;
+  bottom: 72px;
+  box-shadow: 0 22px 48px -22px oklch(0.12 0 0 / 60%);
+  color: var(--primary-foreground);
+  display: flex;
+  height: 58px;
+  justify-content: center;
+  position: sticky;
+  justify-self: end;
+  width: 58px;
+}
+
+.mina-plaza-page {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .mina-hero {
   align-content: center;
   display: grid;
-  gap: 42px;
+  gap: clamp(24px, 4dvh, 42px);
   justify-items: center;
-  padding: 68px 0 48px;
+  min-height: 0;
+  overflow: hidden;
+  padding: clamp(24px, 5dvh, 58px) 0 clamp(20px, 4dvh, 42px);
   text-align: center;
 }
 
@@ -316,7 +712,7 @@ a {
 .mina-hero h1,
 .mina-hero p:last-child {
   font-family: var(--font-display);
-  font-size: clamp(4.4rem, 8vw, 7.6rem);
+  font-size: clamp(3.6rem, min(7.4vw, 12dvh), 7rem);
   font-weight: 800;
   letter-spacing: 0;
   line-height: 0.95;
@@ -335,7 +731,7 @@ a {
   display: grid;
   gap: 12px;
   justify-self: center;
-  margin-bottom: 22px;
+  margin-bottom: clamp(8px, 2dvh, 22px);
   max-width: 820px;
   padding: 20px 22px;
   width: min(100%, 820px);
@@ -421,6 +817,7 @@ a {
 
 @media (max-width: 1024px) {
   .mina-shell {
+    grid-template-rows: auto minmax(0, 1fr);
     grid-template-columns: 1fr;
   }
 
@@ -431,6 +828,7 @@ a {
     grid-template-columns: auto minmax(0, 1fr) auto;
     margin: 18px;
     min-height: 0;
+    overflow: hidden;
     padding: 18px;
   }
 
@@ -457,9 +855,18 @@ a {
     padding: 0 18px;
   }
 
-  .mina-canvas {
-    min-height: calc(100vh - 134px);
+  .mina-workspace {
+    min-height: 0;
     padding: 22px;
+  }
+
+  .mina-project-grid,
+  .mina-recent-canvas-grid {
+    grid-template-columns: repeat(auto-fill, minmax(164px, 1fr));
+  }
+
+  .mina-collection-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -480,9 +887,23 @@ a {
     display: none;
   }
 
-  .mina-canvas {
-    grid-template-rows: auto minmax(320px, 1fr) auto auto;
+  .mina-workspace {
     padding: 18px;
+  }
+
+  .mina-page-header,
+  .mina-section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mina-page-actions {
+    flex-wrap: wrap;
+  }
+
+  .mina-project-grid,
+  .mina-recent-canvas-grid {
+    grid-template-columns: 1fr;
   }
 
   .mina-topbar {
@@ -490,13 +911,13 @@ a {
   }
 
   .mina-hero {
-    gap: 28px;
-    padding: 46px 0 34px;
+    gap: 24px;
+    padding: 24px 0 22px;
   }
 
   .mina-hero h1,
   .mina-hero p:last-child {
-    font-size: clamp(3.2rem, 18vw, 5.8rem);
+    font-size: clamp(2.9rem, min(16vw, 10dvh), 5.2rem);
   }
 
   .mina-composer-actions {

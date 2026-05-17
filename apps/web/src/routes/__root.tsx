@@ -1,9 +1,15 @@
 import { createRootRoute, Outlet } from '@tanstack/react-router'
 
+import { AppShell } from '../app/app-shell'
+
 export const Route = createRootRoute({
   component: RootLayout,
 })
 
 function RootLayout() {
-  return <Outlet />
+  return (
+    <AppShell>
+      <Outlet />
+    </AppShell>
+  )
 }

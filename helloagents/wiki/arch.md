@@ -25,6 +25,7 @@ flowchart TD
 | ADR-WF-001 | Own media input order in target node `data.mediaSlots`, not in edge order. | Accepted | Workflows |
 | ADR-TASK-001 | Mirror provider outputs through a shared `TaskOutputFinalizer`, not provider-specific storage code. | Accepted | Tasks, Media |
 | ADR-DATA-001 | Use PostgreSQL-backed Drizzle repositories for application business runtime; keep fakes only in tests. | Accepted | API |
+| ADR-WEB-001 | Keep the browser-sized app shell in the TanStack root layout; route pages render only inside the stable route frame. | Accepted | Web |
 
 ## Runtime Flow
 ```mermaid

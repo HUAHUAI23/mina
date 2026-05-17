@@ -255,7 +255,7 @@ React Flow compatibility rules:
 The web app follows this sequence:
 
 ```text
-TanStack route -> feature component -> shared UI primitive -> hook -> feature api client -> shared http utility -> typed Hono client
+TanStack root layout -> route frame -> feature component -> shared UI primitive -> hook -> feature api client -> shared http utility -> typed Hono client
 ```
 
 This ensures that UI components do not depend on low-level transport details.
@@ -264,7 +264,9 @@ The web app imports shared design-system CSS from `@mina/ui/globals.css` and com
 
 Routes are file-based through TanStack Router under `apps/web/src/routes`. The generated `apps/web/src/routeTree.gen.ts` is committed so `tsc` can typecheck before Vite runs. Web scripts run `tsr generate` before typecheck, dev, and build to keep the generated tree synchronized.
 
-The current Plaza screen is the first implemented UI surface. It follows `apps/web/DESIGN.md` with a floating navigation island, editorial canvas, static dot-grid surface, and prompt composer. The page avoids expensive visual effects such as `backdrop-filter`, `filter`, `drop-shadow`, `mix-blend-mode`, masks, and animation-heavy opacity/transform combinations.
+The root route owns the persistent browser-sized application shell through `apps/web/src/app/app-shell.tsx`. The shell defines the floating navigation island, top bar, route frame, footer note, and overall viewport contract. Route components should fill the route frame and must not recreate the global app skeleton. The shell is locked to `100dvh` with `overflow: hidden` on the document root so normal route switches keep the same browser-screen proportion instead of making the page scroll.
+
+Current route content includes Plaza (`/`), Projects (`/projects`), and Canvas (`/canvas`). These route pages follow `apps/web/DESIGN.md` with editorial spacing, floating cards, tonal surface hierarchy, and controlled local scrolling inside the route frame. Route pages must not import page-specific shell chrome from static HTML mockups; the shared shell owns navigation, profile chrome, and screen proportions. The page avoids expensive visual effects such as `backdrop-filter`, `filter`, `drop-shadow`, `mix-blend-mode`, masks, and animation-heavy opacity/transform combinations.
 
 ## API Contract Boundary
 
