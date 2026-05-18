@@ -1,3 +1,5 @@
+import { websocket } from 'hono/bun'
+
 import { BackgroundTaskScheduler } from './app/background-scheduler'
 import { createApp } from './app/create-app'
 import { createAppDependencies } from './app/dependencies'
@@ -27,4 +29,5 @@ export type { AppType } from './client'
 export default {
   port: apiEnv.port,
   fetch: app.fetch,
+  websocket,
 }

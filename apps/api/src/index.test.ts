@@ -6,20 +6,47 @@ import type {
   TaskResourceListResponse,
   TaskResponse,
 } from '@mina/contracts/modules/tasks'
+import type { TaskModelCatalogResponse } from '@mina/contracts/modules/tasks/model-catalog'
+import type { MediaObjectResponse } from '@mina/contracts/modules/media/media-object'
 import type {
   CancelWorkflowRunResponse,
   DeleteWorkflowResponse,
   WorkflowListResponse,
+  WorkflowNodeTaskHistoryResponse,
   WorkflowResponse,
   WorkflowRunListResponse,
   WorkflowRunResponse,
 } from '@mina/contracts/modules/workflows'
 import type { ApiError } from '@mina/contracts/schemas/api-error'
+import { hc } from 'hono/client'
+import type { AppType } from './index'
 
 import { createTestApp } from './test/app'
 
 describe('mina api', () => {
   const app = createTestApp()
+
+  const registerAndAuthHeaders = async (username = `user_${crypto.randomUUID().slice(0, 8)}`) => {
+    const response = await app.request('/api/auth/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: `${username}@example.com`,
+        password: 'correct horse battery staple',
+        username,
+      }),
+    })
+    const payload = (await response.json()) as AuthResponse
+    return {
+      auth: payload,
+      headers: {
+        Authorization: `Bearer ${payload.session.token}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  }
 
   test('GET /api/health returns an operational payload', async () => {
     const response = await app.request('/api/health')
@@ -56,6 +83,22 @@ describe('mina api', () => {
       expect(payload.user.email).toBe('admin@example.com')
       expect(payload.user.username).toBe('mina_admin')
       expect(payload.session.token.length).toBeGreaterThanOrEqual(32)
+
+      const workflowResponse = await app.request('/api/workflows', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${payload.session.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'Registered user workflow',
+          nodes: [],
+          edges: [],
+        }),
+      })
+      const workflow = (await workflowResponse.json()) as WorkflowResponse
+      expect(workflowResponse.status).toBe(201)
+      expect(workflow.item.accountId).not.toBe('demo-account')
     },
     10_000,
   )
@@ -113,12 +156,10 @@ describe('mina api', () => {
   })
 
   test('POST /api/tasks creates an independently runnable task', async () => {
-    const app = createTestApp()
+    const { headers } = await registerAndAuthHeaders()
     const response = await app.request('/api/tasks', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         config: {
           kind: 'image_generation',
@@ -139,12 +180,10 @@ describe('mina api', () => {
   })
 
   test('task routes expose list, detail, resources, and cancellation payloads', async () => {
-    const app = createTestApp()
+    const { headers } = await registerAndAuthHeaders()
     const createResponse = await app.request('/api/tasks', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         config: {
           kind: 'image_generation',
@@ -160,35 +199,159 @@ describe('mina api', () => {
     })
     const created = (await createResponse.json()) as TaskResponse
 
-    const listResponse = await app.request('/api/tasks')
+    const listResponse = await app.request('/api/tasks', { headers })
     const listPayload = (await listResponse.json()) as TaskListResponse
     expect(listResponse.status).toBe(200)
     expect(listPayload.items.some((task) => task.id === created.item.id)).toBe(true)
 
-    const detailResponse = await app.request(`/api/tasks/${created.item.id}`)
+    const detailResponse = await app.request(`/api/tasks/${created.item.id}`, { headers })
     const detailPayload = (await detailResponse.json()) as TaskResponse
     expect(detailResponse.status).toBe(200)
     expect(detailPayload.item.id).toBe(created.item.id)
 
-    const resourcesResponse = await app.request(`/api/tasks/${created.item.id}/resources`)
+    const resourcesResponse = await app.request(`/api/tasks/${created.item.id}/resources`, { headers })
     const resourcesPayload = (await resourcesResponse.json()) as TaskResourceListResponse
     expect(resourcesResponse.status).toBe(200)
     expect(resourcesPayload.items).toEqual([])
 
     const cancelResponse = await app.request(`/api/tasks/${created.item.id}/cancel`, {
       method: 'POST',
+      headers,
     })
     const cancelPayload = (await cancelResponse.json()) as CancelTaskResponse
     expect(cancelResponse.status).toBe(200)
     expect(cancelPayload.success).toBe(true)
   })
 
+  test('task routes hide resources from other accounts', async () => {
+    const owner = await registerAndAuthHeaders()
+    const other = await registerAndAuthHeaders()
+    const createResponse = await app.request('/api/tasks', {
+      method: 'POST',
+      headers: owner.headers,
+      body: JSON.stringify({
+        config: {
+          kind: 'image_generation',
+          provider: 'dev',
+          model: 'dev-image',
+          prompt: 'private route task',
+          params: {
+            count: 1,
+            size: '1024x1024',
+          },
+        },
+      }),
+    })
+    const created = (await createResponse.json()) as TaskResponse
+
+    const detailResponse = await app.request(`/api/tasks/${created.item.id}`, { headers: other.headers })
+    const resourcesResponse = await app.request(`/api/tasks/${created.item.id}/resources`, { headers: other.headers })
+    const cancelResponse = await app.request(`/api/tasks/${created.item.id}/cancel`, {
+      method: 'POST',
+      headers: other.headers,
+    })
+
+    expect(detailResponse.status).toBe(404)
+    expect(resourcesResponse.status).toBe(404)
+    expect(cancelResponse.status).toBe(404)
+  })
+
+  test('GET /api/tasks/models exposes public model descriptors', async () => {
+    const app = createTestApp()
+    const response = await app.request('/api/tasks/models')
+    const payload = (await response.json()) as TaskModelCatalogResponse
+
+    expect(response.status).toBe(200)
+    expect(payload.items.some((item) => item.provider === 'dev' && item.model === 'dev-image')).toBe(true)
+    expect(payload.items.every((item) => item.displayName.length > 0)).toBe(true)
+  })
+
+  test('media object routes create, fetch, reject unsupported uploads, and complete presigned uploads', async () => {
+    const { auth } = await registerAndAuthHeaders()
+    const authHeaders = { Authorization: `Bearer ${auth.session.token}` }
+    const formData = new FormData()
+    formData.set('file', new File([new TextEncoder().encode('image-bytes')], 'input.png', { type: 'image/png' }))
+    formData.set('purpose', 'workflow_slot')
+    formData.set('retention', 'project_scoped')
+
+    const createResponse = await app.request('/api/media-objects', {
+      method: 'POST',
+      headers: authHeaders,
+      body: formData,
+    })
+    const created = (await createResponse.json()) as MediaObjectResponse
+    expect(createResponse.status).toBe(201)
+    expect(created.item.status).toBe('ready')
+    expect(created.item.kind).toBe('image')
+
+    const getResponse = await app.request(`/api/media-objects/${created.item.id}`, { headers: authHeaders })
+    const fetched = (await getResponse.json()) as MediaObjectResponse
+    expect(getResponse.status).toBe(200)
+    expect(fetched.item.id).toBe(created.item.id)
+
+    const unsupported = new FormData()
+    unsupported.set('file', new File(['plain'], 'plain.txt', { type: 'text/plain' }))
+    const unsupportedResponse = await app.request('/api/media-objects', {
+      method: 'POST',
+      headers: authHeaders,
+      body: unsupported,
+    })
+    expect(unsupportedResponse.status).toBe(415)
+
+    const presignedResponse = await app.request('/api/media-objects/presigned-upload', {
+      method: 'POST',
+      headers: { ...authHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'video',
+        mimeType: 'video/mp4',
+        byteSize: 1024,
+        purpose: 'workflow_slot',
+        retention: 'project_scoped',
+      }),
+    })
+    const presigned = (await presignedResponse.json()) as {
+      item: MediaObjectResponse['item']
+      storageKey: string
+    }
+    expect(presignedResponse.status).toBe(201)
+    expect(presigned.item.status).toBe('uploading')
+
+    const completeResponse = await app.request(`/api/media-objects/${presigned.item.id}/complete-upload`, {
+      method: 'POST',
+      headers: { ...authHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storageKey: presigned.storageKey }),
+    })
+    const completed = (await completeResponse.json()) as MediaObjectResponse
+    expect(completeResponse.status).toBe(200)
+    expect(completed.item.status).toBe('ready')
+  })
+
+  test('Hono RPC client uploads media objects with object form fields', async () => {
+    const { headers } = await registerAndAuthHeaders('rpc_upload_user')
+    const client = hc<AppType>('http://localhost', {
+      fetch: app.request,
+      headers: { Authorization: headers.Authorization },
+    })
+
+    const response = await client.api['media-objects'].$post({
+      form: {
+        file: new File([new TextEncoder().encode('image-bytes')], 'input.png', { type: 'image/png' }),
+        purpose: 'workflow_slot',
+        retention: 'project_scoped',
+      },
+    })
+    const payload = (await response.json()) as MediaObjectResponse
+
+    expect(response.status).toBe(201)
+    expect(payload.item.kind).toBe('image')
+    expect(payload.item.status).toBe('ready')
+  })
+
   test('POST /api/workflows/:id/runs executes an isolated image node', async () => {
+    const { headers } = await registerAndAuthHeaders()
     const createResponse = await app.request('/api/workflows', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         name: 'Route workflow',
         nodes: [
@@ -223,9 +386,7 @@ describe('mina api', () => {
 
     const runResponse = await app.request(`/api/workflows/${workflowPayload.item.id}/runs`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         selectedNodeId: 'image',
         expectedWorkflowVersion: workflowPayload.item.version,
@@ -238,15 +399,133 @@ describe('mina api', () => {
     expect(runPayload.item.nodeStates.image?.status).toBe('running')
   })
 
-  test('workflow routes expose CRUD, node tasks, runs, run detail, and cancellation payloads', async () => {
-    const app = createTestApp()
+  test(
+    'workflow routes expose CRUD, node tasks, runs, run detail, and cancellation payloads',
+    async () => {
+      const { headers } = await registerAndAuthHeaders()
+      const createResponse = await app.request('/api/workflows', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          name: 'Route coverage workflow',
+          nodes: [
+            {
+              id: 'image',
+              type: 'image_generation',
+              position: { x: 0, y: 0 },
+              data: {
+                nodeType: 'image_generation',
+                title: 'Image',
+                config: {
+                  task: {
+                    kind: 'image_generation',
+                    provider: 'dev',
+                    model: 'dev-image',
+                    prompt: 'route coverage',
+                    params: {
+                      count: 1,
+                      size: '1024x1024',
+                    },
+                  },
+                },
+              },
+            },
+          ],
+          edges: [],
+        }),
+      })
+      const workflowPayload = (await createResponse.json()) as WorkflowResponse
+
+      const listResponse = await app.request('/api/workflows', { headers })
+      const listPayload = (await listResponse.json()) as WorkflowListResponse
+      expect(listResponse.status).toBe(200)
+      expect(listPayload.items.some((workflow) => workflow.id === workflowPayload.item.id)).toBe(true)
+
+      const detailResponse = await app.request(`/api/workflows/${workflowPayload.item.id}`, { headers })
+      const detailPayload = (await detailResponse.json()) as WorkflowResponse
+      expect(detailResponse.status).toBe(200)
+      expect(detailPayload.item.id).toBe(workflowPayload.item.id)
+
+      const updateResponse = await app.request(`/api/workflows/${workflowPayload.item.id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          name: 'Updated route coverage workflow',
+          version: workflowPayload.item.version,
+          nodes: workflowPayload.item.nodes,
+          edges: workflowPayload.item.edges,
+        }),
+      })
+      const updatedPayload = (await updateResponse.json()) as WorkflowResponse
+      expect(updateResponse.status).toBe(200)
+      expect(updatedPayload.item.version).toBe(workflowPayload.item.version + 1)
+
+      const mediaViewResponse = await app.request(
+        `/api/workflows/${updatedPayload.item.id}/nodes/image/media-view`,
+        {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ expectedWorkflowVersion: updatedPayload.item.version }),
+        },
+      )
+      const mediaViewPayload = (await mediaViewResponse.json()) as WorkflowResponse
+      expect(mediaViewResponse.status).toBe(200)
+      expect(mediaViewPayload.item.version).toBe(updatedPayload.item.version + 1)
+
+      const nodeTasksResponse = await app.request(`/api/workflows/${updatedPayload.item.id}/nodes/image/tasks`, { headers })
+      const nodeTasksPayload = (await nodeTasksResponse.json()) as WorkflowNodeTaskHistoryResponse
+      expect(nodeTasksResponse.status).toBe(200)
+      expect(nodeTasksPayload.items).toEqual([])
+
+      const runListBeforeResponse = await app.request(`/api/workflows/${updatedPayload.item.id}/runs`, { headers })
+      const runListBeforePayload = (await runListBeforeResponse.json()) as WorkflowRunListResponse
+      expect(runListBeforeResponse.status).toBe(200)
+      expect(runListBeforePayload.items).toEqual([])
+
+      const runResponse = await app.request(`/api/workflows/${updatedPayload.item.id}/runs`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          selectedNodeId: 'image',
+          expectedWorkflowVersion: mediaViewPayload.item.version,
+        }),
+      })
+      const runPayload = (await runResponse.json()) as WorkflowRunResponse
+      expect(runResponse.status).toBe(201)
+      expect(runPayload.item.workflowId).toBe(updatedPayload.item.id)
+
+      const runDetailResponse = await app.request(`/api/workflow-runs/${runPayload.item.id}`, { headers })
+      const runDetailPayload = (await runDetailResponse.json()) as WorkflowRunResponse
+      expect(runDetailResponse.status).toBe(200)
+      expect(runDetailPayload.item.id).toBe(runPayload.item.id)
+
+      const cancelRunResponse = await app.request(`/api/workflow-runs/${runPayload.item.id}/cancel`, {
+        method: 'POST',
+        headers,
+      })
+      const cancelRunPayload = (await cancelRunResponse.json()) as CancelWorkflowRunResponse
+      expect(cancelRunResponse.status).toBe(200)
+      expect(cancelRunPayload.success).toBe(true)
+
+      const deleteResponse = await app.request(`/api/workflows/${updatedPayload.item.id}`, {
+        method: 'DELETE',
+        headers,
+      })
+      const deletePayload = (await deleteResponse.json()) as DeleteWorkflowResponse
+      expect(deleteResponse.status).toBe(200)
+      expect(deletePayload.success).toBe(true)
+    },
+    10_000,
+  )
+
+  test('workflow routes hide resources from other accounts', async () => {
+    const owner = await registerAndAuthHeaders()
+    const other = await registerAndAuthHeaders()
     const createResponse = await app.request('/api/workflows', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: owner.headers,
       body: JSON.stringify({
-        name: 'Route coverage workflow',
+        name: 'Private workflow',
         nodes: [
           {
             id: 'image',
@@ -260,7 +539,7 @@ describe('mina api', () => {
                   kind: 'image_generation',
                   provider: 'dev',
                   model: 'dev-image',
-                  prompt: 'route coverage',
+                  prompt: 'private workflow',
                   params: {
                     count: 1,
                     size: '1024x1024',
@@ -274,88 +553,27 @@ describe('mina api', () => {
       }),
     })
     const workflowPayload = (await createResponse.json()) as WorkflowResponse
-
-    const listResponse = await app.request('/api/workflows')
-    const listPayload = (await listResponse.json()) as WorkflowListResponse
-    expect(listResponse.status).toBe(200)
-    expect(listPayload.items.some((workflow) => workflow.id === workflowPayload.item.id)).toBe(true)
-
-    const detailResponse = await app.request(`/api/workflows/${workflowPayload.item.id}`)
-    const detailPayload = (await detailResponse.json()) as WorkflowResponse
-    expect(detailResponse.status).toBe(200)
-    expect(detailPayload.item.id).toBe(workflowPayload.item.id)
-
-    const updateResponse = await app.request(`/api/workflows/${workflowPayload.item.id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        name: 'Updated route coverage workflow',
-        version: workflowPayload.item.version,
-        nodes: workflowPayload.item.nodes,
-        edges: workflowPayload.item.edges,
-      }),
-    })
-    const updatedPayload = (await updateResponse.json()) as WorkflowResponse
-    expect(updateResponse.status).toBe(200)
-    expect(updatedPayload.item.version).toBe(workflowPayload.item.version + 1)
-
-    const mediaViewResponse = await app.request(
-      `/api/workflows/${updatedPayload.item.id}/nodes/image/media-view`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({}),
-      },
-    )
-    const mediaViewPayload = (await mediaViewResponse.json()) as WorkflowResponse
-    expect(mediaViewResponse.status).toBe(200)
-    expect(mediaViewPayload.item.version).toBe(updatedPayload.item.version + 1)
-
-    const nodeTasksResponse = await app.request(`/api/workflows/${updatedPayload.item.id}/nodes/image/tasks`)
-    const nodeTasksPayload = (await nodeTasksResponse.json()) as TaskListResponse
-    expect(nodeTasksResponse.status).toBe(200)
-    expect(nodeTasksPayload.items).toEqual([])
-
-    const runListBeforeResponse = await app.request(`/api/workflows/${updatedPayload.item.id}/runs`)
-    const runListBeforePayload = (await runListBeforeResponse.json()) as WorkflowRunListResponse
-    expect(runListBeforeResponse.status).toBe(200)
-    expect(runListBeforePayload.items).toEqual([])
-
-    const runResponse = await app.request(`/api/workflows/${updatedPayload.item.id}/runs`, {
+    const runResponse = await app.request(`/api/workflows/${workflowPayload.item.id}/runs`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: owner.headers,
       body: JSON.stringify({
         selectedNodeId: 'image',
-        expectedWorkflowVersion: mediaViewPayload.item.version,
+        expectedWorkflowVersion: workflowPayload.item.version,
       }),
     })
     const runPayload = (await runResponse.json()) as WorkflowRunResponse
-    expect(runResponse.status).toBe(201)
-    expect(runPayload.item.workflowId).toBe(updatedPayload.item.id)
 
-    const runDetailResponse = await app.request(`/api/workflow-runs/${runPayload.item.id}`)
-    const runDetailPayload = (await runDetailResponse.json()) as WorkflowRunResponse
-    expect(runDetailResponse.status).toBe(200)
-    expect(runDetailPayload.item.id).toBe(runPayload.item.id)
-
+    const detailResponse = await app.request(`/api/workflows/${workflowPayload.item.id}`, { headers: other.headers })
+    const runsResponse = await app.request(`/api/workflows/${workflowPayload.item.id}/runs`, { headers: other.headers })
+    const runDetailResponse = await app.request(`/api/workflow-runs/${runPayload.item.id}`, { headers: other.headers })
     const cancelRunResponse = await app.request(`/api/workflow-runs/${runPayload.item.id}/cancel`, {
       method: 'POST',
+      headers: other.headers,
     })
-    const cancelRunPayload = (await cancelRunResponse.json()) as CancelWorkflowRunResponse
-    expect(cancelRunResponse.status).toBe(200)
-    expect(cancelRunPayload.success).toBe(true)
 
-    const deleteResponse = await app.request(`/api/workflows/${updatedPayload.item.id}`, {
-      method: 'DELETE',
-    })
-    const deletePayload = (await deleteResponse.json()) as DeleteWorkflowResponse
-    expect(deleteResponse.status).toBe(200)
-    expect(deletePayload.success).toBe(true)
+    expect(detailResponse.status).toBe(404)
+    expect(runsResponse.status).toBe(404)
+    expect(runDetailResponse.status).toBe(404)
+    expect(cancelRunResponse.status).toBe(404)
   })
 })

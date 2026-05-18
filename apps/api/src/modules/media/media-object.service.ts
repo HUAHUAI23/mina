@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto'
 
 import type { ResourceKind } from '@mina/contracts/modules/tasks'
 
-import type { ObjectStorage } from '../../lib/storage/object-storage'
+import type { ObjectStorage, PresignedPutObjectUrl } from '../../lib/storage/object-storage'
+import { HttpError } from '../../lib/http/http-error'
 import type {
   MediaObject,
   MediaObjectOrigin,
@@ -47,6 +48,26 @@ export interface CreateMediaObjectFromRemoteUrlInput {
   sourceTaskResourceId?: string
   timeoutMs?: number
   url: string
+}
+
+export interface CreatePresignedUploadInput {
+  accountId: string
+  byteSize?: number
+  kind: ResourceKind
+  mimeType: string
+  purpose: MediaObjectPurpose
+  retention: MediaObjectRetention
+}
+
+export interface CompletePresignedUploadInput {
+  accountId: string
+  mediaObjectId: string
+  storageKey: string
+}
+
+export interface PresignedMediaUpload {
+  mediaObject: MediaObject
+  upload: PresignedPutObjectUrl
 }
 
 export interface MediaObjectServiceConfig {
@@ -109,6 +130,33 @@ export class MediaObjectService {
     })
   }
 
+  async createPresignedUpload(input: CreatePresignedUploadInput): Promise<PresignedMediaUpload> {
+    const id = createId('media')
+    const objectName = mediaOriginalObjectName(id, extensionFromMimeType(input.mimeType, input.kind))
+    const upload = await this.storage.createPresignedPutUrl({
+      accountId: input.accountId,
+      contentType: input.mimeType,
+      expiresInSeconds: 900,
+      objectName,
+      scope: 'media',
+    })
+    const mediaObject = await this.repository.createUploading({
+      accountId: input.accountId,
+      bucket: upload.key.split('/')[0] ?? 'media',
+      byteSize: input.byteSize ?? 0,
+      expiresAt: upload.expiresAt,
+      id,
+      kind: input.kind,
+      mimeType: input.mimeType,
+      origin: 'user_upload',
+      purpose: input.purpose,
+      retention: input.retention,
+      storageKey: upload.key,
+      url: upload.url,
+    })
+    return { mediaObject, upload }
+  }
+
   async createFromRemoteUrl(input: CreateMediaObjectFromRemoteUrlInput): Promise<MediaObject> {
     const fetched = await this.remoteMediaFetcher.fetch({
       maxBytes: input.maxBytes ?? this.config.remoteFetchMaxBytes,
@@ -147,6 +195,25 @@ export class MediaObjectService {
       throw new Error('Media object is not ready.')
     }
     return mediaObject
+  }
+
+  async getMediaObject(accountId: string, mediaObjectId: string): Promise<MediaObject> {
+    const mediaObject = await this.repository.findById(accountId, mediaObjectId)
+    if (!mediaObject || mediaObject.deletedAt) {
+      throw new HttpError(404, 'MEDIA_OBJECT_NOT_FOUND', 'Media object not found.')
+    }
+    return mediaObject
+  }
+
+  async completePresignedUpload(input: CompletePresignedUploadInput): Promise<MediaObject> {
+    const mediaObject = await this.getMediaObject(input.accountId, input.mediaObjectId)
+    if (mediaObject.status !== 'uploading') {
+      throw new HttpError(409, 'MEDIA_OBJECT_NOT_UPLOADING', 'Media object is not waiting for upload completion.')
+    }
+    if (mediaObject.storageKey !== input.storageKey) {
+      throw new HttpError(422, 'MEDIA_UPLOAD_KEY_MISMATCH', 'Upload storage key does not match the media object.')
+    }
+    return this.repository.updateStatus(input.accountId, input.mediaObjectId, 'ready', nowIso())
   }
 
   async findReadyByMediaUrl(accountId: string, url: string): Promise<MediaObject | undefined> {

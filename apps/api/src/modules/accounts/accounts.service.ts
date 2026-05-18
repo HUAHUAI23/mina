@@ -8,6 +8,7 @@ import type {
 } from '@mina/contracts/modules/accounts'
 
 import { HttpError } from '../../lib/http/http-error'
+import type { AuthActor } from './auth-context'
 import type { AccountsRepository } from './accounts.repository'
 import { hashPassword, verifyPassword } from './password'
 import { createSessionToken, hashSessionToken } from './session-token'
@@ -48,9 +49,31 @@ export class AccountsService {
       throw new HttpError(401, 'INVALID_CREDENTIALS', 'Invalid username or password.')
     }
 
+    await this.requireAccount(user.id)
+
     return {
       session: await this.createSession(user.id),
       user: toAuthUser(user),
+    }
+  }
+
+  async getActorForSessionToken(token: string): Promise<AuthActor> {
+    const session = await this.accountsRepository.findSessionByTokenHash(hashSessionToken(token))
+    if (!session || session.revokedAt || Date.parse(session.expiresAt) <= Date.now()) {
+      throw new HttpError(401, 'UNAUTHENTICATED', 'Authentication is required.')
+    }
+
+    const user = await this.accountsRepository.findUserById(session.userId)
+    if (!user) {
+      throw new HttpError(401, 'UNAUTHENTICATED', 'Authentication is required.')
+    }
+
+    const account = await this.requireAccount(user.id)
+
+    return {
+      accountId: account.id,
+      role: user.role,
+      userId: user.id,
     }
   }
 
@@ -66,23 +89,39 @@ export class AccountsService {
       throw new HttpError(409, 'USERNAME_ALREADY_REGISTERED', 'Username is already registered.')
     }
 
-    const user = await this.accountsRepository.createUser({
-      displayName: input.displayName?.trim() || undefined,
-      email,
-      id: createId('user'),
-      role: 'user',
-      username,
-    })
-
-    await this.accountsRepository.createPasswordCredential({
-      passwordHash: await hashPassword(input.password),
-      userId: user.id,
+    const userId = createId('user')
+    const { user } = await this.accountsRepository.registerUserWithAccount({
+      account: {
+        id: createId('account'),
+        name: input.displayName?.trim() || username,
+        ownerUserId: userId,
+        storageRootPrefix: `users/${userId}`,
+      },
+      passwordCredential: {
+        passwordHash: await hashPassword(input.password),
+        userId,
+      },
+      user: {
+        displayName: input.displayName?.trim() || undefined,
+        email,
+        id: userId,
+        role: 'user',
+        username,
+      },
     })
 
     return {
       session: await this.createSession(user.id),
       user: toAuthUser(user),
     }
+  }
+
+  private async requireAccount(userId: string) {
+    const account = await this.accountsRepository.findAccountByOwnerUserId(userId)
+    if (!account) {
+      throw new HttpError(409, 'ACCOUNT_NOT_INITIALIZED', 'User account is not initialized.')
+    }
+    return account
   }
 
   private async createSession(userId: string): Promise<AuthSession> {
@@ -97,4 +136,5 @@ export class AccountsService {
       userId,
     })
   }
+
 }

@@ -3,7 +3,7 @@ import { and, eq, isNull, lte, sum } from 'drizzle-orm'
 import type { MinaDbClient } from '../../db/client'
 import { mediaObjects } from '../../db/schema'
 import { MediaObjectSchema, type MediaObject, type MediaObjectStatus } from './media-object'
-import type { MediaObjectRepository } from './media-object.repository'
+import type { CreateUploadingMediaObjectInput, MediaObjectRepository } from './media-object.repository'
 
 type MediaObjectRow = typeof mediaObjects.$inferSelect
 type MediaObjectInsert = typeof mediaObjects.$inferInsert
@@ -70,6 +70,29 @@ export class DrizzleMediaObjectRepository implements MediaObjectRepository {
   constructor(private readonly db: MinaDbClient) {}
 
   async create(mediaObject: MediaObject): Promise<MediaObject> {
+    await this.db.insert(mediaObjects).values(mediaObjectInsertFromMediaObject(mediaObject))
+    return mediaObject
+  }
+
+  async createUploading(input: CreateUploadingMediaObjectInput): Promise<MediaObject> {
+    const timestamp = new Date().toISOString()
+    const mediaObject: MediaObject = MediaObjectSchema.parse({
+      id: input.id,
+      accountId: input.accountId,
+      kind: input.kind,
+      status: 'uploading',
+      bucket: input.bucket,
+      storageKey: input.storageKey,
+      url: input.url,
+      mimeType: input.mimeType,
+      byteSize: input.byteSize,
+      origin: input.origin,
+      purpose: input.purpose,
+      retention: input.retention,
+      expiresAt: input.expiresAt,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
     await this.db.insert(mediaObjects).values(mediaObjectInsertFromMediaObject(mediaObject))
     return mediaObject
   }

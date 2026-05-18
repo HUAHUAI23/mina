@@ -1,4 +1,5 @@
 import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
+import type { Task } from '@mina/contracts/modules/tasks'
 import type {
   CreateWorkflowRunInput,
   Workflow,
@@ -77,8 +78,8 @@ export class WorkflowRunsService {
     )
   }
 
-  async createRun(workflowId: string, input: CreateWorkflowRunInput): Promise<WorkflowRun> {
-    const workflow = await this.getWorkflow(workflowId)
+  async createRun(workflowId: string, input: CreateWorkflowRunInput, accountId: string): Promise<WorkflowRun> {
+    const workflow = await this.getWorkflow(workflowId, accountId)
     if (workflow.version !== input.expectedWorkflowVersion) {
       throw new HttpError(409, 'WORKFLOW_VERSION_CONFLICT', 'Workflow version is stale.')
     }
@@ -88,14 +89,13 @@ export class WorkflowRunsService {
     if (!selectedNode) {
       throw new HttpError(404, 'WORKFLOW_NODE_NOT_FOUND', 'Selected workflow node not found.')
     }
-    if (!isExecutableNode(selectedNode)) {
+    if (selectedNode.data.nodeType !== 'flow_group' && !isExecutableNode(selectedNode)) {
       throw new HttpError(422, 'WORKFLOW_NODE_NOT_EXECUTABLE', 'Selected workflow node is not executable.')
     }
 
-    const scopeGroupNodeId = findNearestFlowGroupId(selectedNode.id, nodeMap)
-    const executableNodeIds = scopeGroupNodeId
-      ? this.flowGroupExecutableNodeIds(workflow, scopeGroupNodeId)
-      : [selectedNode.id]
+    const target = this.resolveRunTarget(workflow, selectedNode)
+    const scopeGroupNodeId = target.scopeGroupNodeId
+    const executableNodeIds = target.executableNodeIds
     const dependencies = scopeGroupNodeId
       ? this.deriveDependencies(workflow, scopeGroupNodeId, executableNodeIds)
       : []
@@ -163,6 +163,10 @@ export class WorkflowRunsService {
     return run
   }
 
+  async getTask(accountId: string, taskId: string): Promise<Task> {
+    return this.tasksService.getTaskForAccount(accountId, taskId)
+  }
+
   async listRuns(workflowId?: string): Promise<WorkflowRun[]> {
     return this.repositories.runs.listRuns(workflowId)
   }
@@ -205,9 +209,57 @@ export class WorkflowRunsService {
     ).map((node) => node.id)
   }
 
-  private async getWorkflow(id: string): Promise<Workflow> {
+  private resolveRunTarget(
+    workflow: Workflow,
+    selectedNode: WorkflowCanvasNode,
+  ): { executableNodeIds: string[]; scopeGroupNodeId?: string } {
+    const nodeMap = getNodeMap(workflow.nodes)
+    if (selectedNode.data.nodeType === 'flow_group') {
+      return {
+        scopeGroupNodeId: selectedNode.id,
+        executableNodeIds: this.flowGroupExecutableNodeIds(workflow, selectedNode.id),
+      }
+    }
+
+    const scopeGroupNodeId = findNearestFlowGroupId(selectedNode.id, nodeMap)
+    if (!scopeGroupNodeId) {
+      return { executableNodeIds: [selectedNode.id] }
+    }
+
+    return {
+      scopeGroupNodeId,
+      executableNodeIds: this.upstreamClosureNodeIds(workflow, scopeGroupNodeId, selectedNode.id),
+    }
+  }
+
+  private upstreamClosureNodeIds(workflow: Workflow, scopeGroupNodeId: string, targetNodeId: string): string[] {
+    const nodeMap = getNodeMap(workflow.nodes)
+    const scopedExecutableIds = new Set(
+      workflow.nodes
+        .filter((node) => isExecutableNode(node) && isDescendantOf(node.id, scopeGroupNodeId, nodeMap))
+        .map((node) => node.id),
+    )
+    const closure = new Set<string>()
+    const visit = (nodeId: string): void => {
+      if (closure.has(nodeId) || !scopedExecutableIds.has(nodeId)) {
+        return
+      }
+      closure.add(nodeId)
+      const node = nodeMap.get(nodeId)
+      if (!node) {
+        return
+      }
+      for (const sourceId of nodeOutputDependenciesForNode(node, workflow.edges)) {
+        visit(sourceId)
+      }
+    }
+    visit(targetNodeId)
+    return sortNodesForExecution(workflow.nodes.filter((node) => closure.has(node.id))).map((node) => node.id)
+  }
+
+  private async getWorkflow(id: string, accountId: string): Promise<Workflow> {
     const workflow = await this.repositories.definitions.findById(id)
-    if (!workflow) {
+    if (!workflow || workflow.accountId !== accountId) {
       throw new HttpError(404, 'WORKFLOW_NOT_FOUND', 'Workflow not found.')
     }
     return workflow
@@ -237,7 +289,7 @@ export class WorkflowRunsService {
         throw new HttpError(422, 'WORKFLOW_UPSTREAM_OUTPUT_MISSING', 'Required upstream MediaView output is missing.')
       }
 
-      const output = await this.tasksService.getTaskOutput(sourceNode.data.mediaView.taskId)
+      const output = await this.tasksService.getTaskOutputForAccount(workflow.accountId, sourceNode.data.mediaView.taskId)
       const resource = output
         ? findOutputByMediaView(output, sourceNode.data.mediaView.outputResourceId, sourceNode.data.mediaView.outputIndex)
         : undefined

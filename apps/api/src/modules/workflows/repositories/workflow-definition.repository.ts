@@ -23,6 +23,7 @@ export interface ReplaceWorkflowDefinitionInput {
 }
 
 export interface UpdateNodeMediaViewPersistenceInput {
+  expectedWorkflowVersion: number
   mediaView: NodeMediaViewState | undefined
   nodeId: string
   timestamp: string

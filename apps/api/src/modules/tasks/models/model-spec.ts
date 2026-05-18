@@ -1,4 +1,5 @@
 import type { PricingEstimateRequest } from '@mina/contracts/modules/pricing'
+import type { TaskModelDescriptor } from '@mina/contracts/modules/tasks/model-catalog'
 import type { MediaInput, Task, TaskConfig, TaskKind, TaskMode } from '@mina/contracts/modules/tasks'
 import type { z } from 'zod'
 
@@ -42,6 +43,7 @@ export interface ModelSpec<TParams extends Record<string, unknown> = Record<stri
   readonly capabilities: ModelCapabilities
   readonly key: ModelKey
   readonly paramsSchema: z.ZodType<TParams>
+  readonly publicDescriptor?: Partial<Omit<TaskModelDescriptor, 'capabilities' | 'kind' | 'model' | 'provider'>>
 
   cancel?(task: ParsedTask<TParams>): Promise<void>
   collectInputResources(config: ParsedTaskConfig<TParams>): MediaInput[]

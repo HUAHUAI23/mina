@@ -10,6 +10,15 @@ import type {
   TaskResourceListResponse,
   TaskResponse,
 } from '@mina/contracts/modules/tasks'
+import type { TaskModelCatalogResponse } from '@mina/contracts/modules/tasks/model-catalog'
+import type {
+  CompletePresignedMediaUploadInput,
+  CreateMediaObjectInput,
+  CreatePresignedMediaUploadInput,
+  CreatePresignedMediaUploadResponse,
+  GetMediaObjectResponse,
+  MediaObjectResponse,
+} from '@mina/contracts/modules/media/media-object'
 import type {
   CancelWorkflowRunResponse,
   CreateWorkflowInput,
@@ -18,6 +27,7 @@ import type {
   UpdateNodeMediaViewInput,
   UpdateWorkflowInput,
   WorkflowListResponse,
+  WorkflowNodeTaskHistoryResponse,
   WorkflowResponse,
   WorkflowRunListResponse,
   WorkflowRunResponse,
@@ -30,6 +40,10 @@ type JsonEndpoint<Input, Output, Status extends number = 200> = {
   output: Output
   outputFormat: 'json'
   status: Status
+}
+
+type CreateMediaObjectForm = CreateMediaObjectInput & {
+  file: File
 }
 
 type ClientSchema = {
@@ -53,6 +67,9 @@ type ClientSchema = {
     $get: JsonEndpoint<{}, TaskListResponse>
     $post: JsonEndpoint<{ json: CreateTaskInput }, TaskResponse, 201>
   }
+  '/api/tasks/models': {
+    $get: JsonEndpoint<{}, TaskModelCatalogResponse>
+  }
   '/api/tasks/:id': {
     $get: JsonEndpoint<{ param: { id: string } }, TaskResponse>
   }
@@ -75,7 +92,7 @@ type ClientSchema = {
     $patch: JsonEndpoint<{ json: UpdateNodeMediaViewInput; param: { id: string; nodeId: string } }, WorkflowResponse>
   }
   '/api/workflows/:id/nodes/:nodeId/tasks': {
-    $get: JsonEndpoint<{ param: { id: string; nodeId: string } }, TaskListResponse>
+    $get: JsonEndpoint<{ param: { id: string; nodeId: string } }, WorkflowNodeTaskHistoryResponse>
   }
   '/api/workflows/:id/runs': {
     $get: JsonEndpoint<{ param: { id: string } }, WorkflowRunListResponse>
@@ -86,6 +103,18 @@ type ClientSchema = {
   }
   '/api/workflow-runs/:runId/cancel': {
     $post: JsonEndpoint<{ param: { runId: string } }, CancelWorkflowRunResponse>
+  }
+  '/api/media-objects': {
+    $post: JsonEndpoint<{ form: CreateMediaObjectForm }, MediaObjectResponse, 201>
+  }
+  '/api/media-objects/:id': {
+    $get: JsonEndpoint<{ param: { id: string } }, GetMediaObjectResponse>
+  }
+  '/api/media-objects/presigned-upload': {
+    $post: JsonEndpoint<{ json: CreatePresignedMediaUploadInput }, CreatePresignedMediaUploadResponse, 201>
+  }
+  '/api/media-objects/:id/complete-upload': {
+    $post: JsonEndpoint<{ json: CompletePresignedMediaUploadInput; param: { id: string } }, MediaObjectResponse>
   }
 }
 

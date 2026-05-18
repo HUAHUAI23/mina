@@ -1,4 +1,4 @@
-import { createRootRoute, Outlet } from '@tanstack/react-router'
+import { createRootRoute, Outlet, useLocation } from '@tanstack/react-router'
 
 import { AppShell } from '../app/app-shell'
 
@@ -7,9 +7,9 @@ export const Route = createRootRoute({
 })
 
 function RootLayout() {
-  return (
-    <AppShell>
-      <Outlet />
-    </AppShell>
-  )
+  const { pathname } = useLocation()
+  const canvasRoute = pathname.startsWith('/canvas/') && pathname.length > '/canvas/'.length
+  const route = <Outlet />
+
+  return canvasRoute ? route : <AppShell>{route}</AppShell>
 }
