@@ -15,14 +15,18 @@
     "@mina/contracts": "workspace:*",
     "@mina/ui": "workspace:*",
     "@t3-oss/env-core": "catalog:",
+    "@tanstack/react-form": "^1.27.3",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "^1.170.3",
     "@tanstack/react-router-devtools": "^1.167.0",
     "@tanstack/router-plugin": "^1.168.5",
+    "@xyflow/react": "^12.10.0",
     "hono": "catalog:",
+    "immer": "^10.2.0",
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "zustand": "^5.0.9",
     "zod": "catalog:"
   },
   "imports": {

@@ -9,6 +9,7 @@ const DEFAULT_API_PORT = 3001
 const DEFAULT_SCHEDULER_CRON = '*/5 * * * * *'
 const DEFAULT_S3_REGION = 'us-east-1'
 const DEFAULT_STORAGE_ROOT_PREFIX = 'users'
+const DEFAULT_MEDIA_UPLOAD_MAX_BYTES = 100 * 1024 * 1024
 const DEFAULT_TASK_MAX_RUNNING_SECONDS = 21_600
 const DEFAULT_TASK_POLL_BATCH_SIZE = 25
 const DEFAULT_TASK_POLL_DEFAULT_INTERVAL_SECONDS = 10
@@ -33,6 +34,7 @@ const env = createEnv({
     GOOGLE_API_BASE_URL: z.url().default(DEFAULT_GOOGLE_API_BASE_URL),
     GOOGLE_API_KEY: optionalNonEmptyStringSchema,
     MINA_LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+    MINA_MEDIA_UPLOAD_MAX_BYTES: z.coerce.number().int().positive().default(DEFAULT_MEDIA_UPLOAD_MAX_BYTES),
     MINA_S3_ACCESS_KEY_ID: optionalNonEmptyStringSchema,
     MINA_S3_BUCKET: optionalNonEmptyStringSchema,
     MINA_S3_ENDPOINT: z.url().optional(),
@@ -79,6 +81,7 @@ export const apiEnv = {
   googleApiBaseUrl: env.GOOGLE_API_BASE_URL,
   googleApiKey: env.GOOGLE_API_KEY,
   logLevel: env.MINA_LOG_LEVEL,
+  mediaUploadMaxBytes: env.MINA_MEDIA_UPLOAD_MAX_BYTES,
   s3AccessKeyId: env.MINA_S3_ACCESS_KEY_ID,
   s3Bucket: env.MINA_S3_BUCKET,
   s3Endpoint: env.MINA_S3_ENDPOINT,

@@ -223,6 +223,19 @@ export class DrizzleWorkflowDefinitionRepository implements WorkflowDefinitionRe
   async updateNodeMediaView(input: UpdateNodeMediaViewPersistenceInput): Promise<Workflow> {
     const timestamp = new Date(input.timestamp)
     await this.db.transaction(async (tx) => {
+      const [workflowRow] = await tx
+        .select({ id: workflows.id, version: workflows.version })
+        .from(workflows)
+        .where(and(eq(workflows.id, input.workflowId), isNull(workflows.deletedAt)))
+        .limit(1)
+        .for('update')
+      if (!workflowRow) {
+        throw new Error('Workflow not found.')
+      }
+      if (workflowRow.version !== input.expectedWorkflowVersion) {
+        throw new Error('WORKFLOW_VERSION_CONFLICT')
+      }
+
       const [node] = await tx
         .select()
         .from(workflowNodes)
@@ -252,7 +265,7 @@ export class DrizzleWorkflowDefinitionRepository implements WorkflowDefinitionRe
           version: sql`${workflows.version} + 1`,
           updatedAt: timestamp,
         })
-        .where(eq(workflows.id, input.workflowId))
+        .where(and(eq(workflows.id, input.workflowId), eq(workflows.version, input.expectedWorkflowVersion)))
     })
 
     const workflow = await this.findById(input.workflowId)

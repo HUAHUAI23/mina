@@ -121,16 +121,31 @@ export class TasksService {
     return task
   }
 
+  async getTaskForAccount(accountId: string, id: string): Promise<Task> {
+    const task = await this.getTask(id)
+    this.assertTaskAccount(task, accountId)
+    return task
+  }
+
   async getTaskOutput(id: string): Promise<NodeExecutionOutput | undefined> {
     return (await this.getTask(id)).output
   }
 
-  async listTasks(accountId?: string): Promise<Task[]> {
+  async getTaskOutputForAccount(accountId: string, id: string): Promise<NodeExecutionOutput | undefined> {
+    return (await this.getTaskForAccount(accountId, id)).output
+  }
+
+  async listTasks(accountId: string): Promise<Task[]> {
     return this.taskRepository.list(accountId)
   }
 
   async listTaskResources(taskId: string): Promise<TaskResource[]> {
     return this.taskRepository.listResources(taskId)
+  }
+
+  async listTaskResourcesForAccount(accountId: string, taskId: string): Promise<TaskResource[]> {
+    await this.getTaskForAccount(accountId, taskId)
+    return this.listTaskResources(taskId)
   }
 
   async runTask(id: string): Promise<Task> {
@@ -170,13 +185,19 @@ export class TasksService {
     return updatedTasks
   }
 
-  async cancelTask(id: string): Promise<void> {
-    const task = await this.getTask(id)
+  async cancelTask(accountId: string, id: string): Promise<void> {
+    const task = await this.getTaskForAccount(accountId, id)
     if (task.status !== 'queued' && task.status !== 'running') {
       throw new HttpError(409, 'TASK_NOT_CANCELLABLE', 'Only queued or running tasks can be cancelled.')
     }
 
     await this.lifecycle.cancelTask(task)
+  }
+
+  private assertTaskAccount(task: Task, accountId: string): void {
+    if (task.accountId !== accountId) {
+      throw new HttpError(404, 'TASK_NOT_FOUND', 'Task not found.')
+    }
   }
 
   private async recordTaskEvent(

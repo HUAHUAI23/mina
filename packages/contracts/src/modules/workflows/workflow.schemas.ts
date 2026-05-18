@@ -5,7 +5,7 @@ import {
   WorkflowCanvasEdgeSchema,
   WorkflowCanvasNodeSchema,
 } from '../canvas/canvas.schemas'
-import { NodeExecutionOutputSchema } from '../tasks/task.schemas'
+import { NodeExecutionOutputSchema, TaskSchema } from '../tasks/task.schemas'
 
 export const WorkflowRunModeSchema = z.enum(['isolated_node', 'flow_group'])
 export const WorkflowRunStatusSchema = z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled'])
@@ -77,7 +77,18 @@ export const CreateWorkflowRunSchema = z.object({
 })
 
 export const UpdateNodeMediaViewSchema = z.object({
+  expectedWorkflowVersion: z.number().int().min(1),
   mediaView: NodeMediaViewStateSchema.optional(),
+})
+
+export const WorkflowNodeTaskHistoryItemSchema = z.object({
+  workflowRunId: z.string().min(1),
+  nodeId: z.string().min(1),
+  task: TaskSchema,
+})
+
+export const WorkflowNodeTaskHistoryResponseSchema = z.object({
+  items: z.array(WorkflowNodeTaskHistoryItemSchema),
 })
 
 export const WorkflowListResponseSchema = z.object({
@@ -112,6 +123,8 @@ export type UpdateNodeMediaViewInput = z.infer<typeof UpdateNodeMediaViewSchema>
 export type UpdateWorkflowInput = z.infer<typeof UpdateWorkflowSchema>
 export type Workflow = z.infer<typeof WorkflowSchema>
 export type WorkflowListResponse = z.infer<typeof WorkflowListResponseSchema>
+export type WorkflowNodeTaskHistoryItem = z.infer<typeof WorkflowNodeTaskHistoryItemSchema>
+export type WorkflowNodeTaskHistoryResponse = z.infer<typeof WorkflowNodeTaskHistoryResponseSchema>
 export type WorkflowNodeRunStatus = z.infer<typeof WorkflowNodeRunStatusSchema>
 export type WorkflowParams = z.infer<typeof WorkflowParamsSchema>
 export type WorkflowResponse = z.infer<typeof WorkflowResponseSchema>

@@ -20,6 +20,10 @@
       "types": "./src/modules/media/media.schemas.ts",
       "default": "./src/modules/media/media.schemas.ts"
     },
+    "./modules/media/media-object": {
+      "types": "./src/modules/media/media-object.schemas.ts",
+      "default": "./src/modules/media/media-object.schemas.ts"
+    },
     "./modules/pricing": {
       "types": "./src/modules/pricing/pricing.schemas.ts",
       "default": "./src/modules/pricing/pricing.schemas.ts"
@@ -28,9 +32,17 @@
       "types": "./src/modules/tasks/task.schemas.ts",
       "default": "./src/modules/tasks/task.schemas.ts"
     },
+    "./modules/tasks/model-catalog": {
+      "types": "./src/modules/tasks/model-catalog.schemas.ts",
+      "default": "./src/modules/tasks/model-catalog.schemas.ts"
+    },
     "./modules/workflows": {
       "types": "./src/modules/workflows/workflow.schemas.ts",
       "default": "./src/modules/workflows/workflow.schemas.ts"
+    },
+    "./modules/workflows/events": {
+      "types": "./src/modules/workflows/workflow-event.schemas.ts",
+      "default": "./src/modules/workflows/workflow-event.schemas.ts"
     },
     "./schemas/api-error": {
       "types": "./src/schemas/api-error.schemas.ts",

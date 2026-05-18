@@ -10,6 +10,7 @@ import { DrizzlePricingRepository } from '../modules/pricing/pricing.drizzle-rep
 import { PricingService } from '../modules/pricing/pricing.service'
 import { TaskConfigAssembler } from '../modules/tasks/config/task-config-assembler'
 import { ModelRegistry } from '../modules/tasks/models/model-registry'
+import { TaskModelCatalogService } from '../modules/tasks/models/model-catalog.service'
 import { ProviderRouter } from '../modules/tasks/models/provider-router'
 import { registerTaskModels } from '../modules/tasks/models/register-models'
 import { OutputPostProcessor } from '../modules/tasks/output/output-post-processor'
@@ -19,6 +20,7 @@ import { DrizzleTaskEventLog } from '../modules/tasks/task-events'
 import { DrizzleTaskRepository } from '../modules/tasks/tasks.drizzle-repository'
 import { TasksService } from '../modules/tasks/tasks.service'
 import { DrizzleWorkflowRunEventLog } from '../modules/workflows/workflow-events'
+import { InMemoryWorkflowEventBus } from '../modules/workflows/workflow-event-bus'
 import { WorkflowMediaResolver } from '../modules/workflows/media/workflow-media-resolver'
 import {
   DrizzleWorkflowDefinitionRepository,
@@ -30,8 +32,11 @@ import { WorkflowsService } from '../modules/workflows/workflows.service'
 
 export interface AppDependencies {
   accountsService: AccountsService
+  mediaObjectService: MediaObjectService
+  modelCatalogService: TaskModelCatalogService
   storage: ObjectStorage
   tasksService: TasksService
+  workflowEventBus: InMemoryWorkflowEventBus
   workflowsService: WorkflowsService
 }
 
@@ -61,6 +66,7 @@ export const createAppDependencies = (): AppDependencies => {
     new FetchRemoteMediaFetcher(),
   )
   const modelRegistry = registerTaskModels(new ModelRegistry())
+  const modelCatalogService = new TaskModelCatalogService(modelRegistry)
   const taskConfigAssembler = new TaskConfigAssembler(modelRegistry)
   const taskProvider = new ProviderRouter(modelRegistry)
   const outputFinalizer = new TaskOutputFinalizer(mediaObjectService)
@@ -75,18 +81,23 @@ export const createAppDependencies = (): AppDependencies => {
     repositories.taskEventLog,
   )
   const workflowMediaResolver = new WorkflowMediaResolver(mediaObjectService, tasksService)
+  const workflowEventBus = new InMemoryWorkflowEventBus()
   const workflowsService = new WorkflowsService(
     repositories.workflowRepositories,
     tasksService,
     taskConfigAssembler,
     workflowMediaResolver,
     repositories.workflowRunEventLog,
+    workflowEventBus,
   )
 
   return {
     accountsService: new AccountsService(accountsRepository),
+    mediaObjectService,
+    modelCatalogService,
     storage,
     tasksService,
+    workflowEventBus,
     workflowsService,
   }
 }

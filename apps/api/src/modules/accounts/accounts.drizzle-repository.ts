@@ -1,17 +1,18 @@
-import type { AuthSession, User } from '@mina/contracts/modules/accounts'
-import { UserSchema } from '@mina/contracts/modules/accounts'
+import type { Account, AuthSession, User } from '@mina/contracts/modules/accounts'
+import { AccountSchema, UserSchema } from '@mina/contracts/modules/accounts'
 import { eq } from 'drizzle-orm'
 
 import type { MinaDbClient } from '../../db/client'
-import { sessions, userPasswordCredentials, users } from '../../db/schema'
+import { accounts, sessions, userPasswordCredentials, users } from '../../db/schema'
 import type {
   AccountsRepository,
-  CreatePasswordCredentialInput,
   CreateSessionInput,
-  CreateUserRecordInput,
   PasswordCredential,
+  RegisterUserWithAccountInput,
+  StoredSession,
 } from './accounts.repository'
 
+type AccountRow = typeof accounts.$inferSelect
 type UserRow = typeof users.$inferSelect
 type PasswordCredentialRow = typeof userPasswordCredentials.$inferSelect
 type SessionRow = typeof sessions.$inferSelect
@@ -37,6 +38,17 @@ const passwordCredentialFromRow = (row: PasswordCredentialRow): PasswordCredenti
   userId: row.userId,
 })
 
+const accountFromRow = (row: AccountRow): Account =>
+  AccountSchema.parse({
+    id: row.id,
+    ownerUserId: row.ownerUserId,
+    name: row.name,
+    storageRootPrefix: row.storageRootPrefix,
+    createdAt: toIso(row.createdAt),
+    updatedAt: toIso(row.updatedAt),
+    ...(row.deletedAt ? { deletedAt: toIso(row.deletedAt) } : {}),
+  })
+
 const sessionFromRow = (row: SessionRow, token: string): AuthSession => ({
   expiresAt: toIso(row.expiresAt),
   id: row.id,
@@ -44,24 +56,16 @@ const sessionFromRow = (row: SessionRow, token: string): AuthSession => ({
   userId: row.userId,
 })
 
+const storedSessionFromRow = (row: SessionRow): StoredSession => ({
+  expiresAt: toIso(row.expiresAt),
+  id: row.id,
+  ...(row.revokedAt ? { revokedAt: toIso(row.revokedAt) } : {}),
+  tokenHash: row.tokenHash,
+  userId: row.userId,
+})
+
 export class DrizzleAccountsRepository implements AccountsRepository {
   constructor(private readonly db: MinaDbClient) {}
-
-  async createPasswordCredential(input: CreatePasswordCredentialInput): Promise<PasswordCredential> {
-    const [row] = await this.db
-      .insert(userPasswordCredentials)
-      .values({
-        passwordHash: input.passwordHash,
-        userId: input.userId,
-      })
-      .returning()
-
-    if (!row) {
-      throw new Error('Password credential was not created.')
-    }
-
-    return passwordCredentialFromRow(row)
-  }
 
   async createSession(input: CreateSessionInput): Promise<AuthSession> {
     const [row] = await this.db
@@ -81,23 +85,49 @@ export class DrizzleAccountsRepository implements AccountsRepository {
     return sessionFromRow(row, input.token)
   }
 
-  async createUser(input: CreateUserRecordInput): Promise<User> {
-    const [row] = await this.db
-      .insert(users)
-      .values({
-        displayName: input.displayName ?? null,
-        email: input.email,
-        id: input.id,
-        role: input.role,
-        username: input.username,
+  async registerUserWithAccount(input: RegisterUserWithAccountInput): Promise<{ account: Account; user: User }> {
+    const result = await this.db.transaction(async (tx) => {
+      const [userRow] = await tx
+        .insert(users)
+        .values({
+          displayName: input.user.displayName ?? null,
+          email: input.user.email,
+          id: input.user.id,
+          role: input.user.role,
+          username: input.user.username,
+        })
+        .returning()
+
+      if (!userRow) {
+        throw new Error('User was not created.')
+      }
+
+      await tx.insert(userPasswordCredentials).values({
+        passwordHash: input.passwordCredential.passwordHash,
+        userId: input.passwordCredential.userId,
       })
-      .returning()
 
-    if (!row) {
-      throw new Error('User was not created.')
-    }
+      const [accountRow] = await tx
+        .insert(accounts)
+        .values({
+          id: input.account.id,
+          name: input.account.name,
+          ownerUserId: input.account.ownerUserId,
+          storageRootPrefix: input.account.storageRootPrefix,
+        })
+        .returning()
 
-    return userFromRow(row)
+      if (!accountRow) {
+        throw new Error('Account was not created.')
+      }
+
+      return {
+        account: accountFromRow(accountRow),
+        user: userFromRow(userRow),
+      }
+    })
+
+    return result
   }
 
   async findPasswordCredentialByUserId(userId: string): Promise<PasswordCredential | undefined> {
@@ -108,6 +138,16 @@ export class DrizzleAccountsRepository implements AccountsRepository {
       .limit(1)
 
     return row ? passwordCredentialFromRow(row) : undefined
+  }
+
+  async findAccountByOwnerUserId(userId: string): Promise<Account | undefined> {
+    const [row] = await this.db.select().from(accounts).where(eq(accounts.ownerUserId, userId)).limit(1)
+    return row ? accountFromRow(row) : undefined
+  }
+
+  async findSessionByTokenHash(tokenHash: string): Promise<StoredSession | undefined> {
+    const [row] = await this.db.select().from(sessions).where(eq(sessions.tokenHash, tokenHash)).limit(1)
+    return row ? storedSessionFromRow(row) : undefined
   }
 
   async findUserByEmail(email: string): Promise<User | undefined> {

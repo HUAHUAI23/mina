@@ -4,20 +4,22 @@ import type {
   UpdateNodeMediaViewInput,
   UpdateWorkflowInput,
   Workflow,
+  WorkflowNodeTaskHistoryItem,
   WorkflowRun,
 } from '@mina/contracts/modules/workflows'
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
+import type { WorkflowEvent } from '@mina/contracts/modules/workflows/events'
 
 import { HttpError } from '../../lib/http/http-error'
-import { DEFAULT_ACCOUNT_ID } from '../accounts/accounts.data'
 import type { TaskConfigAssembler } from '../tasks/config/task-config-assembler'
 import type { TasksService } from '../tasks/tasks.service'
 import type { WorkflowMediaResolver } from './media/workflow-media-resolver'
 import type { WorkflowDefinitionRepository } from './repositories/workflow-definition.repository'
-import type { WorkflowNodeTaskLink, WorkflowNodeTaskRepository } from './repositories/workflow-node-task.repository'
+import type { WorkflowNodeTaskRepository } from './repositories/workflow-node-task.repository'
 import type { WorkflowRunRepository } from './repositories/workflow-run.repository'
 import type { WorkflowRunNodeStateRepository } from './repositories/workflow-run-node-state.repository'
 import { validateCanvas } from './validation'
+import { createWorkflowEventId, type WorkflowEventBus } from './workflow-event-bus'
 import { NoopWorkflowRunEventLog, type WorkflowRunEventLog } from './workflow-events'
 import { WorkflowRunsService } from './workflow-runs.service'
 
@@ -44,6 +46,7 @@ export class WorkflowsService {
     taskConfigAssembler: TaskConfigAssembler,
     workflowMediaResolver: WorkflowMediaResolver,
     workflowRunEventLog: WorkflowRunEventLog = new NoopWorkflowRunEventLog(),
+    private readonly workflowEventBus?: WorkflowEventBus,
   ) {
     this.workflowRunsService = new WorkflowRunsService(
       repositories,
@@ -54,12 +57,12 @@ export class WorkflowsService {
     )
   }
 
-  async createWorkflow(input: CreateWorkflowInput, accountId = DEFAULT_ACCOUNT_ID): Promise<Workflow> {
+  async createWorkflow(input: CreateWorkflowInput, accountId: string): Promise<Workflow> {
     const timestamp = nowIso()
     const nodes = cloneNodes(input.nodes)
     const edges = cloneEdges(input.edges)
     validateCanvas(nodes, edges)
-    return this.repositories.definitions.create({
+    const workflow = await this.repositories.definitions.create({
       id: createId('workflow'),
       accountId,
       name: input.name,
@@ -68,37 +71,63 @@ export class WorkflowsService {
       edges,
       timestamp,
     })
+    this.publishWorkflowEvent({
+      id: createWorkflowEventId(),
+      accountId: workflow.accountId,
+      createdAt: timestamp,
+      payload: {
+        changedEdgeIds: workflow.edges.map((edge) => edge.id),
+        changedNodeIds: workflow.nodes.map((node) => node.id),
+      },
+      type: 'workflow.definition.updated',
+      version: workflow.version,
+      workflowId: workflow.id,
+    })
+    return workflow
   }
 
-  async deleteWorkflow(id: string): Promise<void> {
+  async deleteWorkflow(id: string, accountId: string): Promise<void> {
+    await this.getWorkflow(id, accountId)
     const deleted = await this.repositories.definitions.delete(id)
     if (!deleted) {
       throw new HttpError(404, 'WORKFLOW_NOT_FOUND', 'Workflow not found.')
     }
   }
 
-  async getNodeTasks(workflowId: string, nodeId: string): Promise<WorkflowNodeTaskLink[]> {
-    await this.getWorkflow(workflowId)
-    return this.repositories.nodeTasks.listNodeTaskLinks(workflowId, nodeId)
+  async getNodeTasks(workflowId: string, nodeId: string, accountId: string): Promise<WorkflowNodeTaskHistoryItem[]> {
+    await this.getWorkflow(workflowId, accountId)
+    const links = await this.repositories.nodeTasks.listNodeTaskLinks(workflowId, nodeId)
+    const hydrated = await Promise.all(
+      links.map(async (link) => ({
+        workflowRunId: link.workflowRunId,
+        nodeId: link.nodeId,
+        task: await this.workflowRunsService.getTask(accountId, link.taskId),
+      })),
+    )
+    return hydrated.sort((left, right) => right.task.createdAt.localeCompare(left.task.createdAt))
   }
 
-  async getRun(runId: string): Promise<WorkflowRun> {
-    return this.workflowRunsService.getRun(runId)
+  async getRun(runId: string, accountId: string): Promise<WorkflowRun> {
+    const run = await this.workflowRunsService.getRun(runId)
+    this.assertAccountAccess(run.accountId, accountId)
+    return run
   }
 
-  async getWorkflow(id: string): Promise<Workflow> {
+  async getWorkflow(id: string, accountId: string): Promise<Workflow> {
     const workflow = await this.repositories.definitions.findById(id)
     if (!workflow) {
       throw new HttpError(404, 'WORKFLOW_NOT_FOUND', 'Workflow not found.')
     }
+    this.assertAccountAccess(workflow.accountId, accountId)
     return workflow
   }
 
-  async listRuns(workflowId?: string): Promise<WorkflowRun[]> {
+  async listRuns(workflowId: string, accountId: string): Promise<WorkflowRun[]> {
+    await this.getWorkflow(workflowId, accountId)
     return this.workflowRunsService.listRuns(workflowId)
   }
 
-  async listWorkflows(accountId = DEFAULT_ACCOUNT_ID): Promise<Workflow[]> {
+  async listWorkflows(accountId: string): Promise<Workflow[]> {
     return this.repositories.definitions.list(accountId)
   }
 
@@ -106,18 +135,41 @@ export class WorkflowsService {
     workflowId: string,
     nodeId: string,
     input: UpdateNodeMediaViewInput,
+    accountId: string,
   ): Promise<Workflow> {
-    await this.getWorkflow(workflowId)
-    return this.repositories.definitions.updateNodeMediaView({
-      workflowId,
-      nodeId,
-      mediaView: input.mediaView,
-      timestamp: nowIso(),
-    })
+    await this.getWorkflow(workflowId, accountId)
+    if (input.mediaView?.taskId) {
+      await this.workflowRunsService.getTask(accountId, input.mediaView.taskId)
+    }
+    const timestamp = nowIso()
+    try {
+      const workflow = await this.repositories.definitions.updateNodeMediaView({
+        workflowId,
+        nodeId,
+        expectedWorkflowVersion: input.expectedWorkflowVersion,
+        mediaView: input.mediaView,
+        timestamp,
+      })
+      this.publishWorkflowEvent({
+        id: createWorkflowEventId(),
+        accountId: workflow.accountId,
+        createdAt: timestamp,
+        payload: { nodeId, ...(input.mediaView ? { mediaView: input.mediaView } : {}) },
+        type: 'workflow.node.mediaView.updated',
+        version: workflow.version,
+        workflowId: workflow.id,
+      })
+      return workflow
+    } catch (error) {
+      if (error instanceof Error && error.message === 'WORKFLOW_VERSION_CONFLICT') {
+        throw new HttpError(409, 'WORKFLOW_VERSION_CONFLICT', 'Workflow version is stale.')
+      }
+      throw error
+    }
   }
 
-  async updateWorkflow(id: string, input: UpdateWorkflowInput): Promise<Workflow> {
-    const current = await this.getWorkflow(id)
+  async updateWorkflow(id: string, input: UpdateWorkflowInput, accountId: string): Promise<Workflow> {
+    const current = await this.getWorkflow(id, accountId)
     if (current.version !== input.version) {
       throw new HttpError(409, 'WORKFLOW_VERSION_CONFLICT', 'Workflow version is stale.')
     }
@@ -125,7 +177,7 @@ export class WorkflowsService {
     const nodes = cloneNodes(input.nodes)
     const edges = cloneEdges(input.edges)
     validateCanvas(nodes, edges)
-    return this.repositories.definitions.replaceDefinition({
+    const workflow = await this.repositories.definitions.replaceDefinition({
       id,
       name: input.name ?? current.name,
       nodes,
@@ -133,13 +185,51 @@ export class WorkflowsService {
       version: current.version + 1,
       timestamp: nowIso(),
     })
+    this.publishWorkflowEvent({
+      id: createWorkflowEventId(),
+      accountId: workflow.accountId,
+      createdAt: workflow.updatedAt,
+      payload: {
+        changedEdgeIds: edges.map((edge) => edge.id),
+        changedNodeIds: nodes.map((node) => node.id),
+      },
+      type: 'workflow.definition.updated',
+      version: workflow.version,
+      workflowId: workflow.id,
+    })
+    return workflow
   }
 
-  async createRun(workflowId: string, input: CreateWorkflowRunInput): Promise<WorkflowRun> {
-    return this.workflowRunsService.createRun(workflowId, input)
+  async createRun(workflowId: string, input: CreateWorkflowRunInput, accountId: string): Promise<WorkflowRun> {
+    await this.getWorkflow(workflowId, accountId)
+    const run = await this.workflowRunsService.createRun(workflowId, input, accountId)
+    this.publishWorkflowEvent({
+      id: createWorkflowEventId(),
+      accountId: run.accountId,
+      createdAt: run.updatedAt,
+      payload: { runId: run.id, status: run.status },
+      type: 'workflow.run.updated',
+      version: run.workflowVersion,
+      workflowId: run.workflowId,
+    })
+    for (const [nodeId, state] of Object.entries(run.nodeStates)) {
+      if (state.taskId) {
+        this.publishWorkflowEvent({
+          id: createWorkflowEventId(),
+          accountId: run.accountId,
+          createdAt: run.updatedAt,
+          payload: { nodeId, taskId: state.taskId, status: 'queued' },
+          type: 'workflow.node.task.updated',
+          version: run.workflowVersion,
+          workflowId: run.workflowId,
+        })
+      }
+    }
+    return run
   }
 
-  async cancelRun(runId: string): Promise<void> {
+  async cancelRun(runId: string, accountId: string): Promise<void> {
+    await this.getRun(runId, accountId)
     await this.workflowRunsService.cancelRun(runId)
   }
 
@@ -149,5 +239,15 @@ export class WorkflowsService {
 
   async reconcileRun(runId: string): Promise<WorkflowRun> {
     return this.workflowRunsService.reconcileRun(runId)
+  }
+
+  private publishWorkflowEvent(event: WorkflowEvent): void {
+    this.workflowEventBus?.publish(event)
+  }
+
+  private assertAccountAccess(resourceAccountId: string, expectedAccountId: string): void {
+    if (resourceAccountId !== expectedAccountId) {
+      throw new HttpError(404, 'WORKFLOW_NOT_FOUND', 'Workflow not found.')
+    }
   }
 }

@@ -1,4 +1,4 @@
-import type { AuthSession, User } from '@mina/contracts/modules/accounts'
+import type { Account, AuthSession, User } from '@mina/contracts/modules/accounts'
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import type { PricingRule } from '@mina/contracts/modules/pricing'
 import type { Task, TaskResource } from '@mina/contracts/modules/tasks'
@@ -17,13 +17,13 @@ import type {
 import { assertAccountStorageKey, buildAccountStorageKey } from '../lib/storage/storage-key'
 import type {
   AccountsRepository,
-  CreatePasswordCredentialInput,
   CreateSessionInput,
-  CreateUserRecordInput,
   PasswordCredential,
+  RegisterUserWithAccountInput,
+  StoredSession,
 } from '../modules/accounts/accounts.repository'
 import type { MediaObject, MediaObjectStatus } from '../modules/media/media-object'
-import type { MediaObjectRepository } from '../modules/media/media-object.repository'
+import type { CreateUploadingMediaObjectInput, MediaObjectRepository } from '../modules/media/media-object.repository'
 import { createDefaultPricingRules } from '../modules/pricing/pricing.repository'
 import type { PricingRepository } from '../modules/pricing/pricing.repository'
 import type { TaskEventInput, TaskEventLog } from '../modules/tasks/task-events'
@@ -140,6 +140,7 @@ export class FakeObjectStorage implements ObjectStorage {
 const clone = <T>(value: T): T => structuredClone(value)
 
 export class FakeAccountsRepository implements AccountsRepository {
+  readonly #accounts = new Map<string, Account>()
   readonly #passwordCredentials = new Map<string, PasswordCredential>()
   readonly #sessions = new Map<string, AuthSession & { tokenHash: string }>()
   readonly #users = new Map<string, User>()
@@ -150,7 +151,7 @@ export class FakeAccountsRepository implements AccountsRepository {
     }
   }
 
-  async createPasswordCredential(input: CreatePasswordCredentialInput): Promise<PasswordCredential> {
+  async addPasswordCredential(input: RegisterUserWithAccountInput['passwordCredential']): Promise<PasswordCredential> {
     const now = new Date().toISOString()
     const credential: PasswordCredential = {
       createdAt: now,
@@ -160,6 +161,20 @@ export class FakeAccountsRepository implements AccountsRepository {
     }
     this.#passwordCredentials.set(input.userId, credential)
     return clone(credential)
+  }
+
+  async addAccount(input: RegisterUserWithAccountInput['account']): Promise<Account> {
+    const now = new Date().toISOString()
+    const account: Account = {
+      createdAt: now,
+      id: input.id,
+      name: input.name,
+      ownerUserId: input.ownerUserId,
+      storageRootPrefix: input.storageRootPrefix,
+      updatedAt: now,
+    }
+    this.#accounts.set(account.id, account)
+    return clone(account)
   }
 
   async createSession(input: CreateSessionInput): Promise<AuthSession> {
@@ -174,7 +189,7 @@ export class FakeAccountsRepository implements AccountsRepository {
     return clone(session)
   }
 
-  async createUser(input: CreateUserRecordInput): Promise<User> {
+  async addUser(input: RegisterUserWithAccountInput['user']): Promise<User> {
     const now = new Date().toISOString()
     const user: User = {
       createdAt: now,
@@ -189,9 +204,26 @@ export class FakeAccountsRepository implements AccountsRepository {
     return clone(user)
   }
 
+  async registerUserWithAccount(input: RegisterUserWithAccountInput): Promise<{ account: Account; user: User }> {
+    const user = await this.addUser(input.user)
+    await this.addPasswordCredential(input.passwordCredential)
+    const account = await this.addAccount(input.account)
+    return { account, user }
+  }
+
   async findPasswordCredentialByUserId(userId: string): Promise<PasswordCredential | undefined> {
     const credential = this.#passwordCredentials.get(userId)
     return credential ? clone(credential) : undefined
+  }
+
+  async findAccountByOwnerUserId(userId: string): Promise<Account | undefined> {
+    const account = [...this.#accounts.values()].find((item) => item.ownerUserId === userId)
+    return account ? clone(account) : undefined
+  }
+
+  async findSessionByTokenHash(tokenHash: string): Promise<StoredSession | undefined> {
+    const session = [...this.#sessions.values()].find((item) => item.tokenHash === tokenHash)
+    return session ? clone(session) : undefined
   }
 
   async findUserByEmail(email: string): Promise<User | undefined> {
@@ -228,6 +260,29 @@ export class FakeMediaObjectRepository implements MediaObjectRepository {
   readonly #mediaObjects = new Map<string, MediaObject>()
 
   async create(mediaObject: MediaObject): Promise<MediaObject> {
+    this.#mediaObjects.set(mediaObject.id, clone(mediaObject))
+    return clone(mediaObject)
+  }
+
+  async createUploading(input: CreateUploadingMediaObjectInput): Promise<MediaObject> {
+    const timestamp = new Date().toISOString()
+    const mediaObject: MediaObject = {
+      accountId: input.accountId,
+      bucket: input.bucket,
+      byteSize: input.byteSize,
+      createdAt: timestamp,
+      expiresAt: input.expiresAt,
+      id: input.id,
+      kind: input.kind,
+      mimeType: input.mimeType,
+      origin: input.origin,
+      purpose: input.purpose,
+      retention: input.retention,
+      status: 'uploading',
+      storageKey: input.storageKey,
+      updatedAt: timestamp,
+      url: input.url,
+    }
     this.#mediaObjects.set(mediaObject.id, clone(mediaObject))
     return clone(mediaObject)
   }
@@ -449,6 +504,9 @@ export class FakeWorkflowDefinitionRepository implements WorkflowDefinitionRepos
     const workflow = this.#workflows.get(input.workflowId)
     if (!workflow) {
       throw new Error('Workflow not found.')
+    }
+    if (workflow.version !== input.expectedWorkflowVersion) {
+      throw new Error('WORKFLOW_VERSION_CONFLICT')
     }
 
     const nodes = workflow.nodes.map((node) => {

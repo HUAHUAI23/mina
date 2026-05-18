@@ -36,6 +36,8 @@ export const readStoredAuthSession = (): AuthResponse | null => {
   }
 }
 
+export const readStoredAuthToken = (): string | undefined => readStoredAuthSession()?.session.token
+
 export const storeAuthSession = (authSession: AuthResponse): void => {
   if (!canUseStorage()) {
     return

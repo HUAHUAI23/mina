@@ -153,7 +153,7 @@ export class WorkflowMediaResolver {
       return this.handleMissing(item, 'Source node has no current MediaView output.')
     }
 
-    const output = await this.tasksService.getTaskOutput(sourceNode.data.mediaView.taskId)
+    const output = await this.tasksService.getTaskOutputForAccount(input.run.accountId, sourceNode.data.mediaView.taskId)
     const resource = output
       ? findOutputByMediaView(output, sourceNode.data.mediaView.outputResourceId, sourceNode.data.mediaView.outputIndex)
       : undefined
