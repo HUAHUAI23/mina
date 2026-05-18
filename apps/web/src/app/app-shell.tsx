@@ -1,7 +1,9 @@
 import type { PropsWithChildren } from 'react'
-import { Archive, Compass, FolderOpen, LayoutGrid, Lightbulb } from 'lucide-react'
+import { Archive, Compass, FolderOpen, LayoutGrid, Lightbulb, LogOut } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Link, useLocation } from '@tanstack/react-router'
+
+import { useAuth } from '../features/auth/components/auth-provider'
 
 interface NavigationItem {
   icon: LucideIcon
@@ -35,6 +37,16 @@ const recentProjects = [
 
 export function AppShell({ children }: PropsWithChildren) {
   const { pathname } = useLocation()
+  const { logout, user } = useAuth()
+  const displayName = user?.displayName || user?.username || user?.email || 'MINA User'
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('')
+    .slice(0, 2)
+  const profileLabel = user?.role === 'admin' ? 'Admin' : 'Creative Director'
 
   return (
     <main className="mina-shell">
@@ -95,12 +107,15 @@ export function AppShell({ children }: PropsWithChildren) {
           <div aria-hidden="true" />
           <div className="mina-profile">
             <div>
-              <strong>Julian Reed</strong>
-              <span>Pro Director</span>
+              <strong>{displayName}</strong>
+              <span>{profileLabel}</span>
             </div>
             <div className="mina-avatar" aria-hidden="true">
-              JR
+              {initials || 'M'}
             </div>
+            <button className="mina-logout" type="button" aria-label="Sign out" onClick={logout}>
+              <LogOut aria-hidden="true" size={17} />
+            </button>
           </div>
         </header>
 

@@ -56,6 +56,8 @@ The Vite + React application.
 - `src/routes/`: TanStack Router file-based route entries and generated route tree
 - `src/lib/`: reusable client-side utilities
 
+The web app keeps authentication as an app-level gate rather than a route page. `AuthProvider` stores the current development session, `AuthGate` short-circuits unauthenticated rendering with a centered login/register card, and feature API clients call the Hono RPC surface from `@mina/api/client` while parsing responses with `@mina/contracts`.
+
 ### `packages/contracts`
 
 Shared runtime schemas and inferred TypeScript types for the full stack.
@@ -151,6 +153,8 @@ The public auth API currently exposes:
 - `POST /api/auth/login`
 
 Full OAuth provider login, client registration, consent UI, refresh token exchange, and administrator-only public resource workflows are intentionally not implemented yet.
+
+The frontend currently connects only the password login/register runtime. Because the API does not yet expose a session refresh or `me` endpoint, the browser stores the returned `AuthResponse` for the development session and clears it when the embedded expiry has passed. Server-side session revalidation should move behind a dedicated authenticated endpoint before production hardening.
 
 ## Task And Workflow Core
 

@@ -5,6 +5,7 @@ This file records important project changes.
 ## [Unreleased]
 
 ### Added
+- Added the web password login/register auth gate, typed auth API client, local development session persistence, and app-shell logout/profile integration.
 - Added web `/projects` and `/canvas` route pages derived from the static UI mockups and adapted to the shared app shell.
 - Added `db:create`, `db:drop`, and `db:migration:test` commands for testing the full Drizzle generate/migrate workflow from a recreated development database.
 - Added a standard `db:reset:push` command that drops Mina-owned development tables and immediately re-syncs the Drizzle schema.
