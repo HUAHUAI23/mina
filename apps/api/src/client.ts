@@ -1,9 +1,8 @@
 import type {
-  CreatePostInput,
-  DeletePostResponse,
-  PostListResponse,
-  PostResponse,
-} from '@mina/contracts/modules/posts'
+  AuthResponse,
+  LoginInput,
+  RegisterInput,
+} from '@mina/contracts/modules/accounts'
 import type {
   CancelTaskResponse,
   CreateTaskInput,
@@ -34,6 +33,12 @@ type JsonEndpoint<Input, Output, Status extends number = 200> = {
 }
 
 type ClientSchema = {
+  '/api/auth/login': {
+    $post: JsonEndpoint<{ json: LoginInput }, AuthResponse>
+  }
+  '/api/auth/register': {
+    $post: JsonEndpoint<{ json: RegisterInput }, AuthResponse, 201>
+  }
   '/api/health': {
     $get: JsonEndpoint<
       {},
@@ -43,14 +48,6 @@ type ClientSchema = {
         timestamp: string
       }
     >
-  }
-  '/api/posts': {
-    $get: JsonEndpoint<{}, PostListResponse>
-    $post: JsonEndpoint<{ json: CreatePostInput }, PostResponse, 201>
-  }
-  '/api/posts/:id': {
-    $get: JsonEndpoint<{ param: { id: string } }, PostResponse>
-    $delete: JsonEndpoint<{ param: { id: string } }, DeletePostResponse>
   }
   '/api/tasks': {
     $get: JsonEndpoint<{}, TaskListResponse>

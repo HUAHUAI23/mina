@@ -16,9 +16,9 @@
       "types": "./src/modules/canvas/canvas.schemas.ts",
       "default": "./src/modules/canvas/canvas.schemas.ts"
     },
-    "./modules/posts": {
-      "types": "./src/modules/posts/post.schemas.ts",
-      "default": "./src/modules/posts/post.schemas.ts"
+    "./modules/media": {
+      "types": "./src/modules/media/media.schemas.ts",
+      "default": "./src/modules/media/media.schemas.ts"
     },
     "./modules/pricing": {
       "types": "./src/modules/pricing/pricing.schemas.ts",
@@ -31,6 +31,10 @@
     "./modules/workflows": {
       "types": "./src/modules/workflows/workflow.schemas.ts",
       "default": "./src/modules/workflows/workflow.schemas.ts"
+    },
+    "./schemas/api-error": {
+      "types": "./src/schemas/api-error.schemas.ts",
+      "default": "./src/schemas/api-error.schemas.ts"
     }
   },
   "scripts": {

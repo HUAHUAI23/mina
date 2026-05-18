@@ -1,71 +1,90 @@
-import { apiEnv } from '../config/env'
 import { createDbClient } from '../db/client'
 import { createObjectStorage } from '../lib/storage/create-object-storage'
 import type { ObjectStorage } from '../lib/storage/object-storage'
-import { createSeedPosts } from '../modules/posts/posts.data'
-import { InMemoryPostRepository } from '../modules/posts/posts.repository'
-import { PostsService } from '../modules/posts/posts.service'
+import { DrizzleAccountsRepository } from '../modules/accounts/accounts.drizzle-repository'
+import { AccountsService } from '../modules/accounts/accounts.service'
+import { DrizzleMediaObjectRepository } from '../modules/media/media-object.drizzle-repository'
+import { MediaObjectService } from '../modules/media/media-object.service'
+import { FetchRemoteMediaFetcher } from '../modules/media/remote-media-fetcher'
 import { DrizzlePricingRepository } from '../modules/pricing/pricing.drizzle-repository'
-import { InMemoryPricingRepository } from '../modules/pricing/pricing.repository'
 import { PricingService } from '../modules/pricing/pricing.service'
-import { DrizzleTaskEventLog, InMemoryTaskEventLog } from '../modules/tasks/task-events'
+import { TaskConfigAssembler } from '../modules/tasks/config/task-config-assembler'
+import { ModelRegistry } from '../modules/tasks/models/model-registry'
+import { ProviderRouter } from '../modules/tasks/models/provider-router'
+import { registerTaskModels } from '../modules/tasks/models/register-models'
+import { OutputPostProcessor } from '../modules/tasks/output/output-post-processor'
+import { TaskOutputFinalizer } from '../modules/tasks/output/task-output-finalizer'
+import { FfmpegVideoFrameGenerator } from '../modules/tasks/output/video-frame-generator'
+import { DrizzleTaskEventLog } from '../modules/tasks/task-events'
 import { DrizzleTaskRepository } from '../modules/tasks/tasks.drizzle-repository'
-import { DevTaskProvider } from '../modules/tasks/providers/dev.provider'
-import { TaskProviderRegistry } from '../modules/tasks/providers/registry'
-import { InMemoryTaskRepository } from '../modules/tasks/tasks.repository'
 import { TasksService } from '../modules/tasks/tasks.service'
-import { DrizzleWorkflowRunEventLog, InMemoryWorkflowRunEventLog } from '../modules/workflows/workflow-events'
-import { DrizzleWorkflowRepository } from '../modules/workflows/workflows.drizzle-repository'
-import { InMemoryWorkflowRepository } from '../modules/workflows/workflows.repository'
+import { DrizzleWorkflowRunEventLog } from '../modules/workflows/workflow-events'
+import { WorkflowMediaResolver } from '../modules/workflows/media/workflow-media-resolver'
+import {
+  DrizzleWorkflowDefinitionRepository,
+  DrizzleWorkflowNodeTaskRepository,
+  DrizzleWorkflowRunNodeStateRepository,
+  DrizzleWorkflowRunRepository,
+} from '../modules/workflows/workflows.drizzle-repository'
 import { WorkflowsService } from '../modules/workflows/workflows.service'
 
 export interface AppDependencies {
-  postsService: PostsService
+  accountsService: AccountsService
   storage: ObjectStorage
   tasksService: TasksService
   workflowsService: WorkflowsService
 }
 
 export const createAppDependencies = (): AppDependencies => {
-  const postRepository = new InMemoryPostRepository(createSeedPosts())
-  const repositories =
-    apiEnv.persistenceDriver === 'postgres'
-      ? (() => {
-          const db = createDbClient()
-          return {
-            pricingRepository: new DrizzlePricingRepository(db),
-            taskEventLog: new DrizzleTaskEventLog(db),
-            taskRepository: new DrizzleTaskRepository(db),
-            workflowRunEventLog: new DrizzleWorkflowRunEventLog(db),
-            workflowRepository: new DrizzleWorkflowRepository(db),
-          }
-        })()
-      : {
-          pricingRepository: new InMemoryPricingRepository(),
-          taskEventLog: new InMemoryTaskEventLog(),
-          taskRepository: new InMemoryTaskRepository(),
-          workflowRunEventLog: new InMemoryWorkflowRunEventLog(),
-          workflowRepository: new InMemoryWorkflowRepository(),
-        }
+  const db = createDbClient()
+  const accountsRepository = new DrizzleAccountsRepository(db)
+  const runs = new DrizzleWorkflowRunRepository(db)
+  const repositories = {
+    pricingRepository: new DrizzlePricingRepository(db),
+    mediaObjectRepository: new DrizzleMediaObjectRepository(db),
+    taskEventLog: new DrizzleTaskEventLog(db),
+    taskRepository: new DrizzleTaskRepository(db),
+    workflowRunEventLog: new DrizzleWorkflowRunEventLog(db),
+    workflowRepositories: {
+      definitions: new DrizzleWorkflowDefinitionRepository(db),
+      nodeStates: new DrizzleWorkflowRunNodeStateRepository(db),
+      nodeTasks: new DrizzleWorkflowNodeTaskRepository(db),
+      runs,
+    },
+  }
 
   const pricingService = new PricingService(repositories.pricingRepository)
   const storage = createObjectStorage()
+  const mediaObjectService = new MediaObjectService(
+    repositories.mediaObjectRepository,
+    storage,
+    new FetchRemoteMediaFetcher(),
+  )
+  const modelRegistry = registerTaskModels(new ModelRegistry())
+  const taskConfigAssembler = new TaskConfigAssembler(modelRegistry)
+  const taskProvider = new ProviderRouter(modelRegistry)
+  const outputFinalizer = new TaskOutputFinalizer(mediaObjectService)
+  const outputPostProcessor = new OutputPostProcessor(new FfmpegVideoFrameGenerator(mediaObjectService))
   const tasksService = new TasksService(
     repositories.taskRepository,
     pricingService,
-    new TaskProviderRegistry({
-      dev: new DevTaskProvider(),
-    }),
+    taskProvider,
+    modelRegistry,
+    outputFinalizer,
+    outputPostProcessor,
     repositories.taskEventLog,
   )
+  const workflowMediaResolver = new WorkflowMediaResolver(mediaObjectService, tasksService)
   const workflowsService = new WorkflowsService(
-    repositories.workflowRepository,
+    repositories.workflowRepositories,
     tasksService,
+    taskConfigAssembler,
+    workflowMediaResolver,
     repositories.workflowRunEventLog,
   )
 
   return {
-    postsService: new PostsService(postRepository),
+    accountsService: new AccountsService(accountsRepository),
     storage,
     tasksService,
     workflowsService,

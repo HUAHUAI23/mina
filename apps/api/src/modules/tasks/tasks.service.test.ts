@@ -1,12 +1,59 @@
 import { describe, expect, test } from 'bun:test'
+import type { TaskConfig } from '@mina/contracts/modules/tasks'
 
-import { InMemoryPricingRepository } from '../pricing/pricing.repository'
+import {
+  FakeMediaObjectRepository,
+  FakeObjectStorage,
+  FakePricingRepository,
+  FakeTaskEventLog,
+  FakeTaskRepository,
+} from '../../test/fakes'
+import { MediaObjectService } from '../media/media-object.service'
 import { PricingService } from '../pricing/pricing.service'
-import { InMemoryTaskEventLog } from './task-events'
-import { DevTaskProvider } from './providers/dev.provider'
+import { ModelRegistry } from './models/model-registry'
+import { ProviderRouter } from './models/provider-router'
+import { registerTaskModels } from './models/register-models'
+import { OutputPostProcessor } from './output/output-post-processor'
+import { TaskOutputFinalizer } from './output/task-output-finalizer'
+import { DeterministicVideoFrameGenerator } from './output/video-frame-generator'
 import type { TaskProvider } from './providers/provider'
-import { InMemoryTaskRepository } from './tasks.repository'
 import { TasksService } from './tasks.service'
+
+const imageConfig = (count = 1): TaskConfig => ({
+  kind: 'image_generation',
+  provider: 'dev',
+  model: 'dev-image',
+  prompt: 'image',
+  media: {
+    inputImages: [],
+    referenceImages: [],
+    referenceAudios: [],
+    referenceVideos: [],
+  },
+  params: {
+    count,
+    size: '1024x1024',
+  },
+})
+
+const videoConfig = (params: Record<string, unknown> = {}): TaskConfig => ({
+  kind: 'video_generation',
+  provider: 'dev',
+  model: 'dev-video',
+  prompt: 'video',
+  media: {
+    inputImages: [],
+    referenceImages: [],
+    referenceAudios: [],
+    referenceVideos: [],
+  },
+  params: {
+    durationSeconds: 2,
+    outputLastFrame: false,
+    resolution: '720p',
+    ...params,
+  },
+})
 
 const videoOutput = (taskId: string) => ({
   resources: [
@@ -23,17 +70,32 @@ const videoOutput = (taskId: string) => ({
   },
 })
 
-const createService = (taskProvider: TaskProvider = new DevTaskProvider()) => {
-  const taskEventLog = new InMemoryTaskEventLog()
-  const taskRepository = new InMemoryTaskRepository()
+const createService = (taskProvider?: TaskProvider) => {
+  const taskEventLog = new FakeTaskEventLog()
+  const taskRepository = new FakeTaskRepository()
+  const modelRegistry = registerTaskModels(new ModelRegistry())
+  const mediaObjectService = new MediaObjectService(
+    new FakeMediaObjectRepository(),
+    new FakeObjectStorage(),
+    {
+      fetch: async () => {
+        throw new Error('fetcher not configured')
+      },
+    },
+  )
   const tasksService = new TasksService(
     taskRepository,
-    new PricingService(new InMemoryPricingRepository()),
-    taskProvider,
+    new PricingService(new FakePricingRepository()),
+    taskProvider ?? new ProviderRouter(modelRegistry),
+    modelRegistry,
+    new TaskOutputFinalizer(mediaObjectService),
+    new OutputPostProcessor(
+      new DeterministicVideoFrameGenerator(mediaObjectService),
+    ),
     taskEventLog,
   )
 
-  return { taskEventLog, tasksService }
+  return { mediaObjectService, taskEventLog, taskRepository, tasksService }
 }
 
 describe('TasksService event logging', () => {
@@ -41,15 +103,7 @@ describe('TasksService event logging', () => {
     const { tasksService } = createService()
     const task = await tasksService.createTask({
       accountId: 'account',
-      config: {
-        kind: 'image_generation',
-        mode: 'text_to_image',
-        provider: 'dev',
-        model: 'dev-image',
-        prompt: 'image',
-        size: '1024x1024',
-        count: 3,
-      },
+      config: imageConfig(3),
     })
 
     expect(task.cost.usage).toEqual({
@@ -63,22 +117,18 @@ describe('TasksService event logging', () => {
     const { taskEventLog, tasksService } = createService()
     const task = await tasksService.createTask({
       accountId: 'account',
-      config: {
-        kind: 'image_generation',
-        mode: 'text_to_image',
-        provider: 'dev',
-        model: 'dev-image',
-        prompt: 'image',
-        size: '1024x1024',
-        count: 1,
-      },
+      config: imageConfig(),
     })
 
     const completed = await tasksService.runTask(task.id)
     expect(completed.status).toBe('succeeded')
 
     const events = await taskEventLog.listEvents(task.id)
-    expect(events.map((event) => event.eventType)).toEqual(['task.created', 'task.started', 'task.succeeded'])
+    expect(events.map((event) => event.eventType)).toEqual([
+      'task.created',
+      'task.started',
+      'task.succeeded',
+    ])
     expect(events[0]?.payload).toMatchObject({
       estimatedCost: 1,
       status: 'queued',
@@ -93,15 +143,7 @@ describe('TasksService event logging', () => {
     const { tasksService } = createService()
     const input = {
       accountId: 'account',
-      config: {
-        kind: 'image_generation' as const,
-        mode: 'text_to_image' as const,
-        provider: 'dev',
-        model: 'dev-image',
-        prompt: 'image',
-        size: '1024x1024',
-        count: 1,
-      },
+      config: imageConfig(),
     }
 
     const first = await tasksService.createTask(input)
@@ -110,19 +152,28 @@ describe('TasksService event logging', () => {
     expect(second.id).not.toBe(first.id)
   })
 
+  test('returns the existing task for duplicate idempotency keys', async () => {
+    const { taskEventLog, taskRepository, tasksService } = createService()
+    const input = {
+      accountId: 'account',
+      config: imageConfig(),
+      idempotencyKey: 'workflow_run:run_a:node:image',
+    }
+
+    const first = await tasksService.createTask(input)
+    const second = await tasksService.createTask(input)
+
+    expect(second.id).toBe(first.id)
+    expect(second.idempotencyKey).toBe(input.idempotencyKey)
+    expect(await taskRepository.list()).toHaveLength(1)
+    expect(await taskEventLog.listEvents(first.id)).toHaveLength(1)
+  })
+
   test('starts queued tasks from the background worker path', async () => {
-    const { taskEventLog, tasksService } = createService()
+    const { taskEventLog, taskRepository, tasksService } = createService()
     const task = await tasksService.createTask({
       accountId: 'account',
-      config: {
-        kind: 'image_generation',
-        mode: 'text_to_image',
-        provider: 'dev',
-        model: 'dev-image',
-        prompt: 'image',
-        size: '1024x1024',
-        count: 1,
-      },
+      config: imageConfig(),
     })
 
     const [completed] = await tasksService.startQueuedTasks()
@@ -130,11 +181,73 @@ describe('TasksService event logging', () => {
     expect(completed?.id).toBe(task.id)
     expect(completed?.status).toBe('succeeded')
     expect(completed?.output?.resources[0]?.role).toBe('generated_image')
-    expect((await taskEventLog.listEvents(task.id)).map((event) => event.eventType)).toEqual([
-      'task.created',
-      'task.started',
-      'task.succeeded',
-    ])
+    expect(completed?.output?.resources[0]?.mediaObjectId).toMatch(/^media_/)
+    expect(completed?.output?.resources[0]?.url).toContain('/media/')
+    const outputResources = (
+      await taskRepository.listResources(task.id)
+    ).filter((resource) => resource.direction === 'output')
+    expect(outputResources[0]?.mediaObjectId).toBe(
+      completed?.output?.resources[0]?.mediaObjectId,
+    )
+    expect(
+      (await taskEventLog.listEvents(task.id)).map((event) => event.eventType),
+    ).toEqual(['task.created', 'task.started', 'task.succeeded'])
+  })
+
+  test('validates standalone task media through the model spec before creation', async () => {
+    const { tasksService } = createService()
+
+    await expect(
+      tasksService.createTask({
+        accountId: 'account',
+        config: {
+          kind: 'video_generation',
+          provider: 'google',
+          model: 'veo-3.1-generate-preview',
+          prompt: 'video',
+          media: {
+            inputImages: [],
+            lastFrame: {
+              kind: 'image',
+              role: 'last_frame',
+              url: 'data:image/png;base64,abc',
+            },
+            referenceImages: [],
+            referenceAudios: [],
+            referenceVideos: [],
+          },
+          params: {},
+        },
+      }),
+    ).rejects.toThrow('lastFrame requires firstFrame')
+  })
+
+  test('validates standalone task media capabilities before creation', async () => {
+    const { tasksService } = createService()
+    const referenceImages = Array.from({ length: 4 }, (_unused, index) => ({
+      kind: 'image' as const,
+      role: 'reference_image' as const,
+      url: `data:image/png;base64,${index}`,
+    }))
+
+    await expect(
+      tasksService.createTask({
+        accountId: 'account',
+        config: {
+          kind: 'video_generation',
+          provider: 'google',
+          model: 'veo-3.1-generate-preview',
+          prompt: 'video',
+          media: {
+            inputImages: [],
+            referenceAudios: [],
+            referenceImages,
+            referenceVideos: [],
+          },
+          params: {},
+        },
+      }),
+    ).rejects.toThrow('supports at most 3')
   })
 
   test('retries provider start transport errors without failing the task immediately', async () => {
@@ -151,15 +264,7 @@ describe('TasksService event logging', () => {
     const { taskEventLog, tasksService } = createService(failingProvider)
     const task = await tasksService.createTask({
       accountId: 'account',
-      config: {
-        kind: 'image_generation',
-        mode: 'text_to_image',
-        provider: 'dev',
-        model: 'dev-image',
-        prompt: 'image',
-        size: '1024x1024',
-        count: 1,
-      },
+      config: imageConfig(),
     })
 
     const retried = await tasksService.startQueuedTasks()
@@ -171,7 +276,11 @@ describe('TasksService event logging', () => {
       message: 'Provider failed.',
     })
     const events = await taskEventLog.listEvents(task.id)
-    expect(events.map((event) => event.eventType)).toEqual(['task.created', 'task.started', 'task.start.retry'])
+    expect(events.map((event) => event.eventType)).toEqual([
+      'task.created',
+      'task.started',
+      'task.start.retry',
+    ])
     expect(events[2]?.payload).toMatchObject({
       retryCount: 1,
       status: 'queued',
@@ -207,18 +316,7 @@ describe('TasksService event logging', () => {
     const { taskEventLog, tasksService } = createService(asyncProvider)
     const task = await tasksService.createTask({
       accountId: 'account',
-      config: {
-        kind: 'video_generation',
-        provider: 'dev',
-        model: 'dev-video',
-        prompt: 'video',
-        resolution: '720p',
-        durationSeconds: 2,
-        referenceImages: [],
-        referenceAudios: [],
-        referenceVideos: [],
-        outputLastFrame: false,
-      },
+      config: videoConfig(),
     })
 
     const [submitted] = await tasksService.startQueuedTasks()
@@ -234,6 +332,13 @@ describe('TasksService event logging', () => {
     const [completed] = await tasksService.pollAsyncTasks()
     expect(completed?.status).toBe('succeeded')
     expect(completed?.output?.resources[0]?.role).toBe('generated_video')
+    expect(completed?.output?.resources[0]?.mediaObjectId).toMatch(/^media_/)
+    expect(completed?.output?.resources[1]?.role).toBe('first_frame')
+    expect(completed?.output?.resources[1]?.mediaObjectId).toMatch(/^media_/)
+    expect(completed?.output?.resources[2]?.role).toBe('last_frame')
+    expect(completed?.output?.resources[2]?.mediaObjectId).toMatch(/^media_/)
+    expect(completed?.output?.resources[3]?.role).toBe('video_cover')
+    expect(completed?.output?.resources[3]?.mediaObjectId).toMatch(/^media_/)
 
     const events = await taskEventLog.listEvents(task.id)
     expect(events.map((event) => event.eventType)).toEqual([
@@ -260,18 +365,7 @@ describe('TasksService event logging', () => {
     const { taskEventLog, tasksService } = createService(flakyProvider)
     const task = await tasksService.createTask({
       accountId: 'account',
-      config: {
-        kind: 'video_generation',
-        provider: 'dev',
-        model: 'dev-video',
-        prompt: 'video',
-        resolution: '720p',
-        durationSeconds: 2,
-        referenceImages: [],
-        referenceAudios: [],
-        referenceVideos: [],
-        outputLastFrame: false,
-      },
+      config: videoConfig(),
     })
 
     await tasksService.startQueuedTasks()

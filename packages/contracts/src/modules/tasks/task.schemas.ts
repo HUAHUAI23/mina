@@ -1,11 +1,14 @@
 import { z } from 'zod'
 
+import { MediaSlotNameSchema } from '../media/slot.schemas'
+
 export const IsoDateTimeSchema = z.string().datetime()
 
 export const ResourceKindSchema = z.enum(['image', 'video', 'audio'])
 export const ResourceRoleSchema = z.enum([
   'generated_image',
   'generated_video',
+  'video_cover',
   'last_frame',
   'first_frame',
   'reference_image',
@@ -29,19 +32,38 @@ export const ResourceRefSchema = z.object({
   metadata: ResourceMetadataSchema.optional(),
 })
 
-export const MediaInputSourceSchema = z.object({
-  workflowId: z.string().min(1).optional(),
-  workflowRunId: z.string().min(1).optional(),
-  nodeId: z.string().min(1).optional(),
-  taskId: z.string().min(1).optional(),
-  outputResourceId: z.string().min(1).optional(),
-  outputIndex: z.number().int().min(0).optional(),
-})
+export const MediaInputSourceSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('media_object'),
+    mediaObjectId: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal('workflow_current_media'),
+    workflowId: z.string().min(1),
+    nodeId: z.string().min(1),
+    taskId: z.string().min(1),
+    outputResourceId: z.string().min(1).optional(),
+    outputIndex: z.number().int().min(0).optional(),
+  }),
+  z.object({
+    type: z.literal('workflow_run_output'),
+    workflowId: z.string().min(1),
+    workflowRunId: z.string().min(1),
+    nodeId: z.string().min(1),
+    taskId: z.string().min(1).optional(),
+    outputResourceId: z.string().min(1).optional(),
+    outputIndex: z.number().int().min(0).optional(),
+  }),
+  z.object({
+    type: z.literal('external_url'),
+  }),
+])
 
 export const MediaInputSchema = z.object({
   kind: ResourceKindSchema,
   url: z.string().min(1),
   role: ResourceRoleSchema,
+  mediaObjectId: z.string().min(1).optional(),
   source: MediaInputSourceSchema.optional(),
   metadata: ResourceMetadataSchema.optional(),
 })
@@ -52,8 +74,11 @@ export const NodeOutputResourceSchema = z.object({
   role: ResourceRoleSchema,
   index: z.number().int().min(0),
   url: z.string().min(1),
+  mediaObjectId: z.string().min(1).optional(),
   metadata: ResourceMetadataSchema.optional(),
 })
+
+export const TaskResourceSourceSchema = MediaInputSourceSchema
 
 export const NodeExecutionOutputSchema = z.object({
   resources: z.array(NodeOutputResourceSchema),
@@ -61,54 +86,42 @@ export const NodeExecutionOutputSchema = z.object({
     .object({
       imageUrls: z.array(z.string()).optional(),
       videoUrls: z.array(z.string()).optional(),
+      videoCoverUrls: z.array(z.string()).optional(),
       audioUrls: z.array(z.string()).optional(),
+      firstFrameUrls: z.array(z.string()).optional(),
       lastFrameUrls: z.array(z.string()).optional(),
       actualCost: z.number().nonnegative().optional(),
     })
     .default({}),
 })
 
-export const ImageGenerationConfigSchema = z.discriminatedUnion('mode', [
-  z.object({
-    kind: z.literal('image_generation'),
-    mode: z.literal('text_to_image'),
-    provider: z.string().min(1),
-    model: z.string().min(1),
-    prompt: z.string().min(1),
-    size: z.string().min(1),
-    count: z.number().int().min(1).max(16).default(1),
-  }),
-  z.object({
-    kind: z.literal('image_generation'),
-    mode: z.literal('image_to_image'),
-    provider: z.string().min(1),
-    model: z.string().min(1),
-    prompt: z.string().min(1),
-    size: z.string().min(1),
-    count: z.number().int().min(1).max(16).default(1),
-    inputImages: z.array(MediaInputSchema).min(1),
-  }),
-])
+export const TaskMediaConfigSchema = z
+  .object({
+    inputImages: z.array(MediaInputSchema).default([]),
+    firstFrame: MediaInputSchema.optional(),
+    lastFrame: MediaInputSchema.optional(),
+    referenceImages: z.array(MediaInputSchema).default([]),
+    referenceAudios: z.array(MediaInputSchema).default([]),
+    referenceVideos: z.array(MediaInputSchema).default([]),
+  })
+  .default({
+    inputImages: [],
+    referenceImages: [],
+    referenceAudios: [],
+    referenceVideos: [],
+  })
 
-export const VideoGenerationConfigSchema = z.object({
-  kind: z.literal('video_generation'),
+export const TaskDraftConfigSchema = z.object({
+  kind: TaskKindSchema,
   provider: z.string().min(1),
   model: z.string().min(1),
   prompt: z.string().min(1),
-  resolution: z.string().min(1),
-  durationSeconds: z.number().int().min(1),
-  firstFrame: MediaInputSchema.optional(),
-  lastFrame: MediaInputSchema.optional(),
-  referenceImages: z.array(MediaInputSchema).default([]),
-  referenceAudios: z.array(MediaInputSchema).default([]),
-  referenceVideos: z.array(MediaInputSchema).default([]),
-  outputLastFrame: z.boolean().default(false),
+  params: z.record(z.string(), z.unknown()).default({}),
 })
 
-export const TaskConfigSchema = z.discriminatedUnion('kind', [
-  ImageGenerationConfigSchema,
-  VideoGenerationConfigSchema,
-])
+export const TaskConfigSchema = TaskDraftConfigSchema.extend({
+  media: TaskMediaConfigSchema,
+})
 
 export const TaskUsageSchema = z.object({
   metric: BillingMetricSchema,
@@ -130,11 +143,17 @@ export const TaskResourceSchema = z.object({
   url: z.string().min(1),
   role: ResourceRoleSchema.optional(),
   outputIndex: z.number().int().min(0).optional(),
+  mediaObjectId: z.string().min(1).optional(),
+  slot: MediaSlotNameSchema.optional(),
+  slotItemId: z.string().min(1).optional(),
+  slotOrder: z.number().int().nonnegative().optional(),
+  source: TaskResourceSourceSchema.optional(),
   metadata: ResourceMetadataSchema.optional(),
 })
 
 export const TaskSchema = z.object({
   id: z.string().min(1),
+  idempotencyKey: z.string().min(1).optional(),
   accountId: z.string().min(1),
   kind: TaskKindSchema,
   mode: TaskModeSchema,
@@ -170,7 +189,6 @@ export const TaskParamsSchema = z.object({
 
 export const CreateTaskSchema = z.object({
   config: TaskConfigSchema,
-  inputResources: z.array(MediaInputSchema).default([]),
 })
 
 export const TaskListResponseSchema = z.object({
@@ -192,7 +210,6 @@ export const CancelTaskResponseSchema = z.object({
 export type BillingMetric = z.infer<typeof BillingMetricSchema>
 export type CancelTaskResponse = z.infer<typeof CancelTaskResponseSchema>
 export type CreateTaskInput = z.infer<typeof CreateTaskSchema>
-export type ImageGenerationConfig = z.infer<typeof ImageGenerationConfigSchema>
 export type MediaInput = z.infer<typeof MediaInputSchema>
 export type MediaInputSource = z.infer<typeof MediaInputSourceSchema>
 export type NodeExecutionOutput = z.infer<typeof NodeExecutionOutputSchema>
@@ -202,13 +219,15 @@ export type ResourceRef = z.infer<typeof ResourceRefSchema>
 export type ResourceRole = z.infer<typeof ResourceRoleSchema>
 export type Task = z.infer<typeof TaskSchema>
 export type TaskConfig = z.infer<typeof TaskConfigSchema>
+export type TaskDraftConfig = z.infer<typeof TaskDraftConfigSchema>
+export type TaskMediaConfig = z.infer<typeof TaskMediaConfigSchema>
 export type TaskKind = z.infer<typeof TaskKindSchema>
 export type TaskListResponse = z.infer<typeof TaskListResponseSchema>
 export type TaskMode = z.infer<typeof TaskModeSchema>
 export type TaskParams = z.infer<typeof TaskParamsSchema>
 export type TaskResource = z.infer<typeof TaskResourceSchema>
+export type TaskResourceSource = z.infer<typeof TaskResourceSourceSchema>
 export type TaskResourceListResponse = z.infer<typeof TaskResourceListResponseSchema>
 export type TaskResponse = z.infer<typeof TaskResponseSchema>
 export type TaskStatus = z.infer<typeof TaskStatusSchema>
 export type TaskUsage = z.infer<typeof TaskUsageSchema>
-export type VideoGenerationConfig = z.infer<typeof VideoGenerationConfigSchema>

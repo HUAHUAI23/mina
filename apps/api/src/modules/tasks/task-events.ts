@@ -17,8 +17,6 @@ export interface TaskEventLog {
 
 const createId = (prefix: string): string => `${prefix}_${crypto.randomUUID()}`
 
-const cloneEvent = (event: TaskEventInput): TaskEventInput => structuredClone(event)
-
 export const taskEventPayload = (task: Task): Record<string, unknown> => ({
   kind: task.kind,
   mode: task.mode,
@@ -29,18 +27,6 @@ export const taskEventPayload = (task: Task): Record<string, unknown> => ({
 
 export class NoopTaskEventLog implements TaskEventLog {
   async record(_input: TaskEventInput): Promise<void> {}
-}
-
-export class InMemoryTaskEventLog implements TaskEventLog {
-  readonly #events: TaskEventInput[] = []
-
-  async listEvents(taskId: string): Promise<TaskEventInput[]> {
-    return this.#events.filter((event) => event.taskId === taskId).map(cloneEvent)
-  }
-
-  async record(input: TaskEventInput): Promise<void> {
-    this.#events.push(cloneEvent(input))
-  }
 }
 
 export class DrizzleTaskEventLog implements TaskEventLog {

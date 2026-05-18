@@ -7,10 +7,10 @@ describe('storage keys', () => {
     expect(
       buildAccountStorageKey({
         accountId: 'account_1',
-        objectName: 'task-1/output image.png',
-        scope: 'task-outputs',
+        objectName: 'media_1/original image.png',
+        scope: 'media',
       }),
-    ).toBe('users/account_1/task-outputs/task-1/output%20image.png')
+    ).toBe('users/account_1/media/media_1/original%20image.png')
   })
 
   test('rejects traversal and cross-account keys', () => {

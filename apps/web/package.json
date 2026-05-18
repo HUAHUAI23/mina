@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "bun run typecheck && vite build",
-    "typecheck": "tsc -b tsconfig.json",
+    "dev": "bun run routes:generate && vite",
+    "build": "bun run routes:generate && tsc -b tsconfig.json && vite build",
+    "routes:generate": "tsr generate",
+    "typecheck": "bun run routes:generate && tsc -b tsconfig.json",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -15,7 +16,11 @@
     "@mina/ui": "workspace:*",
     "@t3-oss/env-core": "catalog:",
     "@tanstack/react-query": "catalog:",
+    "@tanstack/react-router": "^1.170.3",
+    "@tanstack/react-router-devtools": "^1.167.0",
+    "@tanstack/router-plugin": "^1.168.5",
     "hono": "catalog:",
+    "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "zod": "catalog:"
@@ -28,6 +33,7 @@
   "devDependencies": {
     "@mina/typescript-config": "workspace:*",
     "@tailwindcss/vite": "catalog:",
+    "@tanstack/router-cli": "^1.167.4",
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",

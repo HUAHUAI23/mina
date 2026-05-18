@@ -1,232 +1,193 @@
-import type {
-  MediaInput,
-  NodeOutputResource,
-  ResourceRef,
-  TaskConfig,
-} from '@mina/contracts/modules/tasks'
-import type { MediaSlotConnection, WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
-import type { WorkflowRun } from '@mina/contracts/modules/workflows'
+import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
+import type { MediaSlotName } from '@mina/contracts/modules/media'
+import type { MediaInput, TaskConfig } from '@mina/contracts/modules/tasks'
 
+import type { TaskConfigAssembler } from '../tasks/config/task-config-assembler'
 import type { TasksService } from '../tasks/tasks.service'
-import { getIncomingEdges, getNodeMap, isMediaWorkflowNode } from './graph'
-import {
-  findOutputByMediaView,
-  findOutputBySelector,
-  isNodeOutputResource,
-  mediaInputFromOutput,
-  mediaInputFromResourceRef,
-  type ResolvedMediaInput,
-  slotToInputRole,
-  slotToResourceKind,
-} from './media-selection'
-import { workflowNodeRunningState, workflowNodeSucceededState } from './run-state'
-import { buildImageTaskConfig, buildVideoTaskConfig, collectInputResources } from './task-config'
+import type { WorkflowMediaResolver } from './media/workflow-media-resolver'
+import type { WorkflowNodeTaskRepository } from './repositories/workflow-node-task.repository'
+import type { WorkflowRunNodeStateRepository } from './repositories/workflow-run-node-state.repository'
+import type { WorkflowRunRecord } from './repositories/workflow-types'
+import { buildMediaEnvelope } from './task-config'
 import { workflowRunEventPayload, type WorkflowRunEventLog } from './workflow-events'
-import type { WorkflowRepository } from './workflows.repository'
 
-export interface ExecuteNodeResult {
-  run: WorkflowRun
+export interface StartNodeInput {
+  edges: WorkflowCanvasEdge[]
+  getSourceNode(nodeId: string): Promise<WorkflowCanvasNode | undefined>
+  node: WorkflowCanvasNode
+  run: WorkflowRunRecord
+}
+
+export interface StartNodeResult {
+  error?: string
   progressed: boolean
 }
 
 interface WorkflowNodeExecutorDependencies {
-  failRun(run: WorkflowRun, message: string, nodeId?: string): Promise<WorkflowRun>
+  nodeStates: WorkflowRunNodeStateRepository
+  nodeTasks: WorkflowNodeTaskRepository
+  taskConfigAssembler: TaskConfigAssembler
   tasksService: TasksService
-  workflowRepository: WorkflowRepository
+  workflowMediaResolver: WorkflowMediaResolver
   workflowRunEventLog: WorkflowRunEventLog
 }
 
 export class WorkflowNodeExecutor {
   constructor(private readonly dependencies: WorkflowNodeExecutorDependencies) {}
 
-  async executeNode(run: WorkflowRun, node: WorkflowCanvasNode): Promise<ExecuteNodeResult> {
-    const currentState = run.nodeStates[node.id]
-    if (currentState?.status === 'succeeded') {
-      return { run, progressed: false }
+  async observeRunningNode(input: {
+    node: WorkflowCanvasNode
+    run: WorkflowRunRecord
+    taskId: string
+  }): Promise<StartNodeResult> {
+    const task = await this.dependencies.tasksService.getTask(input.taskId)
+    const timestamp = new Date().toISOString()
+    if (task.status === 'succeeded' && task.output) {
+      const updated = await this.dependencies.nodeStates.markNodeSucceeded({
+        workflowRunId: input.run.id,
+        nodeId: input.node.id,
+        taskId: task.id,
+        output: task.output,
+        completedAt: timestamp,
+      })
+      if (!updated) {
+        return { progressed: false }
+      }
+      await this.recordWorkflowRunEvent(input.run, 'workflow.node.succeeded', 'Workflow node completed successfully.', {
+        nodeId: input.node.id,
+        outputResourceCount: task.output.resources.length,
+        taskId: task.id,
+      })
+      return { progressed: true }
     }
 
-    if (currentState?.status === 'running' && currentState.taskId) {
-      const task = await this.dependencies.tasksService.getTask(currentState.taskId)
-      if (task.status === 'succeeded' && task.output) {
-        const nextRun = await this.dependencies.workflowRepository.updateRunNodeState(
-          run.id,
-          node.id,
-          workflowNodeSucceededState(currentState, task.output),
-        )
-        await this.recordWorkflowRunEvent(nextRun, 'workflow.node.succeeded', 'Workflow node completed successfully.', {
-          nodeId: node.id,
-          outputResourceCount: task.output.resources.length,
-          taskId: task.id,
-        })
-        return { run: nextRun, progressed: true }
+    if (task.status === 'failed' || task.status === 'cancelled') {
+      const message = `Task ${task.id} ended with status ${task.status}.`
+      const updated = await this.dependencies.nodeStates.markNodeFailed({
+        workflowRunId: input.run.id,
+        nodeId: input.node.id,
+        taskId: task.id,
+        error: message,
+        completedAt: timestamp,
+      })
+      if (!updated) {
+        return { progressed: false }
       }
-
-      if (task.status === 'failed' || task.status === 'cancelled') {
-        const failedRun = await this.dependencies.failRun(run, `Task ${task.id} ended with status ${task.status}.`, node.id)
-        return { run: failedRun, progressed: true }
-      }
-
-      return { run, progressed: false }
+      await this.recordWorkflowRunEvent(input.run, 'workflow.node.failed', message, {
+        nodeId: input.node.id,
+        taskId: task.id,
+      })
+      return { error: message, progressed: true }
     }
 
+    return { progressed: false }
+  }
+
+  async startNode(input: StartNodeInput): Promise<StartNodeResult> {
     try {
-      const taskConfig = await this.buildTaskConfigForNode(run, node)
-      const inputResources = collectInputResources(taskConfig)
+      const canStart = await this.dependencies.nodeStates.tryMarkNodeStarting({
+        workflowRunId: input.run.id,
+        nodeId: input.node.id,
+      })
+      if (!canStart) {
+        return { progressed: false }
+      }
+
+      const taskConfig = await this.buildTaskConfigForNode(input)
       const task = await this.dependencies.tasksService.createTask({
-        accountId: run.accountId,
+        accountId: input.run.accountId,
         config: taskConfig,
-        inputResources,
+        idempotencyKey: `workflow_run:${input.run.id}:node:${input.node.id}`,
       })
-      await this.dependencies.workflowRepository.linkNodeTask({
-        workflowRunId: run.id,
-        nodeId: node.id,
-        taskId: task.id,
-      })
-      await this.recordWorkflowRunEvent(run, 'workflow.node.task_created', 'Workflow node task was created.', {
-        inputResourceCount: inputResources.length,
-        nodeId: node.id,
+      await this.dependencies.nodeTasks.linkNodeTask({
+        workflowRunId: input.run.id,
+        nodeId: input.node.id,
         taskId: task.id,
       })
 
-      const nextRun = await this.dependencies.workflowRepository.updateRunNodeState(
-        run.id,
-        node.id,
-        workflowNodeRunningState(task.id),
-      )
-      await this.recordWorkflowRunEvent(nextRun, 'workflow.node.started', 'Workflow node started running.', {
-        nodeId: node.id,
+      const startedAt = new Date().toISOString()
+      const marked = await this.dependencies.nodeStates.markNodeRunning({
+        workflowRunId: input.run.id,
+        nodeId: input.node.id,
+        taskId: task.id,
+        startedAt,
+      })
+      if (!marked) {
+        return { progressed: false }
+      }
+
+      const inputResourceCount = (await this.dependencies.tasksService.listTaskResources(task.id)).filter(
+        (resource) => resource.direction === 'input',
+      ).length
+      await this.recordWorkflowRunEvent(input.run, 'workflow.node.task_created', 'Workflow node task was created.', {
+        inputResourceCount,
+        nodeId: input.node.id,
+        taskId: task.id,
+      })
+      await this.recordWorkflowRunEvent(input.run, 'workflow.node.started', 'Workflow node started running.', {
+        nodeId: input.node.id,
         taskId: task.id,
       })
 
-      return { run: nextRun, progressed: true }
+      return { progressed: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Workflow node execution failed.'
-      const failedRun = await this.dependencies.failRun(run, message, node.id)
-      return { run: failedRun, progressed: true }
+      const updated = await this.dependencies.nodeStates.markNodeFailed({
+        workflowRunId: input.run.id,
+        nodeId: input.node.id,
+        error: message,
+        expectedStatus: 'pending',
+        completedAt: new Date().toISOString(),
+      })
+      if (!updated) {
+        return { progressed: false }
+      }
+      await this.recordWorkflowRunEvent(input.run, 'workflow.node.failed', message, {
+        nodeId: input.node.id,
+      })
+      return { error: message, progressed: true }
     }
   }
 
-  private async buildTaskConfigForNode(run: WorkflowRun, node: WorkflowCanvasNode): Promise<TaskConfig> {
+  private async buildTaskConfigForNode(input: StartNodeInput): Promise<TaskConfig> {
+    const { node, run } = input
     if (node.data.nodeType !== 'image_generation' && node.data.nodeType !== 'video_generation') {
       throw new Error('Node is not executable.')
     }
     if (!node.data.config.task) {
       throw new Error('Executable node is missing task config.')
     }
-
-    const inputs = await this.resolveIncomingMediaInputs(run, node)
-    if (node.data.nodeType === 'image_generation') {
-      return buildImageTaskConfig(
-        node.data.config.task,
-        inputs.filter((item) => item.targetSlot === 'inputImages').map((item) => item.input),
-      )
+    if (node.data.config.task.kind !== node.data.nodeType) {
+      throw new Error('Executable node task kind does not match node type.')
     }
 
-    if (node.data.config.task.kind !== 'video_generation') {
-      throw new Error('Video node task config is invalid.')
-    }
-
-    const inputsBySlot = inputs.reduce<Partial<Record<MediaSlotConnection['targetSlot'], MediaInput[]>>>(
+    const inputs = await this.dependencies.workflowMediaResolver.resolveNodeMedia({
+      node,
+      edges: input.edges,
+      getSourceNode: input.getSourceNode,
+      getSourceNodeState: (nodeId) => this.dependencies.nodeStates.getNodeState(run.id, nodeId),
+      run: {
+        id: run.id,
+        workflowId: run.workflowId,
+        accountId: run.accountId,
+        runMode: run.runMode,
+      },
+    })
+    const inputsBySlot = inputs.reduce<Partial<Record<MediaSlotName, MediaInput[]>>>(
       (accumulator, item) => ({
         ...accumulator,
-        [item.targetSlot]: [...(accumulator[item.targetSlot] ?? []), item.input],
+        [item.slot]: [...(accumulator[item.slot] ?? []), item.input],
       }),
       {},
     )
-    return buildVideoTaskConfig(node.data.config.task, inputsBySlot)
-  }
-
-  private async resolveIncomingMediaInputs(run: WorkflowRun, node: WorkflowCanvasNode): Promise<ResolvedMediaInput[]> {
-    const incomingEdges = getIncomingEdges(node.id, run.snapshotEdges)
-    const inputs: ResolvedMediaInput[] = []
-
-    for (const edge of incomingEdges) {
-      const resolved = await this.resolveEdgeMediaInput(run, edge)
-      if (resolved) {
-        inputs.push(resolved)
-      }
-    }
-
-    return inputs
-  }
-
-  private async resolveEdgeMediaInput(run: WorkflowRun, edge: WorkflowCanvasEdge): Promise<ResolvedMediaInput | null> {
-    const { connection } = edge.data
-    if (connection.sourceSelector.mode === 'empty') {
-      return null
-    }
-    if (connection.targetSlot === 'prompt') {
-      return null
-    }
-
-    const expectedKind = slotToResourceKind(connection.targetSlot)
-    const inputRole = slotToInputRole(connection.targetSlot)
-    let resource: NodeOutputResource | ResourceRef | undefined
-    let source: MediaInput['source']
-
-    if (connection.sourceSelector.mode === 'asset') {
-      resource = connection.sourceSelector.resource
-    } else if (connection.sourceSelector.mode === 'run_output') {
-      const sourceState = run.nodeStates[edge.source]
-      resource = sourceState?.output
-        ? findOutputBySelector(
-            sourceState.output,
-            connection.sourceSelector.resourceKind,
-            connection.sourceSelector.role,
-            connection.sourceSelector.index,
-          )
-        : undefined
-      source = {
-        workflowId: run.workflowId,
-        workflowRunId: run.id,
-        nodeId: edge.source,
-        ...(sourceState?.taskId ? { taskId: sourceState.taskId } : {}),
-        ...(resource?.id ? { outputResourceId: resource.id } : {}),
-        ...(resource?.index !== undefined ? { outputIndex: resource.index } : {}),
-      }
-    } else {
-      const sourceNode = getNodeMap(run.snapshotNodes).get(edge.source)
-      if (!sourceNode || !isMediaWorkflowNode(sourceNode) || !sourceNode.data.mediaView?.taskId) {
-        return this.handleMissingMedia(connection, 'Source node has no current MediaView output.')
-      }
-
-      const output = await this.dependencies.tasksService.getTaskOutput(sourceNode.data.mediaView.taskId)
-      resource = output
-        ? findOutputByMediaView(output, sourceNode.data.mediaView.outputResourceId, sourceNode.data.mediaView.outputIndex)
-        : undefined
-      source = {
-        workflowId: run.workflowId,
-        nodeId: edge.source,
-        taskId: sourceNode.data.mediaView.taskId,
-        ...(resource?.id ? { outputResourceId: resource.id } : {}),
-        ...(resource?.index !== undefined ? { outputIndex: resource.index } : {}),
-      }
-    }
-
-    if (!resource) {
-      return this.handleMissingMedia(connection, 'Required upstream output is missing.')
-    }
-    if (expectedKind && resource.kind !== expectedKind) {
-      throw new Error(`Upstream output kind "${resource.kind}" cannot be used for slot "${connection.targetSlot}".`)
-    }
-
-    return {
-      targetSlot: connection.targetSlot,
-      input: isNodeOutputResource(resource)
-        ? mediaInputFromOutput(resource, inputRole, source)
-        : mediaInputFromResourceRef(resource, inputRole),
-    }
-  }
-
-  private handleMissingMedia(connection: MediaSlotConnection, message: string): null {
-    if (!connection.required) {
-      return null
-    }
-    throw new Error(message)
+    return this.dependencies.taskConfigAssembler.prepare({
+      draft: node.data.config.task,
+      media: buildMediaEnvelope(inputsBySlot),
+    })
   }
 
   private async recordWorkflowRunEvent(
-    run: WorkflowRun,
+    run: WorkflowRunRecord,
     eventType: string,
     message: string,
     payload: Record<string, unknown> = {},
@@ -236,7 +197,12 @@ export class WorkflowNodeExecutor {
       message,
       ...(typeof payload.nodeId === 'string' ? { nodeId: payload.nodeId } : {}),
       payload: {
-        ...workflowRunEventPayload(run),
+        ...workflowRunEventPayload({
+          ...run,
+          snapshotNodes: [],
+          snapshotEdges: [],
+          nodeStates: {},
+        }),
         ...payload,
       },
       workflowRunId: run.id,
