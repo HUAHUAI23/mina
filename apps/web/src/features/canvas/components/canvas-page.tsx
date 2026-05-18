@@ -1,4 +1,4 @@
-import { Plus, Sparkles } from 'lucide-react'
+import { Plus } from 'lucide-react'
 
 const recentCanvases = [
   {
@@ -49,10 +49,6 @@ export function CanvasPage() {
           </button>
         </div>
       </section>
-
-      <button className="mina-floating-spark" aria-label="Generate new creative direction" type="button">
-        <Sparkles aria-hidden="true" size={25} />
-      </button>
     </div>
   )
 }

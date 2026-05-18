@@ -18,6 +18,7 @@ This file records important project changes.
 - Added opt-in PostgreSQL-backed workflow repository concurrency tests for run claiming, leases, node state predicates, and duplicate node starts.
 
 ### Changed
+- Removed the floating spark action from the Canvas page.
 - Upgraded Drizzle packages to the v1 RC line and scoped Drizzle Kit push/introspection to Mina-owned public tables.
 - Updated the web navigation to use TanStack Router links with route-aware active state.
 - Switched API business runtime to PostgreSQL-only repositories and removed production in-memory persistence/storage adapters; tests now use explicit fakes.
