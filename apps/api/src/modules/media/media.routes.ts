@@ -66,6 +66,11 @@ export const createMediaRoutes = (mediaObjectService: MediaObjectService, accoun
       const { id } = c.req.valid('param')
       return c.json(GetMediaObjectResponseSchema.parse({ item: await mediaObjectService.getMediaObject(actor.accountId, id) }))
     })
+    .get('/media-objects/:id/content', sValidator('param', MediaObjectParamsSchema), async (c) => {
+      const actor = await requireAuthActor(c, accountsService)
+      const { id } = c.req.valid('param')
+      return c.redirect(await mediaObjectService.createReadUrl(actor.accountId, id), 302)
+    })
     .post(
       '/media-objects/presigned-upload',
       sValidator('json', CreatePresignedMediaUploadSchema),

@@ -1,7 +1,16 @@
 import { z } from 'zod'
 import type { TaskConfig } from '@mina/contracts/modules/tasks'
 
-import { mediaConfigFromEnvelope, mediaEnvelopeFromConfig, parseConfigForModel, parseParams } from '../../models/model-spec-base'
+import { imageMediaEnvelope } from '../../config/media-envelope'
+import {
+  assertMediaLimit,
+  assertNoMediaItem,
+  assertNoMediaItems,
+  mediaConfigFromEnvelope,
+  mediaEnvelopeFromConfig,
+  parseConfigForModel,
+  parseParams,
+} from '../../models/model-spec-base'
 import type { ModelSpec, ParsedTask, ParsedTaskConfig, PrepareConfigInput } from '../../models/model-spec'
 import type { ProviderPollResult, ProviderStartResult } from '../provider'
 import { buildVariables, outputUrl } from './utils'
@@ -33,12 +42,19 @@ export class DevImageSpec implements ModelSpec<DevImageParams> {
 
   prepareConfig(input: PrepareConfigInput): TaskConfig {
     const params = parseParams(this.paramsSchema, input.draft.params)
+    const media = imageMediaEnvelope(input.media)
+    assertNoMediaItem('Dev image firstFrame', media.firstFrame)
+    assertNoMediaItem('Dev image lastFrame', media.lastFrame)
+    assertNoMediaItems('Dev image referenceImages', media.referenceImages)
+    assertNoMediaItems('Dev image referenceAudios', media.referenceAudios)
+    assertNoMediaItems('Dev image referenceVideos', media.referenceVideos)
+    assertMediaLimit('Dev image inputImages', media.inputImages, undefined, 16)
     return {
       kind: this.key.kind,
       provider: this.key.provider,
       model: this.key.model,
       prompt: input.draft.prompt,
-      media: mediaConfigFromEnvelope(input.media),
+      media: mediaConfigFromEnvelope(media),
       params,
     }
   }

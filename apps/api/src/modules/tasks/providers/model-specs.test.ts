@@ -40,6 +40,28 @@ describe('provider model specs', () => {
     })
   })
 
+  test('image specs reject referenceImages instead of treating them as image inputs', () => {
+    const spec = new VolcengineSeedreamSpec('doubao-seedream-5-0-260128')
+
+    expect(() =>
+      spec.prepareConfig({
+        draft: {
+          kind: 'image_generation',
+          provider: 'volcengine',
+          model: 'doubao-seedream-5-0-260128',
+          prompt: 'image',
+          params: {},
+        },
+        media: {
+          inputImages: [imageInput('https://cdn/input.png')],
+          referenceImages: [imageInput('https://cdn/reference.png')],
+          referenceAudios: [],
+          referenceVideos: [],
+        },
+      }),
+    ).toThrow('Volcengine Seedream referenceImages is not supported')
+  })
+
   test('Google Veo rejects too many reference images', () => {
     const spec = new GoogleVeoSpec('veo-3.1-generate-preview')
 

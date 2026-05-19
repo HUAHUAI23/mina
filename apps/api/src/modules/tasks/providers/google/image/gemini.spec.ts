@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { MediaInput, TaskConfig } from '@mina/contracts/modules/tasks'
 
+import { imageMediaEnvelope } from '../../../config/media-envelope'
 import {
   assertMediaLimit,
   assertNoMediaItem,
@@ -74,7 +75,6 @@ export class GoogleGeminiImageSpec implements ModelSpec<GoogleGeminiImageParams>
   readonly capabilities = {
     media: {
       inputImages: { max: 14 },
-      referenceImages: { max: 14 },
     },
     output: {
       images: true,
@@ -94,6 +94,7 @@ export class GoogleGeminiImageSpec implements ModelSpec<GoogleGeminiImageParams>
 
   prepareConfig(input: PrepareConfigInput): TaskConfig {
     const params = parseParams(this.paramsSchema, input.draft.params)
+    const media = imageMediaEnvelope(input.media)
     const capability = modelCapabilities.get(this.key.model) ?? modelCapabilities.get('gemini-3.1-flash-image-preview')
     if (!capability?.aspectRatios.includes(params.aspectRatio)) {
       throw new Error(`Google Gemini model ${this.key.model} does not support aspect ratio ${params.aspectRatio}.`)
@@ -107,18 +108,18 @@ export class GoogleGeminiImageSpec implements ModelSpec<GoogleGeminiImageParams>
     if ((params.thinkingLevel || params.includeThoughts) && !capability.thinking) {
       throw new Error(`Google Gemini model ${this.key.model} does not support thinking controls.`)
     }
-    assertNoMediaItem('Google Gemini firstFrame', input.media.firstFrame)
-    assertNoMediaItem('Google Gemini lastFrame', input.media.lastFrame)
-    assertNoMediaItems('Google Gemini referenceAudios', input.media.referenceAudios)
-    assertNoMediaItems('Google Gemini referenceVideos', input.media.referenceVideos)
-    assertMediaLimit('Google Gemini inputImages', input.media.inputImages, undefined, 14)
-    assertMediaLimit('Google Gemini referenceImages', input.media.referenceImages, undefined, 14)
+    assertNoMediaItem('Google Gemini firstFrame', media.firstFrame)
+    assertNoMediaItem('Google Gemini lastFrame', media.lastFrame)
+    assertNoMediaItems('Google Gemini referenceImages', media.referenceImages)
+    assertNoMediaItems('Google Gemini referenceAudios', media.referenceAudios)
+    assertNoMediaItems('Google Gemini referenceVideos', media.referenceVideos)
+    assertMediaLimit('Google Gemini inputImages', media.inputImages, undefined, 14)
     return {
       kind: this.key.kind,
       provider: this.key.provider,
       model: this.key.model,
       prompt: input.draft.prompt,
-      media: mediaConfigFromEnvelope(input.media),
+      media: mediaConfigFromEnvelope(media),
       params,
     }
   }
@@ -153,7 +154,7 @@ export class GoogleGeminiImageSpec implements ModelSpec<GoogleGeminiImageParams>
   }
 
   collectInputResources(config: ParsedTaskConfig<GoogleGeminiImageParams>): MediaInput[] {
-    return [...config.media.inputImages, ...config.media.referenceImages]
+    return config.media.inputImages
   }
 
   async start(task: ParsedTask<GoogleGeminiImageParams>): Promise<ProviderStartResult> {

@@ -8,7 +8,15 @@ const stableNode = (node: WorkflowCanvasNode): WorkflowCanvasNode => ({
   ...(node.extent ? { extent: node.extent } : {}),
   ...(node.width ? { width: node.width } : {}),
   ...(node.height ? { height: node.height } : {}),
-  data: node.data,
+  data:
+    node.data.nodeType === 'image_generation'
+      ? {
+          ...node.data,
+          mediaSlots: {
+            ...(node.data.mediaSlots?.inputImages ? { inputImages: node.data.mediaSlots.inputImages } : {}),
+          },
+        }
+      : node.data,
 })
 
 export const sortParentNodesFirst = (nodes: readonly WorkflowCanvasNode[]): WorkflowCanvasNode[] => {
@@ -29,13 +37,25 @@ export const sortParentNodesFirst = (nodes: readonly WorkflowCanvasNode[]): Work
   return [...nodes].map(stableNode).sort((left, right) => depth(left) - depth(right))
 }
 
+const stableEdge = (edge: WorkflowCanvasEdge): WorkflowCanvasEdge => ({
+  id: edge.id,
+  type: edge.type ?? 'media',
+  source: edge.source,
+  target: edge.target,
+  ...(edge.sourceHandle ? { sourceHandle: edge.sourceHandle } : {}),
+  ...(edge.targetHandle ? { targetHandle: edge.targetHandle } : {}),
+  data: edge.data,
+})
+
 export const stableEdges = (edges: readonly WorkflowCanvasEdge[]): WorkflowCanvasEdge[] =>
-  edges.map((edge) => ({
-    id: edge.id,
-    type: edge.type ?? 'media',
-    source: edge.source,
-    target: edge.target,
-    ...(edge.sourceHandle ? { sourceHandle: edge.sourceHandle } : {}),
-    ...(edge.targetHandle ? { targetHandle: edge.targetHandle } : {}),
-    data: edge.data,
-  }))
+  edges.map(stableEdge)
+
+export const stableCanvas = (
+  nodes: readonly WorkflowCanvasNode[],
+  edges: readonly WorkflowCanvasEdge[],
+): { edges: WorkflowCanvasEdge[]; nodes: WorkflowCanvasNode[] } => {
+  return {
+    nodes: sortParentNodesFirst(nodes),
+    edges: stableEdges(edges),
+  }
+}

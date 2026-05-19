@@ -26,6 +26,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -974,9 +975,21 @@ a {
   padding: 16px;
 }
 
+
 .mina-wc-page {
-  background: var(--surface);
-  color: var(--foreground);
+  --wc-bg: var(--surface);
+  --wc-canvas: var(--surface-container-low);
+  --wc-panel: color-mix(in oklch, var(--surface-container-lowest) 90%, transparent);
+  --wc-panel-raised: var(--surface-container-low);
+  --wc-panel-soft: var(--surface-container-high);
+  --wc-line: color-mix(in oklch, var(--outline-ghost) 64%, transparent);
+  --wc-line-strong: color-mix(in oklch, var(--foreground-quaternary) 18%, transparent);
+  --wc-text: var(--foreground);
+  --wc-muted: var(--foreground-tertiary);
+  --wc-faint: var(--foreground-quaternary);
+  --wc-accent: var(--foreground-secondary);
+  background: var(--wc-bg);
+  color: var(--wc-text);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   height: 100dvh;
@@ -989,14 +1002,14 @@ a {
 
 .mina-wc-header {
   align-items: center;
-  background: color-mix(in oklch, var(--surface-container-lowest) 94%, transparent);
-  border-bottom: 1px solid var(--outline-ghost);
+  background: color-mix(in oklch, var(--surface-container-lowest) 82%, transparent);
+  backdrop-filter: blur(20px);
   display: flex;
   gap: 18px;
   justify-content: space-between;
   min-height: 66px;
   min-width: 0;
-  padding: 10px 18px;
+  padding: 10px clamp(18px, 3dvw, 34px);
   position: relative;
   z-index: 8;
 }
@@ -1043,10 +1056,9 @@ a {
 
 .mina-wc-stage {
   background:
-    linear-gradient(90deg, color-mix(in oklch, var(--surface-container-low) 72%, transparent) 1px, transparent 1px),
-    linear-gradient(180deg, color-mix(in oklch, var(--surface-container-low) 72%, transparent) 1px, transparent 1px),
-    var(--surface);
-  background-size: 28px 28px;
+    radial-gradient(circle, var(--canvas-dot) 1px, transparent 1.2px),
+    var(--wc-canvas);
+  background-size: 30px 30px;
   min-height: 0;
   min-width: 0;
   overflow: hidden;
@@ -1054,31 +1066,37 @@ a {
 }
 
 .mina-wc-stage .react-flow {
-  color: var(--foreground);
+  --xy-background-color: transparent;
+  --xy-background-pattern-color: transparent;
+  --xy-edge-stroke: color-mix(in oklch, var(--foreground-tertiary) 48%, transparent);
+  --xy-edge-stroke-width: 2;
+  --xy-handle-background-color: var(--surface-container-lowest);
+  --xy-controls-button-background-color: color-mix(in oklch, var(--surface-container-lowest) 86%, transparent);
+  --xy-controls-button-background-color-hover: var(--surface-container-lowest);
+  --xy-controls-button-color: var(--foreground-tertiary);
+  color: var(--wc-text);
   height: 100%;
   width: 100%;
 }
 
-.mina-wc-toolbar,
-.mina-wc-bottom-dock {
-  background: color-mix(in oklch, var(--surface-container-lowest) 94%, transparent);
-  box-shadow: var(--shadow-floating);
-  position: absolute;
-  z-index: 5;
-}
-
 .mina-wc-toolbar {
   align-items: center;
+  background: color-mix(in oklch, var(--surface-container-lowest) 88%, transparent);
+  backdrop-filter: blur(20px);
   border-radius: 999px;
+  box-shadow: var(--shadow-floating);
   display: flex;
   gap: 6px;
-  left: 20px;
+  left: 22px;
   padding: 7px;
-  top: 18px;
+  position: absolute;
+  top: 20px;
+  z-index: 5;
 }
 
 .mina-wc-toolbar button,
 .mina-wc-slot-actions button,
+.mina-wc-slot-actions label,
 .mina-wc-history-resources button {
   align-items: center;
   background: transparent;
@@ -1101,7 +1119,7 @@ a {
 }
 
 .mina-wc-toolbar > span {
-  background: var(--surface-container-high);
+  background: var(--outline-ghost);
   height: 20px;
   width: 1px;
 }
@@ -1109,10 +1127,11 @@ a {
 .mina-wc-save-pill,
 .mina-wc-remote-banner {
   align-items: center;
-  background: color-mix(in oklch, var(--surface-container-lowest) 94%, transparent);
+  background: color-mix(in oklch, var(--surface-container-lowest) 88%, transparent);
+  backdrop-filter: blur(16px);
   border-radius: 999px;
   box-shadow: inset 0 0 0 1px var(--outline-ghost);
-  color: var(--foreground-secondary);
+  color: var(--foreground-tertiary);
   display: flex;
   flex: 0 0 auto;
   font-size: 0.7rem;
@@ -1132,7 +1151,7 @@ a {
 .mina-wc-remote-banner button,
 .mina-wc-run-controls button {
   align-items: center;
-  background: var(--foreground);
+  background: linear-gradient(135deg, var(--primary), color-mix(in oklch, var(--primary) 90%, black));
   border: 0;
   border-radius: 999px;
   color: var(--primary-foreground);
@@ -1144,59 +1163,40 @@ a {
   padding: 0 13px;
 }
 
-.mina-wc-bottom-dock {
+.mina-wc-node-config-toolbar.react-flow__node-toolbar {
+  max-width: min(760px, calc(100vw - 48px));
+  pointer-events: auto;
+  z-index: 20;
+}
+
+.mina-wc-config-card {
+  background:
+    linear-gradient(180deg, color-mix(in oklch, var(--surface-container-lowest) 94%, transparent), color-mix(in oklch, var(--surface-container-lowest) 88%, transparent));
+  backdrop-filter: blur(24px);
   border-radius: var(--radius-2xl);
-  bottom: 18px;
-  display: grid;
-  gap: 10px;
-  left: 50%;
-  max-height: min(52dvh, 520px);
-  min-width: 0;
-  overflow: hidden;
-  padding: 12px;
-  translate: -50% 0;
-  width: min(1120px, calc(100% - 48px));
-}
-
-.mina-wc-dock-tabs {
-  background: var(--surface-container-low);
-  border-radius: 999px;
-  display: none;
-  gap: 4px;
-  padding: 4px;
-}
-
-.mina-wc-dock-tabs button {
-  background: transparent;
-  border: 0;
-  border-radius: 999px;
-  color: var(--foreground-tertiary);
-  font-size: 0.74rem;
-  font-weight: 850;
-  min-height: 34px;
-}
-
-.mina-wc-dock-tabs button[data-active='true'] {
-  background: var(--surface-container-lowest);
+  box-shadow:
+    0 30px 66px -38px color-mix(in oklch, var(--foreground) 22%, transparent),
+    inset 0 0 0 1px color-mix(in oklch, var(--foreground-quaternary) 7%, transparent);
   color: var(--foreground);
-}
-
-.mina-wc-dock-grid {
   display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(460px, 1fr) minmax(300px, 360px);
+  gap: 16px;
+  max-height: min(58dvh, 500px);
   min-height: 0;
+  overflow: auto;
+  padding: 18px 20px 16px;
+  width: 100%;
 }
 
-.mina-wc-config-card,
 .mina-wc-history-card {
-  background: var(--surface-container-low);
-  border-radius: var(--radius-xl);
+  background: color-mix(in oklch, var(--surface-container-lowest) 90%, transparent);
+  backdrop-filter: blur(18px);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-floating);
   display: grid;
   gap: 12px;
   min-height: 0;
   overflow: auto;
-  padding: 14px;
+  padding: 16px;
 }
 
 .mina-wc-panel-heading,
@@ -1225,31 +1225,34 @@ a {
 }
 
 .mina-wc-node {
-  background: var(--surface-container-lowest);
+  background: transparent;
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-floating);
+  box-shadow: none;
   display: grid;
   gap: 9px;
   min-height: 190px;
-  overflow: hidden;
+  overflow: visible;
   padding: 12px;
-  width: 240px;
+  width: 280px;
 }
 
 .mina-wc-media-node {
-  min-height: 246px;
+  min-height: 274px;
+  width: 390px;
 }
 
 .mina-wc-node-header {
   align-items: center;
   display: flex;
   justify-content: space-between;
+  padding: 0 2px;
 }
 
 .mina-wc-node-preview {
-  aspect-ratio: 4 / 3;
-  background: var(--surface-container-low);
-  border-radius: var(--radius-lg);
+  aspect-ratio: 16 / 9;
+  background: var(--surface-container-high);
+  border-radius: var(--radius-xl);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--foreground-quaternary) 10%, transparent);
   display: grid;
   overflow: hidden;
   place-items: center;
@@ -1268,9 +1271,28 @@ a {
 }
 
 .mina-wc-video-poster {
-  background:
-    linear-gradient(135deg, var(--surface-container-high), var(--surface-container-low)),
-    var(--surface-container-low);
+  background: var(--surface-container-high);
+  border: 0;
+  padding: 0;
+  position: relative;
+}
+
+.mina-wc-video-poster img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.mina-wc-video-poster > span {
+  align-items: center;
+  background: color-mix(in oklch, var(--foreground) 72%, transparent);
+  border-radius: 999px;
+  color: var(--primary-foreground);
+  display: flex;
+  height: 42px;
+  justify-content: center;
+  position: absolute;
+  width: 42px;
 }
 
 .mina-wc-node-media,
@@ -1291,7 +1313,7 @@ a {
 
 .mina-wc-output-thumb,
 .mina-wc-history-resources button {
-  background: var(--surface-container-low);
+  background: var(--surface-container-lowest);
   border: 0;
   border-radius: var(--radius-md);
   flex: 0 0 auto;
@@ -1302,18 +1324,21 @@ a {
 }
 
 .mina-wc-output-thumb[data-active='true'] {
-  outline: 2px solid color-mix(in oklch, var(--foreground-tertiary) 44%, transparent);
+  outline: 2px solid color-mix(in oklch, var(--foreground-secondary) 58%, transparent);
 }
 
 .mina-wc-handle {
-  background: var(--foreground-tertiary);
-  height: 10px;
-  width: 10px;
+  background: var(--surface-container-lowest);
+  border: 2px solid color-mix(in oklch, var(--foreground-tertiary) 74%, transparent);
+  box-shadow: var(--shadow-floating);
+  height: 20px;
+  width: 20px;
 }
 
 .mina-wc-media-edge {
-  stroke: color-mix(in oklch, var(--foreground-tertiary) 70%, transparent);
-  stroke-width: 2;
+  filter: drop-shadow(0 7px 8px color-mix(in oklch, var(--foreground-secondary) 14%, transparent));
+  stroke: color-mix(in oklch, var(--foreground-secondary) 52%, transparent);
+  stroke-width: 2.2;
 }
 
 .mina-wc-text-node {
@@ -1321,96 +1346,247 @@ a {
 }
 
 .mina-wc-text-node p {
-  color: var(--foreground-secondary);
+  color: var(--foreground-tertiary);
   font-size: 0.8rem;
   margin: 0;
 }
 
 .mina-wc-group-node {
-  background: color-mix(in oklch, var(--surface-container-low) 58%, transparent);
+  background: color-mix(in oklch, var(--surface-container-lowest) 72%, transparent);
   border-radius: var(--radius-2xl);
-  color: var(--foreground-secondary);
+  color: var(--foreground-tertiary);
   display: flex;
   gap: 10px;
   height: 100%;
   padding: 16px;
 }
 
-.mina-wc-flow-group {
-  outline: 2px solid color-mix(in oklch, var(--foreground-tertiary) 16%, transparent);
-}
-
+.mina-wc-flow-group,
 .mina-wc-node-group {
-  outline: 2px solid color-mix(in oklch, var(--foreground-quaternary) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--foreground-quaternary) 9%, transparent);
 }
 
 .mina-wc-slot-list,
 .mina-wc-slot-section,
 .mina-wc-history-list,
-.mina-wc-advanced {
+.mina-wc-task-form {
   display: grid;
-  gap: 8px;
+  gap: 10px;
+}
+
+.mina-wc-slot-list {
+  align-items: start;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
 }
 
 .mina-wc-slot-section {
-  background: color-mix(in oklch, var(--surface-container-lowest) 56%, transparent);
-  border-radius: var(--radius-lg);
-  padding: 10px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
 }
 
-.mina-wc-slot-heading span {
-  color: var(--foreground-secondary);
-  font-size: 0.75rem;
-  font-weight: 850;
-}
-
-.mina-wc-upload-button {
-  align-items: center;
-  background: var(--surface-container-lowest);
-  border-radius: 999px;
-  color: var(--foreground-tertiary);
-  display: inline-flex;
-  font-size: 0.68rem;
-  font-weight: 850;
-  gap: 6px;
-  min-height: 28px;
-  padding: 0 10px;
-}
-
-.mina-wc-upload-button input {
+.mina-wc-slot-heading {
   display: none;
 }
 
-.mina-wc-slot-item,
-.mina-wc-history-item {
-  background: var(--surface-container-lowest);
-  border-radius: var(--radius-lg);
-  display: grid;
-  gap: 8px;
-  padding: 10px;
+.mina-wc-slot-heading span {
+  color: var(--foreground-tertiary);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.mina-wc-slot-grid {
+  display: flex;
+  gap: 9px;
+  min-height: 88px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: 2px 2px 7px;
+  scroll-padding-inline: 2px;
 }
 
 .mina-wc-slot-item {
+  background: transparent;
+  border-radius: 16px;
+  display: grid;
+  flex: 0 0 auto;
+  padding: 0;
+  position: relative;
+  width: 136px;
+  z-index: 1;
+}
+
+.mina-wc-slot-item[data-dragging='true'] {
+  opacity: 0.38;
+  z-index: 5;
+}
+
+.mina-wc-slot-thumb,
+.mina-wc-slot-drop,
+.mina-wc-slot-drag-overlay {
   align-items: center;
-  grid-template-columns: minmax(0, 1fr) auto;
+  aspect-ratio: 5 / 3;
+  background: var(--surface-container-high);
+  border-radius: 16px;
+  color: var(--foreground-quaternary);
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  width: 136px;
+}
+
+.mina-wc-slot-thumb img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.mina-wc-slot-thumb {
+  cursor: grab;
+  touch-action: none;
+}
+
+.mina-wc-slot-item[data-dragging='true'] .mina-wc-slot-thumb,
+.mina-wc-slot-drag-overlay {
+  cursor: grabbing;
+}
+
+.mina-wc-slot-drag-overlay {
+  background: var(--surface-container-high);
+  box-shadow:
+    0 22px 42px -26px color-mix(in oklch, var(--foreground) 32%, transparent),
+    inset 0 0 0 1px color-mix(in oklch, var(--foreground-quaternary) 10%, transparent);
+  pointer-events: none;
+}
+
+.mina-wc-slot-drag-overlay > span {
+  align-items: center;
+  background: color-mix(in oklch, var(--foreground) 68%, transparent);
+  backdrop-filter: blur(8px);
+  border-radius: 999px;
+  color: var(--primary-foreground);
+  display: flex;
+  font-size: 0.64rem;
+  font-weight: 850;
+  height: 20px;
+  justify-content: center;
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  width: 20px;
+}
+
+.mina-wc-slot-drop {
+  background: color-mix(in oklch, var(--surface-container-lowest) 82%, var(--surface-container-low));
+  border: 1.5px dashed color-mix(in oklch, var(--foreground-quaternary) 38%, transparent);
+  box-shadow: none;
+  color: var(--foreground-quaternary);
+  flex-direction: row;
+  font-size: 0.7rem;
+  font-weight: 850;
+  gap: 8px;
+  width: 136px;
+}
+
+.mina-wc-slot-drop:hover,
+.mina-wc-slot-drop:focus-within {
+  background: color-mix(in oklch, var(--surface-container-lowest) 92%, var(--surface-container-low));
+  border-color: color-mix(in oklch, var(--foreground-secondary) 34%, transparent);
+  color: var(--foreground-secondary);
+}
+
+.mina-wc-slot-drop input {
+  display: none;
+}
+
+.mina-wc-slot-thumb > span {
+  align-items: center;
+  background: color-mix(in oklch, var(--foreground) 68%, transparent);
+  backdrop-filter: blur(8px);
+  border-radius: 999px;
+  color: var(--primary-foreground);
+  display: flex;
+  font-size: 0.64rem;
+  font-weight: 850;
+  height: 20px;
+  justify-content: center;
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  width: 20px;
+}
+
+.mina-wc-slot-copy {
+  display: none;
 }
 
 .mina-wc-slot-actions {
-  display: flex;
-  gap: 4px;
-}
-
-.mina-wc-slot-actions button {
+  background: color-mix(in oklch, var(--surface-container-lowest) 88%, transparent);
+  backdrop-filter: blur(12px);
   border-radius: 999px;
-  height: 28px;
-  width: 28px;
+  box-shadow: 0 16px 30px -18px color-mix(in oklch, var(--foreground) 32%, transparent);
+  display: none;
+  gap: 3px;
+  padding: 4px;
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  z-index: 3;
 }
 
-.mina-wc-slot-actions button:hover {
+.mina-wc-slot-item:hover .mina-wc-slot-actions,
+.mina-wc-slot-item:focus-within .mina-wc-slot-actions {
+  display: flex;
+}
+
+.mina-wc-slot-actions button,
+.mina-wc-slot-actions label {
+  border-radius: 999px;
+  color: var(--foreground-tertiary);
+  height: 26px;
+  width: 26px;
+}
+
+.mina-wc-slot-actions button:hover,
+.mina-wc-slot-actions label:hover {
   background: var(--surface-container-low);
+  color: var(--foreground);
 }
 
-.mina-wc-slot-empty,
+.mina-wc-slot-actions label input {
+  display: none;
+}
+
+.mina-wc-slot-item[data-missing='true'] .mina-wc-slot-thumb {
+  box-shadow: inset 0 0 0 1.5px color-mix(in oklch, var(--destructive) 42%, transparent);
+}
+
+.mina-wc-slot-drag-affordance {
+  align-items: center;
+  background: color-mix(in oklch, var(--surface-container-lowest) 78%, transparent);
+  backdrop-filter: blur(10px);
+  border-radius: 999px;
+  bottom: 6px;
+  color: var(--foreground-tertiary);
+  display: flex;
+  height: 22px;
+  justify-content: center;
+  left: 6px;
+  opacity: 0;
+  position: absolute;
+  transition: opacity 140ms ease;
+  width: 22px;
+}
+
+.mina-wc-slot-item:hover .mina-wc-slot-drag-affordance,
+.mina-wc-slot-item:focus-within .mina-wc-slot-drag-affordance {
+  opacity: 1;
+}
+
 .mina-wc-panel-empty,
 .mina-wc-loading {
   color: var(--foreground-quaternary);
@@ -1425,13 +1601,15 @@ a {
 }
 
 .mina-wc-field,
-.mina-wc-check-field {
+.mina-wc-check-field,
+.mina-wc-switch-field {
   display: grid;
   gap: 6px;
 }
 
 .mina-wc-field span,
-.mina-wc-check-field span {
+.mina-wc-check-field span,
+.mina-wc-switch-field span {
   color: var(--foreground-tertiary);
   font-size: 0.68rem;
   font-weight: 850;
@@ -1442,7 +1620,7 @@ a {
 .mina-wc-field select,
 .mina-wc-slot-selector input,
 .mina-wc-slot-selector select {
-  background: var(--surface-container-lowest);
+  background: var(--surface-container-high);
   border: 0;
   border-radius: var(--radius-lg);
   color: var(--foreground);
@@ -1451,15 +1629,244 @@ a {
   padding: 8px 10px;
 }
 
-.mina-wc-field textarea {
-  min-height: 78px;
-  resize: vertical;
+.mina-wc-field textarea:focus,
+.mina-wc-field input:focus,
+.mina-wc-field select:focus,
+.mina-wc-slot-selector input:focus,
+.mina-wc-slot-selector select:focus {
+  background: var(--surface-container-lowest);
+  box-shadow: 0 12px 28px -18px color-mix(in oklch, var(--foreground) 18%, transparent);
 }
 
-.mina-wc-check-field {
+.mina-wc-prompt-shell,
+.mina-wc-prompt-section {
+  min-width: 0;
+  position: relative;
+}
+
+.mina-wc-prompt-section .mina-wc-field textarea {
+  background: transparent;
+  color: var(--foreground);
+  font-size: 1rem;
+  line-height: 1.5;
+  min-height: 126px;
+  padding: 0 44px 0 0;
+  resize: none;
+}
+
+.mina-wc-prompt-section .mina-wc-field textarea::placeholder {
+  color: var(--foreground-quaternary);
+}
+
+.mina-wc-expand-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--foreground-quaternary);
+  display: flex;
+  height: 36px;
+  justify-content: center;
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 36px;
+  z-index: 2;
+}
+
+.mina-wc-expand-button:hover {
+  background: var(--surface-container-low);
+  color: var(--foreground);
+}
+
+.mina-wc-task-form {
+  gap: 16px;
+}
+
+.mina-wc-config-section {
+  display: grid;
+  gap: 0;
+}
+
+.mina-wc-config-toolbar {
+  align-items: center;
+  box-shadow: inset 0 1px 0 color-mix(in oklch, var(--foreground-quaternary) 9%, transparent);
+  display: flex;
+  gap: 10px;
+  min-height: 54px;
+  min-width: 0;
+  overflow-x: auto;
+  padding-top: 10px;
+}
+
+.mina-wc-toolbar-select {
+  align-items: center;
+  color: var(--foreground);
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 7px;
+  min-width: 0;
+}
+
+.mina-wc-model-select {
+  max-width: 240px;
+}
+
+.mina-wc-toolbar-select select,
+.mina-wc-toolbar-select input {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--foreground);
+  font-size: 0.94rem;
+  font-weight: 750;
+  min-height: 38px;
+  min-width: 0;
+  outline: 0;
+}
+
+.mina-wc-toolbar-select input {
+  width: 72px;
+}
+
+.mina-wc-icon-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-lg);
+  color: var(--foreground-tertiary);
+  display: flex;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.mina-wc-language-toggle {
+  margin-left: auto;
+}
+
+.mina-wc-icon-toggle:hover,
+.mina-wc-icon-toggle[data-active='true'] {
+  background: var(--surface-container-low);
+  color: var(--foreground);
+}
+
+.mina-wc-config-toolbar .mina-wc-run-controls {
+  margin-left: 0;
+}
+
+.mina-wc-config-toolbar .mina-wc-run-controls p {
+  display: none;
+}
+
+.mina-wc-config-toolbar .mina-wc-run-controls button {
+  border-radius: var(--radius-xl);
+  font-size: 0;
+  height: 42px;
+  justify-content: center;
+  padding: 0;
+  width: 42px;
+}
+
+.mina-wc-config-toolbar .mina-wc-run-controls button svg {
+  height: 20px;
+  width: 20px;
+}
+
+.mina-wc-run-controls {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.mina-wc-run-controls p,
+.mina-wc-history-item p {
+  color: var(--destructive);
+  font-size: 0.74rem;
+  margin: 0;
+}
+
+.mina-wc-advanced-body {
+  background: color-mix(in oklch, var(--surface-container-lowest) 54%, transparent);
+  border-radius: var(--radius-xl);
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.mina-wc-advanced-label {
+  color: var(--foreground-tertiary);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.mina-wc-switch-field {
   align-items: center;
   display: flex;
   gap: 8px;
+  justify-content: space-between;
+}
+
+.mina-wc-switch-field input {
+  appearance: none;
+  background: var(--surface-container-high);
+  border: 0;
+  border-radius: 999px;
+  height: 24px;
+  position: relative;
+  width: 48px;
+}
+
+.mina-wc-switch-field input::after {
+  background: var(--surface-container-lowest);
+  border-radius: 999px;
+  box-shadow: var(--shadow-floating);
+  content: '';
+  height: 18px;
+  left: 3px;
+  position: absolute;
+  top: 3px;
+  transition: translate 140ms ease, background 140ms ease;
+  width: 18px;
+}
+
+.mina-wc-switch-field input:checked {
+  background: var(--foreground-secondary);
+}
+
+.mina-wc-switch-field input:checked::after {
+  background: var(--surface-container-lowest);
+  translate: 24px 0;
+}
+
+.mina-wc-credit-line {
+  align-items: center;
+  color: var(--foreground-quaternary);
+  display: flex;
+  font-size: 0.78rem;
+  font-weight: 850;
+  gap: 5px;
+  justify-content: end;
+  min-height: 0;
+}
+
+.mina-wc-field em {
+  color: var(--destructive);
+  font-size: 0.72rem;
+  font-style: normal;
+}
+
+.mina-wc-node-placeholder svg {
+  opacity: 0.7;
+}
+
+.mina-wc-history-item {
+  background: var(--surface-container-low);
+  border-radius: var(--radius-xl);
+  display: grid;
+  gap: 8px;
+  padding: 10px;
 }
 
 .mina-wc-model-grid,
@@ -1475,20 +1882,6 @@ a {
 
 .mina-wc-slot-selector input {
   width: 72px;
-}
-
-.mina-wc-run-controls {
-  align-items: center;
-  display: flex;
-  gap: 10px;
-  justify-content: space-between;
-}
-
-.mina-wc-run-controls p,
-.mina-wc-history-item p {
-  color: oklch(0.48 0.12 28);
-  font-size: 0.74rem;
-  margin: 0;
 }
 
 .mina-plaza-page {
@@ -1642,19 +2035,9 @@ a {
 }
 
 @media (max-width: 1024px) {
-  .mina-wc-bottom-dock {
-    max-height: min(62dvh, 580px);
-    min-width: 0;
-    width: calc(100% - 32px);
-  }
-
-  .mina-wc-dock-tabs {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .mina-wc-dock-grid {
-    grid-template-columns: 1fr;
+  .mina-wc-node-config-toolbar.react-flow__node-toolbar,
+  .mina-wc-config-card {
+    width: min(680px, calc(100vw - 32px));
   }
 
   .mina-auth-card {

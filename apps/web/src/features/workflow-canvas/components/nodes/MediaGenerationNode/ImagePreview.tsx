@@ -1,6 +1,8 @@
 import { memo } from 'react'
 import type { NodeOutputResource } from '@mina/contracts/modules/tasks'
 
+import { previewUrlForMedia } from '../../../utils/media-url'
+
 interface ImagePreviewProps {
   resource?: NodeOutputResource | undefined
 }
@@ -9,5 +11,9 @@ export const ImagePreview = memo(function ImagePreview({ resource }: ImagePrevie
   if (!resource) {
     return <div className="mina-wc-node-placeholder">No output selected</div>
   }
-  return <img alt="" className="mina-wc-node-media" loading="lazy" src={resource.url} />
+  const previewUrl = previewUrlForMedia(resource)
+  if (!previewUrl) {
+    return <div className="mina-wc-node-placeholder">Preview unavailable</div>
+  }
+  return <img alt="" className="mina-wc-node-media" loading="lazy" src={previewUrl} />
 })

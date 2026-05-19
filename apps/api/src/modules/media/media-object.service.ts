@@ -205,6 +205,15 @@ export class MediaObjectService {
     return mediaObject
   }
 
+  async createReadUrl(accountId: string, mediaObjectId: string, expiresInSeconds = 300): Promise<string> {
+    const mediaObject = await this.getReadyMediaObject(accountId, mediaObjectId)
+    return this.storage.createPresignedGetUrl({
+      accountId,
+      expiresInSeconds,
+      key: mediaObject.storageKey,
+    })
+  }
+
   async completePresignedUpload(input: CompletePresignedUploadInput): Promise<MediaObject> {
     const mediaObject = await this.getMediaObject(input.accountId, input.mediaObjectId)
     if (mediaObject.status !== 'uploading') {

@@ -4,6 +4,7 @@ import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import { workflowKeys } from '../../api/workflow-keys'
 import { listNodeTasks, patchNodeMediaView } from '../../api/workflow-queries'
 import { selectableResources } from '../../utils/media-view'
+import { previewUrlForMedia } from '../../utils/media-url'
 import { useCanvasStore } from '../../store/canvas-store'
 
 interface TaskHistoryCardProps {
@@ -54,22 +55,29 @@ export function TaskHistoryCard({ node, open, workflowId }: TaskHistoryCardProps
               </div>
               {item.task.error ? <p>{item.task.error.message}</p> : null}
               <div className="mina-wc-history-resources">
-                {resources.map((resource) => (
-                  <button
-                    aria-label={`Select ${resource.role ?? resource.kind} ${resource.index + 1}`}
-                    key={resource.id}
-                    onClick={() =>
-                      mutation.mutate({
-                        taskId: item.task.id,
-                        outputResourceId: resource.id,
-                        outputIndex: resource.index,
-                      })
-                    }
-                    type="button"
-                  >
-                    {resource.kind === 'image' ? <img alt="" loading="lazy" src={resource.url} /> : <span>{resource.index + 1}</span>}
-                  </button>
-                ))}
+                {resources.map((resource) => {
+                  const previewUrl = previewUrlForMedia(resource)
+                  return (
+                    <button
+                      aria-label={`Select ${resource.role ?? resource.kind} ${resource.index + 1}`}
+                      key={resource.id}
+                      onClick={() =>
+                        mutation.mutate({
+                          taskId: item.task.id,
+                          outputResourceId: resource.id,
+                          outputIndex: resource.index,
+                        })
+                      }
+                      type="button"
+                    >
+                      {resource.kind === 'image' && previewUrl ? (
+                        <img alt="" loading="lazy" src={previewUrl} />
+                      ) : (
+                        <span>{resource.index + 1}</span>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
             </article>
           )

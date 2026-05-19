@@ -2,6 +2,8 @@ import { memo } from 'react'
 import type { NodeMediaViewState } from '@mina/contracts/modules/canvas'
 import type { NodeOutputResource } from '@mina/contracts/modules/tasks'
 
+import { previewUrlForMedia } from '../../../utils/media-url'
+
 interface MediaOutputStripProps {
   mediaView?: NodeMediaViewState | undefined
   onSelect(resource: NodeOutputResource): void
@@ -18,6 +20,7 @@ export const MediaOutputStrip = memo(function MediaOutputStrip({ mediaView, onSe
         const active = mediaView?.outputResourceId
           ? mediaView.outputResourceId === resource.id
           : mediaView?.outputIndex === resource.index
+        const previewUrl = previewUrlForMedia(resource)
         return (
           <button
             aria-label={`Select output ${resource.index + 1}`}
@@ -30,7 +33,11 @@ export const MediaOutputStrip = memo(function MediaOutputStrip({ mediaView, onSe
             }}
             type="button"
           >
-            {resource.kind === 'image' ? <img alt="" loading="lazy" src={resource.url} /> : <span>{resource.index + 1}</span>}
+            {resource.kind === 'image' && previewUrl ? (
+              <img alt="" loading="lazy" src={previewUrl} />
+            ) : (
+              <span>{resource.role === 'generated_video' ? 'V' : resource.index + 1}</span>
+            )}
           </button>
         )
       })}

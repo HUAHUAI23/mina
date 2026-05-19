@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { MediaInput, TaskConfig } from '@mina/contracts/modules/tasks'
 
 import { apiEnv } from '../../../../../config/env'
+import { imageMediaEnvelope } from '../../../config/media-envelope'
 import {
   assertMediaLimit,
   assertNoMediaItem,
@@ -48,7 +49,6 @@ export class VolcengineSeedreamSpec implements ModelSpec<VolcengineSeedreamParam
   readonly capabilities = {
     media: {
       inputImages: { max: 16 },
-      referenceImages: { max: 16 },
     },
     output: {
       images: true,
@@ -72,12 +72,13 @@ export class VolcengineSeedreamSpec implements ModelSpec<VolcengineSeedreamParam
 
   prepareConfig(input: PrepareConfigInput): TaskConfig {
     const params = parseParams(this.paramsSchema, input.draft.params)
-    assertNoMediaItem('Volcengine Seedream firstFrame', input.media.firstFrame)
-    assertNoMediaItem('Volcengine Seedream lastFrame', input.media.lastFrame)
-    assertNoMediaItems('Volcengine Seedream referenceAudios', input.media.referenceAudios)
-    assertNoMediaItems('Volcengine Seedream referenceVideos', input.media.referenceVideos)
-    assertMediaLimit('Volcengine Seedream inputImages', input.media.inputImages, undefined, 16)
-    assertMediaLimit('Volcengine Seedream referenceImages', input.media.referenceImages, undefined, 16)
+    const media = imageMediaEnvelope(input.media)
+    assertNoMediaItem('Volcengine Seedream firstFrame', media.firstFrame)
+    assertNoMediaItem('Volcengine Seedream lastFrame', media.lastFrame)
+    assertNoMediaItems('Volcengine Seedream referenceImages', media.referenceImages)
+    assertNoMediaItems('Volcengine Seedream referenceAudios', media.referenceAudios)
+    assertNoMediaItems('Volcengine Seedream referenceVideos', media.referenceVideos)
+    assertMediaLimit('Volcengine Seedream inputImages', media.inputImages, undefined, 16)
     const formats = outputFormatSupport.get(this.key.model)
     if (params.outputFormat && formats && !formats.includes(params.outputFormat)) {
       throw new TaskConfigValidationError(`Volcengine Seedream model ${this.key.model} does not support ${params.outputFormat}.`)
@@ -94,7 +95,7 @@ export class VolcengineSeedreamSpec implements ModelSpec<VolcengineSeedreamParam
       provider: this.key.provider,
       model: this.key.model,
       prompt: input.draft.prompt,
-      media: mediaConfigFromEnvelope(input.media),
+      media: mediaConfigFromEnvelope(media),
       params,
     }
   }
@@ -129,7 +130,7 @@ export class VolcengineSeedreamSpec implements ModelSpec<VolcengineSeedreamParam
   }
 
   collectInputResources(config: ParsedTaskConfig<VolcengineSeedreamParams>): MediaInput[] {
-    return [...config.media.inputImages, ...config.media.referenceImages]
+    return config.media.inputImages
   }
 
   async start(task: ParsedTask<VolcengineSeedreamParams>): Promise<ProviderStartResult> {

@@ -1,73 +1,81 @@
-import { memo, useMemo } from 'react'
+import { memo, useCallback, useMemo } from 'react'
 import { Background, Controls, ReactFlow, ReactFlowProvider } from '@xyflow/react'
-import type { Edge, EdgeTypes, Node, NodeTypes } from '@xyflow/react'
-import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
+import type { NodeMouseHandler } from '@xyflow/react'
 
 import { MediaEdge } from './edges/MediaEdge'
 import { FlowGroupNode } from './nodes/FlowGroupNode'
 import { MediaGenerationNode } from './nodes/MediaGenerationNode/MediaGenerationNode'
 import { NodeGroupNode } from './nodes/NodeGroupNode'
 import { TextNode } from './nodes/TextNode'
-import { useCanvasStore } from '../store/canvas-store'
+import { NodePanelLayer } from './panels/NodePanelLayer'
+import { useCanvasUiStore } from '../store/canvas-ui-store'
+import { useCanvasEdges, useCanvasNodes } from '../store/selectors'
+import { isIgnoredCanvasTarget, isReactFlowPaneTarget } from '../utils/canvas-dom-scope'
+import { toFlowEdge, toFlowNode } from '../react-flow/flow-adapters'
+import { useWorkflowFlowHandlers } from '../react-flow/use-workflow-flow-handlers'
+import type {
+  WorkflowFlowEdge,
+  WorkflowFlowNode,
+  WorkflowFlowEdgeTypes,
+  WorkflowFlowNodeTypes,
+  WorkflowNodeRuntime,
+} from '../domain/flow-types'
 
 interface WorkflowCanvasProps {
+  onRunNode(nodeId: string): void
   onSelectOutput(nodeId: string, taskId: string, outputResourceId: string, outputIndex: number): void
+  runError?: string | undefined
+  runningNodeId?: string | undefined
 }
 
-const edgeTypes: EdgeTypes = {
+const edgeTypes = {
   media: MediaEdge,
-}
+} satisfies WorkflowFlowEdgeTypes
 
-const toFlowNode = (node: WorkflowCanvasNode): Node => ({
-  id: node.id,
-  type: node.type,
-  position: node.position,
-  data: node.data as unknown as Record<string, unknown>,
-  ...(node.parentId ? { parentId: node.parentId } : {}),
-  ...(node.extent ? { extent: node.extent } : {}),
-  ...(node.width !== undefined ? { width: node.width } : {}),
-  ...(node.height !== undefined ? { height: node.height } : {}),
-})
+const nodeTypes = {
+  image_generation: MediaGenerationNode,
+  video_generation: MediaGenerationNode,
+  text: TextNode,
+  flow_group: FlowGroupNode,
+  node_group: NodeGroupNode,
+} satisfies WorkflowFlowNodeTypes
 
-const toFlowEdge = (edge: WorkflowCanvasEdge): Edge => ({
-  id: edge.id,
-  type: edge.type,
-  source: edge.source,
-  target: edge.target,
-  sourceHandle: edge.sourceHandle ?? null,
-  targetHandle: edge.targetHandle ?? null,
-  data: edge.data as unknown as Record<string, unknown>,
-})
-
-const createMediaNode = (
-  onSelectOutput: WorkflowCanvasProps['onSelectOutput'],
-): NonNullable<NodeTypes[string]> =>
-  function MediaNode(props) {
-    return <MediaGenerationNode {...props} onSelectOutput={onSelectOutput} />
-  }
-
-export function WorkflowCanvas({ onSelectOutput }: WorkflowCanvasProps) {
-  const nodes = useCanvasStore((state) => state.nodes)
-  const edges = useCanvasStore((state) => state.edges)
-  const onNodesChange = useCanvasStore((state) => state.onNodesChange)
-  const onEdgesChange = useCanvasStore((state) => state.onEdgesChange)
-  const onConnect = useCanvasStore((state) => state.onConnect)
-  const nodeTypes = useMemo<NodeTypes>(
-    () => ({
-      image_generation: createMediaNode(onSelectOutput),
-      video_generation: createMediaNode(onSelectOutput),
-      text: TextNode,
-      flow_group: FlowGroupNode,
-      node_group: NodeGroupNode,
-    }),
-    [onSelectOutput],
+export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNodeId }: WorkflowCanvasProps) {
+  const nodes = useCanvasNodes()
+  const edges = useCanvasEdges()
+  const openNodePanel = useCanvasUiStore((state) => state.openNodePanel)
+  const closeNodePanel = useCanvasUiStore((state) => state.closeNodePanel)
+  const selectNodeIds = useCanvasUiStore((state) => state.selectNodeIds)
+  const { onConnect, onEdgesChange, onNodesChange } = useWorkflowFlowHandlers()
+  const runtime = useMemo<WorkflowNodeRuntime>(
+    () => ({ onRunNode, onSelectOutput, runError, runningNodeId }),
+    [onRunNode, onSelectOutput, runError, runningNodeId],
   )
-  const flowNodes = useMemo(() => nodes.map(toFlowNode), [nodes])
+  const flowNodes = useMemo(() => nodes.map((node) => toFlowNode(node, runtime)), [nodes, runtime])
   const flowEdges = useMemo(() => edges.map(toFlowEdge), [edges])
+  const handleNodeClick = useCallback<NodeMouseHandler<WorkflowFlowNode>>((event, node) => {
+    if (isIgnoredCanvasTarget(event.target)) {
+      return
+    }
+    openNodePanel(node.id, 'config')
+  }, [openNodePanel])
+  const handlePaneClick = useCallback(
+    (event: React.MouseEvent) => {
+      if (isReactFlowPaneTarget(event.target)) {
+        closeNodePanel()
+      }
+    },
+    [closeNodePanel],
+  )
+  const handleSelectionChange = useCallback(
+    ({ nodes: selectedNodes }: { nodes: WorkflowFlowNode[]; edges: WorkflowFlowEdge[] }) =>
+      selectNodeIds(selectedNodes.map((node) => node.id)),
+    [selectNodeIds],
+  )
 
   return (
     <ReactFlowProvider>
-      <ReactFlow
+      <ReactFlow<WorkflowFlowNode, WorkflowFlowEdge>
         edgeTypes={edgeTypes}
         edges={flowEdges}
         fitView
@@ -75,11 +83,15 @@ export function WorkflowCanvas({ onSelectOutput }: WorkflowCanvasProps) {
         nodeTypes={nodeTypes}
         onConnect={onConnect}
         onEdgesChange={onEdgesChange}
+        onNodeClick={handleNodeClick}
         onNodesChange={onNodesChange}
+        onPaneClick={handlePaneClick}
+        onSelectionChange={handleSelectionChange}
         onlyRenderVisibleElements
       >
         <Background gap={24} size={1} />
         <Controls showInteractive={false} />
+        <NodePanelLayer onRunNode={onRunNode} runError={runError} runningNodeId={runningNodeId} />
       </ReactFlow>
     </ReactFlowProvider>
   )

@@ -11,13 +11,16 @@ const bearerTokenFromHeader = (value: string | undefined): string | undefined =>
   return match?.[1]?.trim()
 }
 
+const tokenFromRequest = (c: Context): string | undefined =>
+  bearerTokenFromHeader(c.req.header('Authorization')) ?? c.req.query('token')?.trim()
+
 export const requireAuthActor = async (c: Context, accountsService: AccountsService): Promise<AuthActor> => {
   const existing = c.get(AUTH_ACTOR_KEY) as AuthActor | undefined
   if (existing) {
     return existing
   }
 
-  const token = bearerTokenFromHeader(c.req.header('Authorization'))
+  const token = tokenFromRequest(c)
   if (!token) {
     throw new HttpError(401, 'UNAUTHENTICATED', 'Authentication is required.')
   }

@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import '@xyflow/react/dist/style.css'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
 
 import { taskKeys, workflowKeys } from '../api/workflow-keys'
-import { createWorkflowRun, getWorkflow, patchNodeMediaView, saveWorkflow } from '../api/workflow-queries'
+import { createWorkflowRun, getWorkflow, patchNodeMediaView } from '../api/workflow-queries'
 import { getWorkflowClientId, parseWorkflowEvent, workflowEventUrl } from '../api/workflow-ws'
 import { getCanvasSnapshot, useCanvasStore } from '../store/canvas-store'
-import { sortParentNodesFirst, stableEdges } from '../utils/react-flow-persistence'
-import { BottomNodeDock } from './panels/BottomNodeDock'
+import { useCanvasUiStore } from '../store/canvas-ui-store'
+import { useWorkflowAutosave } from '../hooks/use-workflow-autosave'
 import { CanvasToolbar } from './CanvasToolbar'
 import { RemoteUpdateBanner } from './RemoteUpdateBanner'
 import { SaveStatusPill } from './SaveStatusPill'
@@ -22,28 +22,39 @@ interface WorkflowCanvasPageProps {
 export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
   const queryClient = useQueryClient()
   const [runError, setRunError] = useState<string>()
+  const [runningNodeId, setRunningNodeId] = useState<string>()
   const workflowQuery = useQuery({
     queryFn: () => getWorkflow(workflowId),
     queryKey: workflowKeys.detail(workflowId),
   })
-  const nodes = useCanvasStore((state) => state.nodes)
   const dirty = useCanvasStore((state) => state.dirty)
   const saving = useCanvasStore((state) => state.saving)
   const version = useCanvasStore((state) => state.version)
+  const hydratedWorkflowId = useCanvasStore((state) => state.hydratedWorkflowId)
   const remoteUpdatePending = useCanvasStore((state) => state.remoteUpdatePending)
   const remoteVersion = useCanvasStore((state) => state.remoteVersion)
   const addNode = useCanvasStore((state) => state.addNode)
-  const initialize = useCanvasStore((state) => state.initialize)
-  const markClean = useCanvasStore((state) => state.markClean)
-  const selectedNodeIds = useCanvasStore((state) => state.selectedNodeIds)
+  const hydrateFromServer = useCanvasStore((state) => state.hydrateFromServer)
+  const selectedNodeIds = useCanvasUiStore((state) => state.selectedNodeIds)
   const setRemoteUpdate = useCanvasStore((state) => state.setRemoteUpdate)
   const applyRemoteMediaView = useCanvasStore((state) => state.applyRemoteMediaView)
-  const setSaving = useCanvasStore((state) => state.setSaving)
-  const selectedNode = nodes.find((node) => node.id === selectedNodeIds[0])
+  const eventRuntimeRef = useRef({
+    dirty,
+    selectedNodeId: selectedNodeIds[0],
+    version,
+  })
+  eventRuntimeRef.current = {
+    dirty,
+    selectedNodeId: selectedNodeIds[0],
+    version,
+  }
 
   useEffect(() => {
-    if (workflowQuery.data && !dirty) {
-      initialize({
+    if (
+      workflowQuery.data &&
+      (!hydratedWorkflowId || hydratedWorkflowId !== workflowQuery.data.item.id || (!dirty && workflowQuery.data.item.version !== version))
+    ) {
+      hydrateFromServer({
         workflowId: workflowQuery.data.item.id,
         version: workflowQuery.data.item.version,
         name: workflowQuery.data.item.name,
@@ -51,7 +62,7 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
         edges: workflowQuery.data.item.edges,
       })
     }
-  }, [dirty, initialize, workflowQuery.data])
+  }, [dirty, hydrateFromServer, hydratedWorkflowId, version, workflowQuery.data])
 
   useEffect(() => {
     const clientId = getWorkflowClientId()
@@ -64,58 +75,52 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
       if (!event || event.workflowId !== workflowId || event.sourceClientId === clientId) {
         return
       }
-      if (dirty) {
-        setRemoteUpdate(event.version ?? version)
+      const { dirty: hasLocalChanges, selectedNodeId, version: currentVersion } = eventRuntimeRef.current
+      if (hasLocalChanges) {
+        setRemoteUpdate(event.version ?? currentVersion)
         return
       }
       if (event.type === 'workflow.node.mediaView.updated') {
-        applyRemoteMediaView(event.payload.nodeId, event.payload.mediaView, event.version ?? version)
+        applyRemoteMediaView(event.payload.nodeId, event.payload.mediaView, event.version ?? currentVersion)
       }
       void queryClient.invalidateQueries({ queryKey: workflowKeys.detail(workflowId) })
-      if (event.type === 'workflow.node.task.updated' && selectedNodeIds[0] === event.payload.nodeId) {
+      if (event.type === 'workflow.node.task.updated' && selectedNodeId === event.payload.nodeId) {
         void queryClient.invalidateQueries({ queryKey: workflowKeys.nodeTasks(workflowId, event.payload.nodeId) })
       }
       if (event.type === 'workflow.run.updated') {
         void queryClient.invalidateQueries({ queryKey: workflowKeys.runs(workflowId) })
       }
     }
-    return () => socket.close()
-  }, [applyRemoteMediaView, dirty, queryClient, selectedNodeIds, setRemoteUpdate, version, workflowId])
+    return () => {
+      socket.onmessage = null
+      if (socket.readyState === WebSocket.CONNECTING) {
+        socket.addEventListener('open', () => socket.close(), { once: true })
+        return
+      }
+      socket.close()
+    }
+  }, [applyRemoteMediaView, queryClient, setRemoteUpdate, workflowId])
 
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      const snapshot = getCanvasSnapshot()
-      const response = await saveWorkflow(workflowId, {
-        name: snapshot.name || workflowQuery.data?.item.name,
-        version: snapshot.version,
-        nodes: sortParentNodesFirst(snapshot.nodes),
-        edges: stableEdges(snapshot.edges),
-      })
-      return response
-    },
-    onMutate: () => setSaving(true),
-    onSettled: () => setSaving(false),
-    onSuccess: (response) => {
-      markClean({
-        name: response.item.name,
-        version: response.item.version,
-        nodes: response.item.nodes,
-        edges: response.item.edges,
-      })
-      queryClient.setQueryData(workflowKeys.detail(workflowId), response)
-    },
-    onError: (error) => setRunError(error instanceof Error ? error.message : 'Save failed.'),
+  const { saveNow, saveNowAsync } = useWorkflowAutosave({
+    fallbackName: workflowQuery.data?.item.name,
+    onError: setRunError,
+    workflowId,
   })
 
   const runMutation = useMutation({
     mutationFn: async (nodeId: string) => {
       let currentVersion = getCanvasSnapshot().version
       if (getCanvasSnapshot().dirty) {
-        const saved = await saveMutation.mutateAsync()
-        currentVersion = saved.item.version
+        const saved = await saveNowAsync()
+        currentVersion = saved.response.item.version
       }
       return createWorkflowRun(workflowId, { selectedNodeId: nodeId, expectedWorkflowVersion: currentVersion })
     },
+    onMutate: (nodeId) => {
+      setRunError(undefined)
+      setRunningNodeId(nodeId)
+    },
+    onSettled: () => setRunningNodeId(undefined),
     onSuccess: (response) => {
       setRunError(undefined)
       void queryClient.invalidateQueries({ queryKey: workflowKeys.runs(workflowId) })
@@ -146,11 +151,7 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
     },
   })
 
-  const runSelected = useCallback(() => {
-    if (selectedNode) {
-      runMutation.mutate(selectedNode.id)
-    }
-  }, [runMutation, selectedNode])
+  const runNode = useCallback((nodeId: string) => runMutation.mutate(nodeId), [runMutation])
 
   const selectOutput = useCallback(
     (nodeId: string, taskId: string, outputResourceId: string, outputIndex: number) => {
@@ -195,16 +196,13 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
       </header>
 
       <section className="mina-wc-stage" aria-label="Workflow canvas">
-        <WorkflowCanvas onSelectOutput={selectOutput} />
-        <CanvasToolbar dirty={dirty} onAddNode={addNode} onSave={() => saveMutation.mutate()} saving={saving} />
-        <BottomNodeDock
-          node={selectedNode}
-          nodes={nodes}
-          onRun={runSelected}
+        <WorkflowCanvas
+          onRunNode={runNode}
+          onSelectOutput={selectOutput}
           runError={runError}
-          running={runMutation.isPending}
-          workflowId={workflowId}
+          runningNodeId={runningNodeId}
         />
+        <CanvasToolbar dirty={dirty} onAddNode={addNode} onSave={saveNow} saving={saving} />
       </section>
     </div>
   )

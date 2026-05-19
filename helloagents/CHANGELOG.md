@@ -5,6 +5,10 @@ This file records important project changes.
 ## [Unreleased]
 
 ### Added
+- Added an authenticated media-object content redirect endpoint and workflow preview URL resolver so canvas previews can render managed media even when storage objects are private or stored as `s3://` URLs.
+- Added dnd-kit-powered drag sorting for workflow media slot thumbnails.
+- Added a TanStack Form-driven workflow node composer for image/video generation configuration, including shared prompt state and model descriptor-based parameter rendering.
+- Added workflow media slot UI support for paste/upload input, local media replacement, slot ordering, upstream MediaView missing-state display, and flow-group output selector controls.
 - Added the web password login/register auth gate, typed auth API client, local development session persistence, and app-shell logout/profile integration.
 - Added web `/projects` and `/canvas` route pages derived from the static UI mockups and adapted to the shared app shell.
 - Added `db:create`, `db:drop`, and `db:migration:test` commands for testing the full Drizzle generate/migrate workflow from a recreated development database.
@@ -18,6 +22,13 @@ This file records important project changes.
 - Added opt-in PostgreSQL-backed workflow repository concurrency tests for run claiming, leases, node state predicates, and duplicate node starts.
 
 ### Changed
+- Reworked workflow canvas image/video nodes as MediaView previews: image nodes render selected images directly, while video nodes render a poster and mount video playback only after user interaction.
+- Reworked the workflow canvas composer into a selected-node floating card below image/video MediaView nodes, anchored through React Flow `NodeToolbar` so positioning follows React Flow internals while preserving a white glass UI aligned to `apps/web/DESIGN.md`.
+- Split workflow canvas draft state from UI state: node selection/config panel state now lives in a dedicated UI store, while the draft store keeps persisted nodes/edges and revision-based saves.
+- Refined workflow media input UX with direct thumbnail drag ordering, in-thumbnail replace/delete actions, dashed upload wells, and a more compact floating composer layout.
+- Added debounced workflow canvas auto-save so uploaded media slots, drag ordering, and node edits persist without requiring a manual save before refresh.
+- Unified image-generation node media input semantics: image nodes now expose one ordered image media slot, treat any image input as image-to-image, and reject image-task `referenceImages` instead of migrating or merging them.
+- Changed development provider image outputs to finalize as valid previewable PNG objects instead of placeholder text bytes.
 - Removed the floating spark action from the Canvas page.
 - Upgraded Drizzle packages to the v1 RC line and scoped Drizzle Kit push/introspection to Mina-owned public tables.
 - Updated the web navigation to use TanStack Router links with route-aware active state.
@@ -27,3 +38,7 @@ This file records important project changes.
 - Task resource snapshots now record `mediaObjectId`, slot coordinates, order, and structured lineage source.
 - Flow-group scheduling now derives executable dependencies from node-output media slot sources.
 - Workflow reconciliation now claims due running runs before processing and updates individual `workflow_run_node_states` rows instead of rewriting run-level JSON state.
+
+### Fixed
+- Fixed workflow canvas Zustand subscriptions that returned fresh projection objects on every render, preventing React's `getSnapshot` infinite update warning and maximum-depth crash.
+- Enabled Vite websocket proxy upgrades for `/api` workflow event streams and kept the canvas event socket stable across local dirty/version/selection changes.

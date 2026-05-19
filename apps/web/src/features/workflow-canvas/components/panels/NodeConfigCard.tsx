@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
+import { FileText } from 'lucide-react'
 import type { MediaSlotName, NodeMediaSlotItem } from '@mina/contracts/modules/media'
 import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 
@@ -7,15 +8,12 @@ import { uploadMediaObject } from '../../api/media-mutations'
 import { taskKeys } from '../../api/workflow-keys'
 import { listTaskModels } from '../../api/model-catalog-queries'
 import { useCanvasStore } from '../../store/canvas-store'
-import { AdvancedSettingsPanel } from '../../forms/shared/AdvancedSettingsPanel'
-import { MediaSlotList } from '../media-slots/MediaSlotList'
 import { PromptField } from '../../forms/shared/PromptField'
-import { ProviderModelSection } from '../../forms/shared/ProviderModelSection'
 import { RunControls } from './RunControls'
+import { NodeTaskForm } from '../../forms/NodeTaskForm'
 
 interface NodeConfigCardProps {
   node: WorkflowCanvasNode
-  nodes: WorkflowCanvasNode[]
   onRun(): void
   runError?: string | undefined
   running?: boolean | undefined
@@ -29,26 +27,39 @@ const createSlotItem = (slot: MediaSlotName, mediaObjectId: string, order: numbe
   source: { type: 'media_object', mediaObjectId },
 })
 
-export function NodeConfigCard({ node, nodes, onRun, runError, running }: NodeConfigCardProps) {
+export function NodeConfigCard({ node, onRun, runError, running }: NodeConfigCardProps) {
   const [uploading, setUploading] = useState(false)
   const setNodeTaskConfig = useCanvasStore((state) => state.setNodeTaskConfig)
   const setNodeText = useCanvasStore((state) => state.setNodeText)
   const removeSlotItem = useCanvasStore((state) => state.removeSlotItem)
-  const reorderSlotItem = useCanvasStore((state) => state.reorderSlotItem)
-  const addSlotItem = useCanvasStore((state) => state.addSlotItem)
+  const reorderSlotItems = useCanvasStore((state) => state.reorderSlotItems)
   const updateSlotItem = useCanvasStore((state) => state.updateSlotItem)
   const modelsQuery = useQuery({ queryFn: listTaskModels, queryKey: taskKeys.models() })
-  const uploadMutation = useMutation({
-    mutationFn: uploadMediaObject,
-    onSettled: () => setUploading(false),
-  })
+
+  const uploadAndAttach = async (
+    input:
+      | { file: File; kind: 'add'; nodeId: string; order: number; slot: MediaSlotName }
+      | { file: File; kind: 'replace'; nodeId: string; slot: MediaSlotName; slotItemId: string },
+  ) => {
+    setUploading(true)
+    try {
+      const response = await uploadMediaObject(input.file)
+      if (input.kind === 'add') {
+        useCanvasStore.getState().addSlotItem(input.nodeId, createSlotItem(input.slot, response.item.id, input.order))
+        return
+      }
+      useCanvasStore.getState().replaceSlotItemMediaObject(input.nodeId, input.slot, input.slotItemId, response.item.id)
+    } finally {
+      setUploading(false)
+    }
+  }
 
   if (node.data.nodeType === 'text') {
     return (
-      <section className="mina-wc-config-card">
+      <section className="mina-wc-config-card nodrag nowheel nopan" data-mina-canvas-ignore="true" data-mina-canvas-panel-root="true">
         <div className="mina-wc-panel-heading">
           <strong>{node.data.title}</strong>
-          <span>Text</span>
+          <span><FileText aria-hidden="true" size={13} />Text</span>
         </div>
         <PromptField value={node.data.config.text} onChange={(value) => setNodeText(node.id, value)} />
       </section>
@@ -57,7 +68,7 @@ export function NodeConfigCard({ node, nodes, onRun, runError, running }: NodeCo
 
   if (node.data.nodeType !== 'image_generation' && node.data.nodeType !== 'video_generation') {
     return (
-      <section className="mina-wc-config-card">
+      <section className="mina-wc-config-card nodrag nowheel nopan" data-mina-canvas-ignore="true" data-mina-canvas-panel-root="true">
         <div className="mina-wc-panel-heading">
           <strong>{node.data.title}</strong>
           <span>{node.data.nodeType === 'flow_group' ? 'Executable scope' : 'Organization'}</span>
@@ -69,43 +80,40 @@ export function NodeConfigCard({ node, nodes, onRun, runError, running }: NodeCo
 
   const task = node.data.config.task
   const models = modelsQuery.data?.items ?? []
-  const activeModel = task
-    ? models.find((model) => model.kind === task.kind && model.provider === task.provider && model.model === task.model)
-    : undefined
-
+  const slotItemCount = (slot: MediaSlotName) =>
+    node.data.nodeType === 'image_generation' || node.data.nodeType === 'video_generation'
+      ? node.data.mediaSlots?.[slot]?.length ?? 0
+      : 0
   return (
-    <section className="mina-wc-config-card">
-      <div className="mina-wc-panel-heading">
+    <section className="mina-wc-config-card nodrag nowheel nopan" data-mina-canvas-ignore="true" data-mina-canvas-panel-root="true">
+      <div className="mina-wc-panel-heading sr-only">
         <strong>{node.data.title}</strong>
         <span>{node.data.nodeType === 'image_generation' ? 'Image' : 'Video'}</span>
       </div>
-      <MediaSlotList
-        node={node}
-        nodes={nodes}
-        uploading={uploading}
-        onAddUpload={(slot, file) => {
-          setUploading(true)
-          uploadMutation.mutate(file, {
-            onSuccess: (response) => {
-              const items = node.data.nodeType === 'image_generation' || node.data.nodeType === 'video_generation'
-                ? node.data.mediaSlots?.[slot] ?? []
-                : []
-              addSlotItem(node.id, createSlotItem(slot, response.item.id, items.length))
-            },
-          })
-        }}
-        onChange={(item) => updateSlotItem(node.id, item)}
-        onMove={(slot, slotItemId, direction) => reorderSlotItem(node.id, slot, slotItemId, direction)}
-        onRemove={(slot, slotItemId) => removeSlotItem(node.id, slot, slotItemId)}
-      />
       {task ? (
-        <>
-          <PromptField value={task.prompt} onChange={(value) => setNodeTaskConfig(node.id, { ...task, prompt: value })} />
-          <ProviderModelSection models={models} task={task} onChange={(nextTask) => setNodeTaskConfig(node.id, nextTask)} />
-          <AdvancedSettingsPanel model={activeModel} task={task} onChange={(nextTask) => setNodeTaskConfig(node.id, nextTask)} />
-        </>
+        <NodeTaskForm
+          key={node.id}
+          mediaActions={{
+            uploading,
+            onAddUpload: (slot, file) => {
+              void uploadAndAttach({ file, kind: 'add', nodeId: node.id, order: slotItemCount(slot), slot })
+            },
+            onChange: (item) => updateSlotItem(node.id, item),
+            onRemove: (slot, slotItemId) => removeSlotItem(node.id, slot, slotItemId),
+            onReorder: (slot, orderedIds) => reorderSlotItems(node.id, slot, orderedIds),
+            onReplaceUpload: (slot, slotItemId, file) => {
+              void uploadAndAttach({ file, kind: 'replace', nodeId: node.id, slot, slotItemId })
+            },
+          }}
+          models={models}
+          node={node}
+          task={task}
+          onChange={(nextTask) => setNodeTaskConfig(node.id, nextTask)}
+          onRun={onRun}
+          running={running}
+          runError={runError}
+        />
       ) : null}
-      <RunControls disabled={!task} onRun={onRun} running={running} error={runError} />
     </section>
   )
 }

@@ -9,26 +9,35 @@ const selectorRoles: NodeOutputSelector['role'][] = ['generated_image', 'generat
 
 type RunOutputSource = Extract<NodeMediaSlotItem['source'], { resolve: 'run_output' }>
 
+const isSelectorRole = (value: string): value is NodeOutputSelector['role'] =>
+  selectorRoles.some((role) => role === value)
+
+const isRunOutputSource = (source: NodeMediaSlotItem['source']): source is RunOutputSource =>
+  source.type === 'node_output' && source.resolve === 'run_output'
+
 export function SlotOutputSelector({ item, onChange }: SlotOutputSelectorProps) {
-  if (item.source.type !== 'node_output' || item.source.resolve !== 'run_output') {
+  if (!isRunOutputSource(item.source)) {
     return null
   }
-  const source = item.source as RunOutputSource
+  const source = item.source
   const selector = source.selector
   return (
     <div className="mina-wc-slot-selector">
       <select
         aria-label="Output role"
         value={selector.role}
-        onChange={(event) =>
+        onChange={(event) => {
+          if (!isSelectorRole(event.target.value)) {
+            return
+          }
           onChange({
             ...item,
             source: {
               ...source,
-              selector: { ...selector, role: event.target.value as NodeOutputSelector['role'] },
+              selector: { ...selector, role: event.target.value },
             },
           })
-        }
+        }}
       >
         {selectorRoles.map((role) => (
           <option key={role} value={role}>
