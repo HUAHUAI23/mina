@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react'
 import type { Edge, EdgeProps, Node, NodeProps } from '@xyflow/react'
 import type {
+  NodeMediaViewState,
   WorkflowCanvasEdge,
   WorkflowNodeType,
 } from '@mina/contracts/modules/canvas'
@@ -10,23 +11,13 @@ interface WorkflowFlowEdgeData {
   connection: WorkflowCanvasEdge['data']['connection']
 }
 
-export interface WorkflowNodeRuntime {
-  onRunNode(nodeId: string): void
-  onSelectOutput(
-    nodeId: string,
-    taskId: string,
-    outputResourceId: string,
-    outputIndex: number,
-  ): void
-  runError?: string | undefined
-  runningNodeId?: string | undefined
-}
-
 export interface WorkflowFlowNodeData {
-  [key: string]: WorkflowNodeRuntime | WorkflowNodeType | string | undefined
+  [key: string]: NodeMediaViewState | WorkflowNodeType | string | undefined
+  mediaView?: NodeMediaViewState | undefined
   nodeId: string
   nodeType: WorkflowNodeType
-  runtime: WorkflowNodeRuntime
+  textPreview?: string | undefined
+  title: string
 }
 
 export type ImageGenerationFlowNode = Node<

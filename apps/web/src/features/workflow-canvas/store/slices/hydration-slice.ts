@@ -13,6 +13,23 @@ export const createHydrationSlice: CanvasSliceCreator<
   CanvasHydrationState & CanvasHydrationActions
 > = (set) => ({
   ...initialHydrationState,
+  applyRemoteSnapshot: (input) =>
+    set((state) => {
+      if (state.workflowId !== input.workflowId) {
+        return state
+      }
+      return {
+        ...state,
+        dirty: false,
+        edges: input.edges,
+        nodeIndexById: indexNodes(input.nodes),
+        nodes: input.nodes,
+        remoteUpdatePending: false,
+        remoteVersion: undefined,
+        savedRevision: state.draftRevision,
+        ...(input.version ? { version: input.version } : {}),
+      }
+    }),
   hydrateFromServer: (input) =>
     set((state) => {
       if (state.hydratedWorkflowId === input.workflowId && state.dirty) {

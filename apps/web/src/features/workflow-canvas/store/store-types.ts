@@ -17,6 +17,53 @@ export interface CanvasNodeFramePatch {
   width?: number | undefined
 }
 
+export type CanvasDocumentTransaction =
+  | {
+      changes: Array<{
+        nodeId: string
+        parentId?: string | undefined
+        position?: XYPosition | undefined
+        width?: number | undefined
+        height?: number | undefined
+      }>
+      type: 'move_nodes'
+    }
+  | {
+      edge: WorkflowCanvasEdge
+      node: WorkflowCanvasNode
+      type: 'connect_media_slot'
+    }
+  | {
+      edge: WorkflowCanvasEdge
+      type: 'upsert_edge'
+    }
+  | {
+      edgeId: string
+      type: 'remove_edge'
+    }
+  | {
+      node: WorkflowCanvasNode
+      type: 'upsert_node'
+    }
+  | {
+      nodeId: string
+      type: 'remove_node'
+    }
+  | {
+      node: WorkflowCanvasNode
+      type: 'update_node'
+    }
+  | {
+      edges: readonly WorkflowCanvasEdge[]
+      nodes: readonly WorkflowCanvasNode[]
+      type: 'replace_snapshot'
+    }
+
+export interface CanvasDocumentTransactionEntry {
+  revision: number
+  transaction: CanvasDocumentTransaction
+}
+
 export interface MediaConnectionInput {
   sourceHandle?: string | undefined
   sourceId: string
@@ -35,6 +82,7 @@ export interface CanvasGraphState {
 export interface CanvasGraphActions {
   addMediaConnection(input: MediaConnectionInput): void
   addNode(type: WorkflowNodeType): void
+  commitNodeFrames(input: readonly CanvasNodeFramePatch[]): void
   removeGraphEdges(edgeIds: readonly string[]): void
   removeGraphNodes(nodeIds: readonly string[]): void
   setNodeFrame(input: CanvasNodeFramePatch): void
@@ -43,6 +91,7 @@ export interface CanvasGraphActions {
 export interface CanvasDraftState {
   dirty: boolean
   draftRevision: number
+  lastDocumentTransaction: CanvasDocumentTransactionEntry | undefined
   savedRevision: number
   saving: boolean
   version: number
@@ -55,6 +104,12 @@ export interface CanvasDraftActions {
 }
 
 export interface CanvasHydrationActions {
+  applyRemoteSnapshot(input: {
+    edges: WorkflowCanvasEdge[]
+    nodes: WorkflowCanvasNode[]
+    version?: number | undefined
+    workflowId: string
+  }): void
   hydrateFromServer(input: {
     edges: WorkflowCanvasEdge[]
     name: string

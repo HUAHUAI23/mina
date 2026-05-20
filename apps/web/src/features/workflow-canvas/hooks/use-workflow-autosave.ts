@@ -5,6 +5,10 @@ import type { WorkflowResponse } from '@mina/contracts/modules/workflows'
 import { workflowKeys } from '../api/workflow-keys'
 import { saveWorkflow } from '../api/workflow-queries'
 import { getCanvasSnapshot, useCanvasStore } from '../store/canvas-store'
+import {
+  incrementCanvasPerfCounter,
+  markCanvasPerformance,
+} from '../diagnostics/canvas-performance-marks'
 import { stableCanvas } from '../utils/react-flow-persistence'
 
 interface UseWorkflowAutosaveInput {
@@ -44,8 +48,15 @@ export function useWorkflowAutosave({
       })
       return { response, revision: snapshot.draftRevision }
     },
-    onMutate: () => setSaving(true),
-    onSettled: () => setSaving(false),
+    onMutate: () => {
+      incrementCanvasPerfCounter('autosaveStarts')
+      markCanvasPerformance('autosave:start')
+      setSaving(true)
+    },
+    onSettled: () => {
+      markCanvasPerformance('autosave:end')
+      setSaving(false)
+    },
     onSuccess: ({ response, revision }) => {
       acknowledgeSaved({ revision, version: response.item.version })
       queryClient.setQueryData(workflowKeys.detail(workflowId), response)

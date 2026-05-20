@@ -55,6 +55,7 @@
     "build": "turbo build",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
+    "test:e2e": "playwright test",
     "check": "bun run typecheck && bun run test && bun run build",
     "dev:api": "bun --filter @mina/api dev",
     "dev:web": "bun --filter @mina/web dev",
@@ -66,6 +67,7 @@
     "check:boundaries": "bun scripts/check-api-boundaries.ts"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "turbo": "^2.8.21"
   }
 }

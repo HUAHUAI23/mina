@@ -1,16 +1,14 @@
 import { memo } from 'react'
 import type { NodeProps } from '@xyflow/react'
 
+import { markCanvasNodeRender } from '../../diagnostics/canvas-render-counts'
 import type { FlowGroupFlowNode } from '../../domain/flow-types'
-import { useCanvasUiStore } from '../../store/canvas-ui-store'
-import { useCanvasNode } from '../../store/selectors'
 
-export const FlowGroupNode = memo(function FlowGroupNode({ id }: NodeProps<FlowGroupFlowNode>) {
-  const node = useCanvasNode(id)
-  const openNodePanel = useCanvasUiStore((state) => state.openNodePanel)
+export const FlowGroupNode = memo(function FlowGroupNode({ data, id }: NodeProps<FlowGroupFlowNode>) {
+  markCanvasNodeRender(id)
   return (
-    <section className="mina-wc-group-node mina-wc-flow-group" onClick={() => openNodePanel(id, 'config')}>
-      <strong>{node?.data.title ?? 'Flow Group'}</strong>
+    <section className="mina-wc-group-node mina-wc-flow-group">
+      <strong>{data.title}</strong>
       <span>Flow scope</span>
     </section>
   )

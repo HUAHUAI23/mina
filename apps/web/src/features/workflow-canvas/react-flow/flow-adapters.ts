@@ -3,21 +3,21 @@ import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/mod
 import type {
   WorkflowFlowEdge,
   WorkflowFlowNode,
-  WorkflowNodeRuntime,
 } from '../domain/flow-types'
 
-export const toFlowNode = (
-  node: WorkflowCanvasNode,
-  runtime: WorkflowNodeRuntime,
-): WorkflowFlowNode => {
+export const toFlowNode = (node: WorkflowCanvasNode): WorkflowFlowNode => {
   const flowNode = {
     id: node.id,
     type: node.type,
     position: node.position,
     data: {
+      ...(node.data.nodeType === 'image_generation' || node.data.nodeType === 'video_generation'
+        ? { mediaView: node.data.mediaView }
+        : {}),
       nodeId: node.id,
       nodeType: node.data.nodeType,
-      runtime,
+      ...(node.data.nodeType === 'text' ? { textPreview: node.data.config.text } : {}),
+      title: node.data.title,
     },
     ...(node.parentId ? { parentId: node.parentId } : {}),
     ...(node.extent ? { extent: node.extent } : {}),

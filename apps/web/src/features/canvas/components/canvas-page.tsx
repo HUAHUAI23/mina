@@ -23,9 +23,7 @@ export function CanvasPage() {
         <div className="mina-recent-canvas-grid">
           {workflowsQuery.data?.items.map((workflow) => (
             <Link className="mina-recent-canvas-card" key={workflow.id} params={{ workflowId: workflow.id }} to="/canvas/$workflowId">
-              <div className="mina-recent-preview" data-tone="wave">
-                <span>v{workflow.version}</span>
-              </div>
+              <div className="mina-recent-preview" data-tone="wave" />
               <div>
                 <h3>{workflow.name}</h3>
                 <p>{new Date(workflow.updatedAt).toLocaleString()}</p>

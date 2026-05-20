@@ -41,8 +41,11 @@
     "dotenv": "catalog:",
     "drizzle-orm": "catalog:",
     "hono": "catalog:",
+    "lib0": "^0.2.117",
     "pino": "catalog:",
     "postgres": "catalog:",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.30",
     "zod": "catalog:"
   },
   "devDependencies": {

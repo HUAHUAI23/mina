@@ -23,6 +23,7 @@ import type {
 } from '@mina/contracts/modules/workflows'
 import {
   boolean,
+  bytea,
   index,
   integer,
   jsonb,
@@ -606,4 +607,31 @@ export const workflowRunEvents = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('workflow_run_events_run_idx').on(table.workflowRunId)],
+)
+
+export const workflowYjsUpdates = pgTable(
+  'workflow_yjs_updates',
+  {
+    id: text('id').primaryKey(),
+    workflowId: text('workflow_id')
+      .notNull()
+      .references(() => workflows.id),
+    updateBin: bytea('update_bin').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('workflow_yjs_updates_workflow_created_idx').on(table.workflowId, table.createdAt)],
+)
+
+export const workflowYjsSnapshots = pgTable(
+  'workflow_yjs_snapshots',
+  {
+    workflowId: text('workflow_id')
+      .primaryKey()
+      .references(() => workflows.id),
+    stateVector: bytea('state_vector').notNull(),
+    snapshotBin: bytea('snapshot_bin').notNull(),
+    version: integer('version').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('workflow_yjs_snapshots_updated_idx').on(table.updatedAt)],
 )

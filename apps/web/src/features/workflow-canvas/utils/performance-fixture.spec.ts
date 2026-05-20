@@ -26,4 +26,12 @@ for (const node of canvas.nodes) {
   }
 }
 
+if (!canvas.nodes.some((node) => node.data.nodeType === 'video_generation')) {
+  throw new Error('Expected fixture to include video nodes.')
+}
+
+if (!canvas.nodes.some((node) => node.data.nodeType === 'text')) {
+  throw new Error('Expected fixture to include text nodes.')
+}
+
 console.log(`stableCanvas 1000-node fixture: ${elapsedMs.toFixed(2)}ms`)

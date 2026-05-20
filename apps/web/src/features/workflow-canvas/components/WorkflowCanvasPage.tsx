@@ -5,11 +5,19 @@ import { Link } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
 
 import { taskKeys, workflowKeys } from '../api/workflow-keys'
-import { createWorkflowRun, getWorkflow, patchNodeMediaView } from '../api/workflow-queries'
+import {
+  createWorkflowRun,
+  getWorkflow,
+  getWorkflowCollaborationSnapshot,
+  patchNodeMediaView,
+} from '../api/workflow-queries'
 import { getWorkflowClientId, parseWorkflowEvent, workflowEventUrl } from '../api/workflow-ws'
 import { getCanvasSnapshot, useCanvasStore } from '../store/canvas-store'
+import { incrementCanvasPerfCounter } from '../diagnostics/canvas-performance-marks'
+import { webEnv } from '../../../config/env'
 import { useCanvasUiStore } from '../store/canvas-ui-store'
 import { useWorkflowAutosave } from '../hooks/use-workflow-autosave'
+import { useWorkflowYjsShadowSync } from '../sync/yjs/yjs-shadow-sync'
 import { CanvasToolbar } from './CanvasToolbar'
 import { RemoteUpdateBanner } from './RemoteUpdateBanner'
 import { SaveStatusPill } from './SaveStatusPill'
@@ -27,12 +35,16 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
     queryFn: () => getWorkflow(workflowId),
     queryKey: workflowKeys.detail(workflowId),
   })
+  const collaborationSnapshotQuery = useQuery({
+    enabled: webEnv.workflowCanvasSyncMode === 'primary',
+    queryFn: () => getWorkflowCollaborationSnapshot(workflowId),
+    queryKey: [...workflowKeys.detail(workflowId), 'collaboration-snapshot'] as const,
+  })
   const dirty = useCanvasStore((state) => state.dirty)
   const saving = useCanvasStore((state) => state.saving)
   const version = useCanvasStore((state) => state.version)
   const hydratedWorkflowId = useCanvasStore((state) => state.hydratedWorkflowId)
   const remoteUpdatePending = useCanvasStore((state) => state.remoteUpdatePending)
-  const remoteVersion = useCanvasStore((state) => state.remoteVersion)
   const addNode = useCanvasStore((state) => state.addNode)
   const hydrateFromServer = useCanvasStore((state) => state.hydrateFromServer)
   const selectedNodeIds = useCanvasUiStore((state) => state.selectedNodeIds)
@@ -48,24 +60,31 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
     selectedNodeId: selectedNodeIds[0],
     version,
   }
+  useWorkflowYjsShadowSync(workflowId, webEnv.workflowCanvasSyncMode !== 'disabled')
 
   useEffect(() => {
-    if (
-      workflowQuery.data &&
-      (!hydratedWorkflowId || hydratedWorkflowId !== workflowQuery.data.item.id || (!dirty && workflowQuery.data.item.version !== version))
-    ) {
+    const workflow = workflowQuery.data?.item
+    if (!workflow) {
+      return
+    }
+    const collaborationSnapshot =
+      webEnv.workflowCanvasSyncMode === 'primary' ? collaborationSnapshotQuery.data?.item : undefined
+    const graph = collaborationSnapshot ?? workflow
+    const graphVersion = collaborationSnapshot?.version ?? workflow.version
+    if (!hydratedWorkflowId || hydratedWorkflowId !== workflow.id || (!dirty && graphVersion > version)) {
       hydrateFromServer({
-        workflowId: workflowQuery.data.item.id,
-        version: workflowQuery.data.item.version,
-        name: workflowQuery.data.item.name,
-        nodes: workflowQuery.data.item.nodes,
-        edges: workflowQuery.data.item.edges,
+        workflowId: workflow.id,
+        version: graphVersion,
+        name: workflow.name,
+        nodes: graph.nodes,
+        edges: graph.edges,
       })
     }
-  }, [dirty, hydrateFromServer, hydratedWorkflowId, version, workflowQuery.data])
+  }, [collaborationSnapshotQuery.data, dirty, hydrateFromServer, hydratedWorkflowId, version, workflowQuery.data])
 
   useEffect(() => {
     const clientId = getWorkflowClientId()
+    incrementCanvasPerfCounter('websocketReconnects')
     const socket = new WebSocket(workflowEventUrl(workflowId))
     socket.onmessage = (message) => {
       if (typeof message.data !== 'string') {
@@ -160,11 +179,15 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
     [mediaViewMutation.mutate],
   )
 
-  if (workflowQuery.isLoading) {
+  if (workflowQuery.isLoading || (webEnv.workflowCanvasSyncMode === 'primary' && collaborationSnapshotQuery.isLoading)) {
     return <div className="mina-wc-page"><div className="mina-wc-loading">Loading workflow</div></div>
   }
 
-  if (workflowQuery.isError || !workflowQuery.data) {
+  if (
+    workflowQuery.isError ||
+    !workflowQuery.data ||
+    (webEnv.workflowCanvasSyncMode === 'primary' && collaborationSnapshotQuery.isError)
+  ) {
     return <div className="mina-wc-page"><div className="mina-wc-loading">Workflow unavailable</div></div>
   }
 
@@ -185,7 +208,6 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
         <div className="mina-wc-header-actions">
           {remoteUpdatePending ? (
             <RemoteUpdateBanner
-              version={remoteVersion}
               onRefresh={() => {
                 void queryClient.invalidateQueries({ queryKey: workflowKeys.detail(workflowId) })
               }}

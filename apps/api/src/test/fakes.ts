@@ -30,6 +30,11 @@ import type { TaskEventInput, TaskEventLog } from '../modules/tasks/task-events'
 import type { TaskCreateResult, TaskRepository } from '../modules/tasks/tasks.repository'
 import type { WorkflowRunEventInput, WorkflowRunEventLog } from '../modules/workflows/workflow-events'
 import type {
+  WorkflowYjsRepository,
+  WorkflowYjsSnapshotRecord,
+  WorkflowYjsUpdateRecord,
+} from '../modules/workflows/collaboration/workflow-yjs-repository'
+import type {
   ReplaceWorkflowDefinitionInput,
   UpdateNodeMediaViewPersistenceInput,
   WorkflowDefinitionCreate,
@@ -443,6 +448,54 @@ export class FakeWorkflowRunEventLog implements WorkflowRunEventLog {
 
   async record(input: WorkflowRunEventInput): Promise<void> {
     this.#events.push(clone(input))
+  }
+}
+
+export class FakeWorkflowYjsRepository implements WorkflowYjsRepository {
+  readonly #snapshots = new Map<string, WorkflowYjsSnapshotRecord>()
+  readonly #updates = new Map<string, WorkflowYjsUpdateRecord[]>()
+
+  async appendUpdate(input: { id: string; updateBin: Uint8Array; workflowId: string }): Promise<void> {
+    const updates = this.#updates.get(input.workflowId) ?? []
+    updates.push({
+      createdAt: new Date().toISOString(),
+      id: input.id,
+      updateBin: new Uint8Array(input.updateBin),
+      workflowId: input.workflowId,
+    })
+    this.#updates.set(input.workflowId, updates)
+  }
+
+  async getSnapshot(workflowId: string): Promise<WorkflowYjsSnapshotRecord | undefined> {
+    const snapshot = this.#snapshots.get(workflowId)
+    return snapshot
+      ? {
+          snapshotBin: new Uint8Array(snapshot.snapshotBin),
+          stateVector: new Uint8Array(snapshot.stateVector),
+          version: snapshot.version,
+          workflowId: snapshot.workflowId,
+        }
+      : undefined
+  }
+
+  async listUpdates(workflowId: string, after?: Date): Promise<WorkflowYjsUpdateRecord[]> {
+    return (this.#updates.get(workflowId) ?? [])
+      .filter((update) => !after || new Date(update.createdAt) > after)
+      .map((update) => ({
+        createdAt: update.createdAt,
+        id: update.id,
+        updateBin: new Uint8Array(update.updateBin),
+        workflowId: update.workflowId,
+      }))
+  }
+
+  async saveSnapshot(input: WorkflowYjsSnapshotRecord): Promise<void> {
+    this.#snapshots.set(input.workflowId, {
+      snapshotBin: new Uint8Array(input.snapshotBin),
+      stateVector: new Uint8Array(input.stateVector),
+      version: input.version,
+      workflowId: input.workflowId,
+    })
   }
 }
 

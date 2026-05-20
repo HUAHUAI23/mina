@@ -25,11 +25,7 @@ export const useCanvasUiStore = create<CanvasUiStore>((set) => ({
   closeNodePanel: () => set({ activeNodePanel: undefined }),
   openNodePanel: (nodeId, panel) => set({ activeNodePanel: { nodeId, panel } }),
   selectedNodeIds: [],
-  selectNodeIds: (ids) =>
-    set((state) => ({
-      activeNodePanel: state.activeNodePanel && !ids.includes(state.activeNodePanel.nodeId) ? undefined : state.activeNodePanel,
-      selectedNodeIds: ids,
-    })),
+  selectNodeIds: (ids) => set({ selectedNodeIds: ids }),
 }))
 
 export const getCanvasUiSnapshot = () => useCanvasUiStore.getState()

@@ -1,12 +1,11 @@
 interface RemoteUpdateBannerProps {
   onRefresh(): void
-  version?: number | undefined
 }
 
-export function RemoteUpdateBanner({ onRefresh, version }: RemoteUpdateBannerProps) {
+export function RemoteUpdateBanner({ onRefresh }: RemoteUpdateBannerProps) {
   return (
     <div className="mina-wc-remote-banner">
-      <span>Remote update{version ? ` v${version}` : ''}</span>
+      <span>Remote update</span>
       <button onClick={onRefresh} type="button">
         Refresh
       </button>

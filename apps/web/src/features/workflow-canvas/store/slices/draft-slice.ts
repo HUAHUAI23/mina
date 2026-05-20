@@ -11,6 +11,7 @@ import type {
 export const initialDraftState: CanvasDraftState = {
   dirty: false,
   draftRevision: 0,
+  lastDocumentTransaction: undefined,
   savedRevision: 0,
   saving: false,
   version: 1,

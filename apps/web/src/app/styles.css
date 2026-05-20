@@ -836,21 +836,6 @@ a {
     linear-gradient(135deg, oklch(0.91 0.004 247), oklch(0.66 0.006 247));
 }
 
-.mina-canvas-preview span,
-.mina-recent-preview span {
-  background: oklch(1 0 0 / 88%);
-  border-radius: 999px;
-  color: var(--foreground-secondary);
-  font-size: 0.62rem;
-  font-weight: 900;
-  letter-spacing: 0.12em;
-  padding: 6px 10px;
-  position: absolute;
-  right: 12px;
-  text-transform: uppercase;
-  top: 12px;
-}
-
 .mina-canvas-card-copy {
   align-items: start;
   display: flex;

@@ -8,7 +8,7 @@ import {
   assignSlotOrder,
   normalizeSlotOrder,
 } from '../../utils/media-slots'
-import { commitDraftChanged } from '../store-helpers'
+import { commitDocumentTransaction } from '../store-helpers'
 import type {
   CanvasStore,
   CanvasMediaSlotActions,
@@ -33,7 +33,7 @@ export const createMediaSlotsSlice: CanvasSliceCreator<
           ...(node.data.mediaSlots ?? {}),
           [item.slot]: normalizeSlotOrder([...items, item]),
         }
-        commitDraftChanged(state)
+        commitDocumentTransaction(state, { node, type: 'update_node' })
       }),
     ),
   removeSlotItem: (nodeId, slot, slotItemId) =>
@@ -54,7 +54,11 @@ export const createMediaSlotsSlice: CanvasSliceCreator<
         state.edges = state.edges.filter(
           (edge: WorkflowCanvasEdge) => edge.data.connection.targetSlotItemId !== slotItemId,
         )
-        commitDraftChanged(state)
+        commitDocumentTransaction(state, {
+          edges: state.edges,
+          nodes: state.nodes,
+          type: 'replace_snapshot',
+        })
       }),
     ),
   reorderSlotItem: (nodeId, slot, slotItemId, direction) =>
@@ -81,7 +85,7 @@ export const createMediaSlotsSlice: CanvasSliceCreator<
           ...(node.data.mediaSlots ?? {}),
           [slot]: normalizeSlotOrder(items),
         }
-        commitDraftChanged(state)
+        commitDocumentTransaction(state, { node, type: 'update_node' })
       }),
     ),
   reorderSlotItems: (nodeId, slot, orderedIds) =>
@@ -104,7 +108,7 @@ export const createMediaSlotsSlice: CanvasSliceCreator<
           ...(node.data.mediaSlots ?? {}),
           [slot]: assignSlotOrder([...orderedItems, ...remainingItems]),
         }
-        commitDraftChanged(state)
+        commitDocumentTransaction(state, { node, type: 'update_node' })
       }),
     ),
   replaceSlotItemMediaObject: (nodeId, slot, slotItemId, mediaObjectId) =>
@@ -128,7 +132,7 @@ export const createMediaSlotsSlice: CanvasSliceCreator<
             ),
           ),
         }
-        commitDraftChanged(state)
+        commitDocumentTransaction(state, { node, type: 'update_node' })
       }),
     ),
   updateSlotItem: (nodeId, item) =>
@@ -150,7 +154,7 @@ export const createMediaSlotsSlice: CanvasSliceCreator<
             ),
           ),
         }
-        commitDraftChanged(state)
+        commitDocumentTransaction(state, { node, type: 'update_node' })
       }),
     ),
 })

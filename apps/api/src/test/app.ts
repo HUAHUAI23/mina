@@ -25,7 +25,9 @@ import {
   FakeWorkflowNodeTaskRepository,
   FakeWorkflowRunEventLog,
   FakeWorkflowRunRepository,
+  FakeWorkflowYjsRepository,
 } from './fakes'
+import { WorkflowYjsRoomService } from '../modules/workflows/collaboration/workflow-yjs-room.service'
 
 export const createTestApp = () => {
   const accountsRepository = new FakeAccountsRepository()
@@ -53,6 +55,7 @@ export const createTestApp = () => {
   )
   const runs = new FakeWorkflowRunRepository()
   const workflowEventBus = new InMemoryWorkflowEventBus()
+  const workflowYjsRoomService = new WorkflowYjsRoomService(new FakeWorkflowYjsRepository())
   const workflowsService = new WorkflowsService(
     {
       definitions: new FakeWorkflowDefinitionRepository(),
@@ -74,6 +77,7 @@ export const createTestApp = () => {
     storage: new FakeObjectStorage(),
     tasksService,
     workflowEventBus,
+    workflowYjsRoomService,
     workflowsService,
   })
 }

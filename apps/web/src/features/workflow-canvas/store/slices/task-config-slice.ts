@@ -2,7 +2,7 @@ import { produce } from 'immer'
 import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 
 import { isMediaGenerationNode } from '../../domain/canvas-node-types'
-import { commitDraftChanged } from '../store-helpers'
+import { commitDocumentTransaction } from '../store-helpers'
 import type {
   CanvasStore,
   CanvasSliceCreator,
@@ -20,7 +20,7 @@ export const createTaskConfigSlice: CanvasSliceCreator<
           return
         }
         node.data.config.task = task
-        commitDraftChanged(state)
+        commitDocumentTransaction(state, { node, type: 'update_node' })
       }),
     ),
   setNodeText: (nodeId, text) =>
@@ -31,7 +31,7 @@ export const createTaskConfigSlice: CanvasSliceCreator<
           return
         }
         node.data.config.text = text
-        commitDraftChanged(state)
+        commitDocumentTransaction(state, { node, type: 'update_node' })
       }),
     ),
 })

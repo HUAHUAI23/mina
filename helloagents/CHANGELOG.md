@@ -5,6 +5,11 @@ This file records important project changes.
 ## [Unreleased]
 
 ### Added
+- Added workflow canvas render-state separation, projection cache, drag-session diagnostics, 20/100/500-node performance fixtures, and Yjs shadow document mapping with snapshot parity checks.
+- Added Playwright workflow canvas regression coverage for drag/save/reload, selection drag, save failure retry, Yjs parity, 500-node visible-element clipping, and drag-time unrelated-node render counts.
+- Added automated workflow canvas performance evidence generation with Chromium trace files and React Profiler commit summaries for 20/100/500-node fixtures.
+- Added an authenticated workflow collaboration snapshot endpoint and y-websocket-compatible collaboration room with Yjs update persistence, snapshot compaction, awareness broadcast, and restart recovery tests.
+- Added workflow Yjs persistence tables for binary updates and compacted snapshots, plus Drizzle schema explain coverage for the generated table/index/foreign-key SQL.
 - Added an authenticated media-object content redirect endpoint and workflow preview URL resolver so canvas previews can render managed media even when storage objects are private or stored as `s3://` URLs.
 - Added dnd-kit-powered drag sorting for workflow media slot thumbnails.
 - Added a TanStack Form-driven workflow node composer for image/video generation configuration, including shared prompt state and model descriptor-based parameter rendering.
@@ -22,6 +27,11 @@ This file records important project changes.
 - Added opt-in PostgreSQL-backed workflow repository concurrency tests for run claiming, leases, node state predicates, and duplicate node starts.
 
 ### Changed
+- Reworked workflow canvas React Flow integration so high-frequency node/edge changes update a dedicated render store, while document commits and autosave happen only on semantic graph transactions.
+- Recorded local workflow canvas document transactions and mapped them into Yjs transactions, while remote Yjs updates now export snapshots back into the document/render path.
+- Added a runtime toggle for workflow canvas Yjs shadow sync while keeping REST snapshot persistence as the default save/export path.
+- Moved workflow canvas node display data out of broad store subscriptions and runtime objects; node components now consume stable flow-node data plus narrow runtime/action stores.
+- Changed video canvas nodes to render poster-only previews in the canvas and avoid mounting playable `<video>` elements in normal node bodies.
 - Reworked workflow canvas image/video nodes as MediaView previews: image nodes render selected images directly, while video nodes render a poster and mount video playback only after user interaction.
 - Reworked the workflow canvas composer into a selected-node floating card below image/video MediaView nodes, anchored through React Flow `NodeToolbar` so positioning follows React Flow internals while preserving a white glass UI aligned to `apps/web/DESIGN.md`.
 - Split workflow canvas draft state from UI state: node selection/config panel state now lives in a dedicated UI store, while the draft store keeps persisted nodes/edges and revision-based saves.
@@ -42,3 +52,5 @@ This file records important project changes.
 ### Fixed
 - Fixed workflow canvas Zustand subscriptions that returned fresh projection objects on every render, preventing React's `getSnapshot` infinite update warning and maximum-depth crash.
 - Enabled Vite websocket proxy upgrades for `/api` workflow event streams and kept the canvas event socket stable across local dirty/version/selection changes.
+- Reduced workflow canvas pan/zoom jank by moving the node config composer out of React Flow's transform-following toolbar layer and removing costly blur/filter effects from active canvas elements.
+- Fixed controlled React Flow node dragging by syncing in-flight position changes into the canvas node state without marking the draft dirty until drag stop.

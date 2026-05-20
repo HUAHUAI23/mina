@@ -13,11 +13,12 @@ import {
   normalizeSlotOrder,
   removeEdgeSlotItem,
 } from '../../utils/media-slots'
-import { commitDraftChanged, createStoreId } from '../store-helpers'
+import { commitDocumentTransaction, createStoreId } from '../store-helpers'
 import type {
   CanvasStore,
   CanvasGraphActions,
   CanvasGraphState,
+  CanvasNodeFramePatch,
   CanvasSliceCreator,
 } from '../store-types'
 
@@ -53,6 +54,38 @@ const createMediaEdge = (
     },
   },
 })
+
+const applyNodeFramePatch = (
+  node: WorkflowCanvasNode,
+  input: {
+    height?: number | undefined
+    parentId?: string | undefined
+    position?: { x: number; y: number } | undefined
+    width?: number | undefined
+  },
+): boolean => {
+  let changed = false
+  if (
+    input.position &&
+    (node.position.x !== input.position.x || node.position.y !== input.position.y)
+  ) {
+    node.position = input.position
+    changed = true
+  }
+  if (input.parentId !== undefined && node.parentId !== input.parentId) {
+    node.parentId = input.parentId
+    changed = true
+  }
+  if (input.width !== undefined && node.width !== input.width) {
+    node.width = input.width
+    changed = true
+  }
+  if (input.height !== undefined && node.height !== input.height) {
+    node.height = input.height
+    changed = true
+  }
+  return changed
+}
 
 export const createGraphSlice: CanvasSliceCreator<
   CanvasGraphState & CanvasGraphActions
@@ -99,15 +132,41 @@ export const createGraphSlice: CanvasSliceCreator<
           ...(target.data.mediaSlots ?? {}),
           [slot]: normalizeSlotOrder([...existingItems, item]),
         }
-        state.edges.push(createMediaEdge(input, targetSlotItemId, slot))
-        commitDraftChanged(state)
+        const edge = createMediaEdge(input, targetSlotItemId, slot)
+        state.edges.push(edge)
+        commitDocumentTransaction(state, {
+          edge,
+          node: target,
+          type: 'connect_media_slot',
+        })
       }),
     ),
   addNode: (type) =>
     _set(
       produce<CanvasStore>((state) => {
-        state.nodes.push(createWorkflowCanvasNode(type, state.nodes.length))
-        commitDraftChanged(state)
+        const node = createWorkflowCanvasNode(type, state.nodes.length)
+        state.nodes.push(node)
+        commitDocumentTransaction(state, { node, type: 'upsert_node' })
+      }),
+    ),
+  commitNodeFrames: (frames) =>
+    _set(
+      produce<CanvasStore>((state) => {
+        let changed = false
+        const changes: CanvasNodeFramePatch[] = []
+        for (const frame of frames) {
+          const node = state.nodes.find((item: WorkflowCanvasNode) => item.id === frame.nodeId)
+          if (!node) {
+            continue
+          }
+          if (applyNodeFramePatch(node, frame)) {
+            changed = true
+            changes.push(frame)
+          }
+        }
+        if (changed) {
+          commitDocumentTransaction(state, { changes, type: 'move_nodes' })
+        }
       }),
     ),
   removeGraphEdges: (edgeIds) =>
@@ -130,7 +189,11 @@ export const createGraphSlice: CanvasSliceCreator<
             ),
           state.nodes,
         )
-        commitDraftChanged(state)
+        commitDocumentTransaction(state, {
+          edges: state.edges,
+          nodes: state.nodes,
+          type: 'replace_snapshot',
+        })
       }),
     ),
   removeGraphNodes: (nodeIds) =>
@@ -158,7 +221,11 @@ export const createGraphSlice: CanvasSliceCreator<
         state.edges = state.edges.filter(
           (edge: WorkflowCanvasEdge) => !removedIds.has(edge.source) && !removedIds.has(edge.target),
         )
-        commitDraftChanged(state)
+        commitDocumentTransaction(state, {
+          edges: state.edges,
+          nodes: state.nodes,
+          type: 'replace_snapshot',
+        })
       }),
     ),
   setNodeFrame: (input) =>
@@ -169,28 +236,11 @@ export const createGraphSlice: CanvasSliceCreator<
           return
         }
 
-        let changed = false
-        if (
-          input.position &&
-          (node.position.x !== input.position.x || node.position.y !== input.position.y)
-        ) {
-          node.position = input.position
-          changed = true
-        }
-        if (input.parentId !== undefined && node.parentId !== input.parentId) {
-          node.parentId = input.parentId
-          changed = true
-        }
-        if (input.width !== undefined && node.width !== input.width) {
-          node.width = input.width
-          changed = true
-        }
-        if (input.height !== undefined && node.height !== input.height) {
-          node.height = input.height
-          changed = true
-        }
-        if (changed) {
-          commitDraftChanged(state)
+        if (applyNodeFramePatch(node, input)) {
+          commitDocumentTransaction(state, {
+            changes: [input],
+            type: 'move_nodes',
+          })
         }
       }),
     ),

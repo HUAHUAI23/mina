@@ -27,6 +27,8 @@ flowchart TD
 | ADR-DATA-001 | Use PostgreSQL-backed Drizzle repositories for application business runtime; keep fakes only in tests. | Accepted | API |
 | ADR-WEB-001 | Keep the browser-sized app shell in the TanStack root layout; route pages render only inside the stable route frame. | Accepted | Web |
 | ADR-WEB-002 | Gate unauthenticated browser usage at the app provider layer with a centered password login/register card, typed Hono RPC calls, and contract-parsed responses. | Accepted | Web, Auth |
+| ADR-WF-002 | Split workflow canvas render state from persisted document state; React Flow interaction frames update render state while autosave follows document revisions. | Accepted | Web, Workflows |
+| ADR-WF-003 | Introduce Yjs as a shadow collaboration document before replacing REST snapshot persistence. | Accepted | Web, API, Workflows |
 
 ## Runtime Flow
 ```mermaid
@@ -47,4 +49,41 @@ sequenceDiagram
   Tasks->>Finalizer: finalize output resources
   Finalizer->>Media: create output media_objects
   Tasks-->>Workflow: task output with mediaObjectId
+```
+
+## Workflow Canvas State Flow
+```mermaid
+flowchart TD
+  RF[React Flow] --> RS[Render Store: flowNodes / flowEdges]
+  RF --> PS[Presence Store: cursor / selection / dragging / viewport]
+  RS --> DC[Drag Stop Diff]
+  DC --> DS[Document Draft Store: persisted nodes / edges / revisions]
+  DS --> SAVE[Autosave REST Snapshot]
+  DS --> PROJ[Projection Cache]
+  PROJ --> RS
+  DS --> YJS[Yjs Shadow Document]
+  YJS --> YWS[Authenticated y-websocket Room]
+  YWS --> YPERSIST[Yjs Updates / Snapshots]
+  YJS --> PARITY[Snapshot Parity Checks]
+```
+
+## Workflow Collaboration Flow
+```mermaid
+sequenceDiagram
+  participant ClientA
+  participant API as Hono/Bun API
+  participant Room as WorkflowYjsRoomService
+  participant Store as WorkflowYjsRepository
+  participant ClientB
+
+  ClientA->>API: WS /api/workflows/:id/collab/:id?token=...
+  API->>API: authenticate and authorize workflow access
+  API->>Room: connect workflow room
+  Room->>Store: load snapshot and updates
+  Room-->>ClientA: y-websocket sync step
+  ClientA->>Room: Yjs update
+  Room->>Store: append update / compact snapshot
+  Room-->>ClientB: broadcast Yjs update
+  ClientA->>Room: awareness update
+  Room-->>ClientB: broadcast awareness
 ```
