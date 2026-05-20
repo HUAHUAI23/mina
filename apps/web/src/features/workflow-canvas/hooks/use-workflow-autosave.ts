@@ -1,15 +1,18 @@
 import { useCallback, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { WorkflowResponse } from '@mina/contracts/modules/workflows'
+import type { WorkflowCollaborationCheckpointResponse } from '@mina/contracts/modules/workflows'
 
 import { workflowKeys } from '../api/workflow-keys'
-import { saveWorkflow } from '../api/workflow-queries'
+import { checkpointWorkflowCollaboration } from '../api/workflow-queries'
 import { getCanvasSnapshot, useCanvasStore } from '../store/canvas-store'
 import {
   incrementCanvasPerfCounter,
   markCanvasPerformance,
 } from '../diagnostics/canvas-performance-marks'
-import { stableCanvas } from '../utils/react-flow-persistence'
+import {
+  getWorkflowYjsRuntimeForWorkflow,
+  getWorkflowYjsStateVector,
+} from '../sync/yjs/workflow-yjs-store'
 
 interface UseWorkflowAutosaveInput {
   fallbackName?: string | undefined
@@ -18,9 +21,11 @@ interface UseWorkflowAutosaveInput {
 }
 
 interface WorkflowSaveResult {
-  response: WorkflowResponse
-  revision: number
+  response: WorkflowCollaborationCheckpointResponse
 }
+
+const stateVectorsEqual = (left: Uint8Array | undefined, right: readonly number[]): boolean =>
+  Boolean(left && left.length === right.length && left.every((value, index) => value === right[index]))
 
 export function useWorkflowAutosave({
   fallbackName,
@@ -28,10 +33,9 @@ export function useWorkflowAutosave({
   workflowId,
 }: UseWorkflowAutosaveInput) {
   const queryClient = useQueryClient()
-  const draftRevision = useCanvasStore((state) => state.draftRevision)
-  const remoteUpdatePending = useCanvasStore((state) => state.remoteUpdatePending)
-  const savedRevision = useCanvasStore((state) => state.savedRevision)
+  const dirty = useCanvasStore((state) => state.dirty)
   const saving = useCanvasStore((state) => state.saving)
+  const yjsConnectionStatus = useCanvasStore((state) => state.yjsConnectionStatus)
   const acknowledgeSaved = useCanvasStore((state) => state.acknowledgeSaved)
   const setSaving = useCanvasStore((state) => state.setSaving)
 
@@ -39,14 +43,15 @@ export function useWorkflowAutosave({
     scope: { id: `workflow-save:${workflowId}` },
     mutationFn: async (): Promise<WorkflowSaveResult> => {
       const snapshot = getCanvasSnapshot()
-      const canvas = stableCanvas(snapshot.nodes, snapshot.edges)
-      const response = await saveWorkflow(workflowId, {
-        name: snapshot.name || fallbackName,
-        version: snapshot.version,
-        nodes: canvas.nodes,
-        edges: canvas.edges,
-      })
-      return { response, revision: snapshot.draftRevision }
+      const runtime = getWorkflowYjsRuntimeForWorkflow(workflowId)
+      if (!runtime?.synced || runtime.providerStatus !== 'connected') {
+        throw new Error('Workflow collaboration is not synced yet.')
+      }
+      return {
+        response: await checkpointWorkflowCollaboration(workflowId, {
+          ...(snapshot.name || fallbackName ? { name: snapshot.name || fallbackName } : {}),
+        }),
+      }
     },
     onMutate: () => {
       incrementCanvasPerfCounter('autosaveStarts')
@@ -57,8 +62,11 @@ export function useWorkflowAutosave({
       markCanvasPerformance('autosave:end')
       setSaving(false)
     },
-    onSuccess: ({ response, revision }) => {
-      acknowledgeSaved({ revision, version: response.item.version })
+    onSuccess: ({ response }) => {
+      if (!stateVectorsEqual(getWorkflowYjsStateVector(workflowId), response.yjsStateVector)) {
+        return
+      }
+      acknowledgeSaved({ version: response.item.version })
       queryClient.setQueryData(workflowKeys.detail(workflowId), response)
     },
     onError: (error) =>
@@ -66,12 +74,12 @@ export function useWorkflowAutosave({
   })
 
   useEffect(() => {
-    if (draftRevision <= savedRevision || saving || remoteUpdatePending) {
+    if (!dirty || saving || yjsConnectionStatus !== 'synced') {
       return
     }
     const timeout = window.setTimeout(() => saveMutation.mutate(), 700)
     return () => window.clearTimeout(timeout)
-  }, [draftRevision, remoteUpdatePending, saveMutation, savedRevision, saving])
+  }, [dirty, saveMutation, saving, yjsConnectionStatus])
 
   const saveNow = useCallback(
     () => saveMutation.mutate(),

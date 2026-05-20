@@ -75,6 +75,20 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
     setRuntime({ actions: runtimeActions, runError, runningNodeId })
   }, [runError, runningNodeId, runtimeActions, setRuntime])
 
+  useEffect(() => {
+    if (!import.meta.env.DEV) {
+      return
+    }
+    window.__minaWorkflowCanvasUi = {
+      get activeNodePanel() {
+        return useCanvasUiStore.getState().activeNodePanel
+      },
+    }
+    return () => {
+      delete window.__minaWorkflowCanvasUi
+    }
+  }, [])
+
   const handleNodeClick = useCallback<NodeMouseHandler<WorkflowFlowNode>>((event, node) => {
     if (isIgnoredCanvasTarget(event.target)) {
       return
@@ -133,3 +147,11 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
 }
 
 export const MemoizedWorkflowCanvas = memo(WorkflowCanvas)
+
+declare global {
+  interface Window {
+    __minaWorkflowCanvasUi?: {
+      activeNodePanel: { nodeId: string; panel: string } | undefined
+    }
+  }
+}

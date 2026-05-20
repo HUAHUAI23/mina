@@ -1109,8 +1109,7 @@ a {
   width: 1px;
 }
 
-.mina-wc-save-pill,
-.mina-wc-remote-banner {
+.mina-wc-save-pill {
   align-items: center;
   background: color-mix(in oklch, var(--surface-container-lowest) 88%, transparent);
   backdrop-filter: blur(16px);
@@ -1129,11 +1128,22 @@ a {
   padding: 0 15px;
 }
 
-.mina-wc-remote-banner {
-  padding: 0 8px 0 15px;
+.mina-wc-save-pill > span {
+  background: #f59e0b;
+  border-radius: 999px;
+  height: 7px;
+  width: 7px;
 }
 
-.mina-wc-remote-banner button,
+.mina-wc-save-pill[data-sync='connected'] > span,
+.mina-wc-save-pill[data-sync='synced'] > span {
+  background: #22c55e;
+}
+
+.mina-wc-save-pill[data-sync='disconnected'] > span {
+  background: #ef4444;
+}
+
 .mina-wc-run-controls button {
   align-items: center;
   background: linear-gradient(135deg, var(--primary), color-mix(in oklch, var(--primary) 90%, black));

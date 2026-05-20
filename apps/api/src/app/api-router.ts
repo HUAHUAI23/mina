@@ -41,7 +41,7 @@ export const createApiRouter = ({
     .route('/health', createHealthRoutes())
     .route('/', createMediaRoutes(mediaObjectService, accountsService))
     .route('/tasks', createTasksRoutes(tasksService, modelCatalogService, accountsService))
-    .route('/workflows', createWorkflowsRoutes(workflowsService, accountsService))
+    .route('/workflows', createWorkflowsRoutes(workflowsService, accountsService, workflowYjsRoomService))
     .route('/workflows', createWorkflowCollaborationRoutes(workflowsService, accountsService, workflowYjsRoomService))
     .route('/workflows', createWorkflowEventsRoutes(workflowEventBus))
     .route('/workflow-runs', createWorkflowRunsRoutes(workflowsService, accountsService))

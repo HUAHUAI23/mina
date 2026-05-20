@@ -39,6 +39,11 @@ interface WorkflowDetailResponse {
   }
 }
 
+interface NodeScreenFrame {
+  x: number
+  y: number
+}
+
 interface CanvasPerfCounters {
   autosaveStarts: number
   documentCommits: number
@@ -66,6 +71,10 @@ declare global {
     __minaWorkflowCanvasRenderCounts?: Record<string, number>
     __minaWorkflowCanvasYjs?: {
       matchesDocument(): boolean
+      stateVector(): Uint8Array
+    }
+    __minaWorkflowCanvasUi?: {
+      activeNodePanel: { nodeId: string; panel: string } | undefined
     }
   }
 }
@@ -333,6 +342,29 @@ const readRenderCount = async (page: Page, nodeId: string): Promise<number> =>
 const readProfilerCommits = async (page: Page): Promise<CanvasProfilerCommit[]> =>
   page.evaluate(() => window.__minaWorkflowCanvasProfiler?.map((commit) => ({ ...commit })) ?? [])
 
+const readNodeScreenFrame = async (page: Page, nodeId: string): Promise<NodeScreenFrame> =>
+  page.locator(`.react-flow__node[data-id="${nodeId}"]`).evaluate((node) => {
+    const rect = node.getBoundingClientRect()
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    }
+  })
+
+const dragNodeBy = async (
+  page: Page,
+  nodeId: string,
+  delta: { x: number; y: number },
+  steps = 18,
+): Promise<NodeScreenFrame> => {
+  const before = await readNodeScreenFrame(page, nodeId)
+  await page.mouse.move(before.x, before.y)
+  await page.mouse.down()
+  await page.mouse.move(before.x + delta.x, before.y + delta.y, { steps })
+  await page.mouse.up()
+  return readNodeScreenFrame(page, nodeId)
+}
+
 test('workflow canvas drag/save/reload keeps document commits bounded and Yjs parity intact', async ({ page, request }) => {
   const auth = await register(request)
   const workflow = await createWorkflow(request, auth.session.token, 20)
@@ -341,13 +373,7 @@ test('workflow canvas drag/save/reload keeps document commits bounded and Yjs pa
   await page.goto(`/canvas/${workflow.item.id}`)
   await expect
     .poll(() =>
-      page.evaluate(
-        (workflowId) =>
-          performance
-            .getEntriesByType('resource')
-            .some((entry) => entry.name.includes(`/api/workflows/${workflowId}/collab/snapshot`)),
-        workflow.item.id,
-      ),
+      page.evaluate(() => (window.__minaWorkflowCanvasYjs?.stateVector?.().byteLength ?? 0) > 0),
     )
     .toBe(true)
   await page.locator('.react-flow').waitFor()
@@ -412,6 +438,37 @@ test('workflow canvas drag/save/reload keeps document commits bounded and Yjs pa
   expect(nodeAfterReload.position).toEqual(nodeAfterSave.position)
 })
 
+test('workflow canvas keeps a newly added image node after primary checkpoint save', async ({ page, request }) => {
+  const auth = await register(request)
+  const workflow = await createWorkflow(request, auth.session.token, 20)
+  await installAuthSession(page, auth)
+
+  await page.goto(`/canvas/${workflow.item.id}`)
+  await page.locator('.react-flow').waitFor()
+  await expect(page.locator('.react-flow__node')).toHaveCount(20)
+  await expect.poll(() => page.evaluate(() => window.__minaWorkflowCanvasYjs?.matchesDocument?.())).toBe(true)
+
+  await page.getByRole('button', { name: 'Add Image' }).click()
+  await expect(page.locator('.react-flow__node')).toHaveCount(21)
+  await expect
+    .poll(async () => {
+      const text = await page.getByText(/Saving|Saved/).first().textContent().catch(() => '')
+      return text === 'Saving' || text === 'Saved'
+    })
+    .toBe(true)
+  await expect(page.getByText('Saved')).toBeVisible()
+  await expect(page.locator('.react-flow__node')).toHaveCount(21)
+  await expect.poll(() => page.evaluate(() => window.__minaWorkflowCanvasYjs?.matchesDocument?.())).toBe(true)
+
+  const persisted = await getWorkflowDetail(request, auth.session.token, workflow.item.id)
+  expect(persisted.item.nodes).toHaveLength(21)
+  expect(persisted.item.nodes.some((node) => node.data.nodeType === 'image_generation' && node.data.title === 'Image Node')).toBe(true)
+
+  await page.reload()
+  await page.locator('.react-flow').waitFor()
+  await expect(page.locator('.react-flow__node')).toHaveCount(21)
+})
+
 test('workflow canvas opens the config card when a node is clicked', async ({ page, request }) => {
   const auth = await register(request)
   const workflow = await createWorkflow(request, auth.session.token, 20)
@@ -450,6 +507,129 @@ test('workflow canvas keeps the config card open after config document updates',
   await expect(prompt).toHaveValue('Updated prompt while the panel stays open')
 })
 
+test('workflow canvas collaboration keeps remote moves, nodes, and config interaction stable', async ({ page, context, request }) => {
+  const auth = await register(request)
+  const workflow = await createWorkflow(request, auth.session.token, 20)
+  await installAuthSession(page, auth)
+  const collaborator = await context.newPage()
+  await installAuthSession(collaborator, auth)
+
+  await page.goto(`/canvas/${workflow.item.id}`)
+  await collaborator.goto(`/canvas/${workflow.item.id}`)
+  for (const canvasPage of [page, collaborator]) {
+    await canvasPage.locator('.react-flow').waitFor()
+    await expect(canvasPage.locator('.react-flow__node').first()).toBeVisible()
+    await expect.poll(() => canvasPage.evaluate(() => window.__minaWorkflowCanvasYjs?.matchesDocument?.())).toBe(true)
+  }
+
+  const target = await firstVisibleDraggableNode(page)
+  await page.mouse.click(target.x, target.y)
+  const configCard = page.locator('.mina-wc-config-card')
+  await expect(configCard).toBeVisible()
+
+  const collaboratorTargetBefore = await readNodeScreenFrame(collaborator, target.id)
+  await collaborator.mouse.move(collaboratorTargetBefore.x, collaboratorTargetBefore.y)
+  await collaborator.mouse.down()
+  await collaborator.mouse.move(collaboratorTargetBefore.x + 150, collaboratorTargetBefore.y + 80, { steps: 18 })
+  await collaborator.mouse.up()
+
+  await expect
+    .poll(async () => {
+      const after = await readNodeScreenFrame(page, target.id)
+      return Math.abs(after.x - target.x) >= 20 || Math.abs(after.y - target.y) >= 20
+    })
+    .toBe(true)
+  await expect(page.locator('.react-flow__node')).toHaveCount(20)
+  await expect(configCard).toBeVisible()
+
+  const prompt = configCard.getByRole('textbox', { name: 'Prompt' })
+  await prompt.fill('Collaborative prompt while remote move is retained')
+  await expect(configCard).toBeVisible()
+
+  await page.getByRole('button', { name: /save/i }).click()
+  await expect(page.getByText('Saved')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => window.__minaWorkflowCanvasYjs?.matchesDocument?.())).toBe(true)
+
+  const persisted = await getWorkflowDetail(request, auth.session.token, workflow.item.id)
+  const movedNode = persisted.item.nodes.find((node) => node.id === target.id)
+  if (!movedNode) {
+    throw new Error(`Workflow API did not return collaborator-moved node ${target.id}.`)
+  }
+  const initialNode = createWorkflowFixture(20).nodes.find((node) => node.id === target.id)
+  if (!initialNode) {
+    throw new Error(`Workflow fixture did not contain node ${target.id}.`)
+  }
+  expect(persisted.item.nodes).toHaveLength(20)
+  expect(
+    Math.abs(movedNode.position.x - initialNode.position.x) >= 20 ||
+      Math.abs(movedNode.position.y - initialNode.position.y) >= 20,
+  ).toBe(true)
+})
+
+test('workflow canvas collaboration lets a synced peer immediately move the same node', async ({ page, context, request }) => {
+  const auth = await register(request)
+  const workflow = await createWorkflow(request, auth.session.token, 20)
+  await installAuthSession(page, auth)
+  const collaborator = await context.newPage()
+  await installAuthSession(collaborator, auth)
+
+  await page.goto(`/canvas/${workflow.item.id}`)
+  await collaborator.goto(`/canvas/${workflow.item.id}`)
+  for (const canvasPage of [page, collaborator]) {
+    await canvasPage.locator('.react-flow').waitFor()
+    await expect(canvasPage.locator('.react-flow__node').first()).toBeVisible()
+    await expect.poll(() => canvasPage.evaluate(() => window.__minaWorkflowCanvasYjs?.matchesDocument?.())).toBe(true)
+  }
+
+  const target = await firstVisibleDraggableNode(page)
+  await page.mouse.click(target.x, target.y)
+  await expect(page.locator('.mina-wc-config-card')).toBeVisible()
+
+  const pageMove = await dragNodeBy(page, target.id, { x: 150, y: 70 })
+  await expect
+    .poll(async () => {
+      const synced = await readNodeScreenFrame(collaborator, target.id)
+      return Math.abs(synced.x - pageMove.x) <= 12 && Math.abs(synced.y - pageMove.y) <= 12
+    })
+    .toBe(true)
+
+  const collaboratorMove = await dragNodeBy(collaborator, target.id, { x: -110, y: 95 })
+  await expect
+    .poll(async () => {
+      const current = await readNodeScreenFrame(collaborator, target.id)
+      return Math.abs(current.x - collaboratorMove.x) <= 12 && Math.abs(current.y - collaboratorMove.y) <= 12
+    })
+    .toBe(true)
+  await expect
+    .poll(async () => {
+      const synced = await readNodeScreenFrame(page, target.id)
+      return Math.abs(synced.x - collaboratorMove.x) <= 12 && Math.abs(synced.y - collaboratorMove.y) <= 12
+    })
+    .toBe(true)
+
+  await expect(page.locator('.mina-wc-config-card')).toBeVisible()
+  await expect
+    .poll(() => page.evaluate(() => window.__minaWorkflowCanvasUi?.activeNodePanel?.nodeId))
+    .toBe(target.id)
+
+  await expect.poll(() => page.evaluate(() => window.__minaWorkflowCanvasYjs?.matchesDocument?.())).toBe(true)
+  await expect.poll(() => collaborator.evaluate(() => window.__minaWorkflowCanvasYjs?.matchesDocument?.())).toBe(true)
+  await page.getByRole('button', { name: /save/i }).click()
+  await expect(page.getByText('Saved')).toBeVisible()
+
+  const persisted = await getWorkflowDetail(request, auth.session.token, workflow.item.id)
+  const movedNode = persisted.item.nodes.find((node) => node.id === target.id)
+  if (!movedNode) {
+    throw new Error(`Workflow API did not return moved node ${target.id}.`)
+  }
+  const initialNode = createWorkflowFixture(20).nodes.find((node) => node.id === target.id)
+  if (!initialNode) {
+    throw new Error(`Workflow fixture did not contain node ${target.id}.`)
+  }
+  expect(movedNode.position.x).not.toBe(initialNode.position.x)
+  expect(movedNode.position.y).not.toBe(initialNode.position.y)
+})
+
 test('workflow canvas keeps dirty state after a save failure and recovers on retry', async ({ page, request }) => {
   const auth = await register(request)
   const workflow = await createWorkflow(request, auth.session.token, 20)
@@ -462,8 +642,8 @@ test('workflow canvas keeps dirty state after a save failure and recovers on ret
 
   const target = await firstVisibleDraggableNode(page)
   let failSaves = true
-  await page.route(`**/api/workflows/${workflow.item.id}`, async (route) => {
-    if (route.request().method() === 'PUT' && failSaves) {
+  await page.route(`**/api/workflows/${workflow.item.id}/collab/checkpoint`, async (route) => {
+    if (route.request().method() === 'POST' && failSaves) {
       await route.fulfill({
         contentType: 'application/json',
         status: 503,
@@ -493,7 +673,7 @@ test('workflow canvas keeps dirty state after a save failure and recovers on ret
   await expect.poll(() => page.evaluate(() => window.__minaWorkflowCanvasYjs?.matchesDocument?.())).toBe(true)
 })
 
-test('workflow canvas selection drag commits one document transaction for multiple nodes', async ({ page, request }) => {
+test('workflow canvas selection drag commits one Yjs graph update for multiple nodes', async ({ page, request }) => {
   const auth = await register(request)
   const workflow = await createWorkflow(request, auth.session.token, 20)
   await installAuthSession(page, auth)

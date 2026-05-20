@@ -3,11 +3,9 @@ import * as Y from 'yjs'
 
 import {
   incrementCanvasPerfCounter,
-  markCanvasPerformance,
 } from '../../diagnostics/canvas-performance-marks'
 import {
   createWorkflowYDoc,
-  importWorkflowSnapshotToYjs,
   workflowYjsSnapshotMatches,
   type WorkflowYDocHandles,
 } from './yjs-document'
@@ -15,26 +13,29 @@ import {
   applyLocalWorkflowAwareness,
   readRemoteWorkflowAwareness,
 } from './yjs-awareness'
-import { applyWorkflowTransactionToYjs } from './yjs-transactions'
 import { createWorkflowYjsProvider } from './yjs-provider'
 import { exportWorkflowYjsSnapshot } from './yjs-snapshot'
 import { getCanvasSnapshot, useCanvasStore } from '../../store/canvas-store'
 import { useWorkflowPresenceStore } from '../workflow-presence'
+import {
+  registerWorkflowYjsRuntime,
+  unregisterWorkflowYjsRuntime,
+  updateWorkflowYjsRuntimeConnection,
+  updateWorkflowYjsRuntimeSnapshot,
+} from './workflow-yjs-store'
 
-export const useWorkflowYjsShadowSync = (workflowId: string, enabled = true): void => {
-  const nodes = useCanvasStore((state) => state.nodes)
-  const edges = useCanvasStore((state) => state.edges)
-  const draftRevision = useCanvasStore((state) => state.draftRevision)
+export const useWorkflowYjsSync = (workflowId: string, enabled = true): void => {
   const hydratedWorkflowId = useCanvasStore((state) => state.hydratedWorkflowId)
-  const lastDocumentTransaction = useCanvasStore((state) => state.lastDocumentTransaction)
   const applyRemoteSnapshot = useCanvasStore((state) => state.applyRemoteSnapshot)
+  const markDraftChanged = useCanvasStore((state) => state.markDraftChanged)
+  const setYjsConnectionStatus = useCanvasStore((state) => state.setYjsConnectionStatus)
   const providerRef = useRef<ReturnType<typeof createWorkflowYjsProvider> | undefined>(undefined)
-  const appliedTransactionKeyRef = useRef<string | undefined>(undefined)
-  const skipNextDocumentImport = useRef(false)
   const yRef = useRef<WorkflowYDocHandles | undefined>(undefined)
+  const yWorkflowIdRef = useRef<string | undefined>(undefined)
 
-  if (enabled && !yRef.current) {
+  if (enabled && (!yRef.current || yWorkflowIdRef.current !== workflowId)) {
     yRef.current = createWorkflowYDoc()
+    yWorkflowIdRef.current = workflowId
   }
 
   useEffect(() => {
@@ -45,75 +46,92 @@ export const useWorkflowYjsShadowSync = (workflowId: string, enabled = true): vo
     if (!y || hydratedWorkflowId !== workflowId) {
       return
     }
-    if (skipNextDocumentImport.current) {
-      skipNextDocumentImport.current = false
-      return
-    }
-    if (draftRevision > 0 && lastDocumentTransaction?.revision === draftRevision) {
-      return
-    }
-    importWorkflowSnapshotToYjs(y, { edges, nodes }, draftRevision === 0 ? 'mina-import' : 'mina-local')
-    markCanvasPerformance('yjs:shadow-sync')
-  }, [draftRevision, edges, enabled, hydratedWorkflowId, lastDocumentTransaction, nodes, workflowId])
 
-  useEffect(() => {
-    if (!enabled) {
-      return
-    }
-    const y = yRef.current
-    if (!y || hydratedWorkflowId !== workflowId) {
-      return
-    }
+    registerWorkflowYjsRuntime(workflowId, y, getCanvasSnapshot())
     const provider = createWorkflowYjsProvider(workflowId, y)
     providerRef.current = provider
-    const onUpdate = (_update: Uint8Array, origin: unknown) => {
-      if (origin === 'mina-local' || origin === 'mina-import') {
-        incrementCanvasPerfCounter('yjsUpdatesSent')
+
+    const projectYjsToStore = (markDirty: boolean) => {
+      const snapshot = exportWorkflowYjsSnapshot(y)
+      const current = getCanvasSnapshot()
+      if (
+        !provider.synced &&
+        snapshot.nodes.length === 0 &&
+        snapshot.edges.length === 0 &&
+        current.workflowId === workflowId &&
+        current.nodes.length > 0
+      ) {
         return
       }
-      incrementCanvasPerfCounter('yjsUpdatesReceived')
-      const snapshot = exportWorkflowYjsSnapshot(y)
-      skipNextDocumentImport.current = true
+      updateWorkflowYjsRuntimeSnapshot(workflowId, snapshot)
+      if (
+        current.workflowId === workflowId &&
+        workflowYjsSnapshotMatches(snapshot, {
+          edges: current.edges,
+          nodes: current.nodes,
+        })
+      ) {
+        return
+      }
       applyRemoteSnapshot({
+        allowEmpty: provider.synced,
         edges: snapshot.edges,
         nodes: snapshot.nodes,
+        source: 'yjs',
         workflowId,
       })
+      if (markDirty) {
+        markDraftChanged()
+      }
+    }
+
+    const onUpdate = (_update: Uint8Array, origin: unknown) => {
+      const isLocal = origin === 'mina-local' || origin === 'mina-bootstrap'
+      if (isLocal) {
+        incrementCanvasPerfCounter('yjsUpdatesSent')
+      } else {
+        incrementCanvasPerfCounter('yjsUpdatesReceived')
+      }
+      projectYjsToStore(origin === 'mina-local')
     }
     const onAwarenessUpdate = () => {
       useWorkflowPresenceStore.getState().setPeers(readRemoteWorkflowAwareness(provider.awareness))
     }
+    const onSync = (synced: boolean) => {
+      updateWorkflowYjsRuntimeConnection(workflowId, { synced })
+      if (synced) {
+        setYjsConnectionStatus('synced')
+        projectYjsToStore(false)
+      }
+    }
+    const onStatus = (event: { status: 'connected' | 'connecting' | 'disconnected' }) => {
+      updateWorkflowYjsRuntimeConnection(workflowId, {
+        providerStatus: event.status,
+        ...(event.status === 'disconnected' ? { synced: false } : {}),
+      })
+      setYjsConnectionStatus(event.status)
+    }
     y.ydoc.on('update', onUpdate)
     provider.awareness.on('update', onAwarenessUpdate)
+    provider.on('sync', onSync)
+    provider.on('status', onStatus)
+    projectYjsToStore(false)
+
     return () => {
+      provider.off('sync', onSync)
+      provider.off('status', onStatus)
       provider.awareness.off('update', onAwarenessUpdate)
       provider.destroy()
       providerRef.current = undefined
       y.ydoc.off('update', onUpdate)
+      unregisterWorkflowYjsRuntime(workflowId, y)
+      y.ydoc.destroy()
+      if (yRef.current === y) {
+        yRef.current = undefined
+        yWorkflowIdRef.current = undefined
+      }
     }
-  }, [applyRemoteSnapshot, enabled, hydratedWorkflowId, workflowId])
-
-  useEffect(() => {
-    if (!enabled) {
-      return
-    }
-    const y = yRef.current
-    if (
-      !y ||
-      hydratedWorkflowId !== workflowId ||
-      draftRevision === 0 ||
-      lastDocumentTransaction?.revision !== draftRevision
-    ) {
-      return
-    }
-    const transactionKey = `${workflowId}:${draftRevision}`
-    if (appliedTransactionKeyRef.current === transactionKey) {
-      return
-    }
-    applyWorkflowTransactionToYjs(y, lastDocumentTransaction.transaction, 'mina-local')
-    appliedTransactionKeyRef.current = transactionKey
-    markCanvasPerformance('yjs:shadow-sync')
-  }, [draftRevision, enabled, hydratedWorkflowId, lastDocumentTransaction, workflowId])
+  }, [applyRemoteSnapshot, enabled, hydratedWorkflowId, markDraftChanged, setYjsConnectionStatus, workflowId])
 
   useEffect(() => {
     if (!import.meta.env.DEV || !enabled) {

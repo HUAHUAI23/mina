@@ -36,7 +36,9 @@ export const useWorkflowFlowHandlers = () => {
   const dragSession = useRef<NodeDragSession | undefined>(undefined)
   const applyRenderEdgeChanges = useFlowRenderStore((state) => state.applyEdgeChanges)
   const applyRenderNodeChanges = useFlowRenderStore((state) => state.applyNodeChanges)
+  const releaseLocalFrameNodeIds = useFlowRenderStore((state) => state.releaseLocalFrameNodeIds)
   const setDraggingNodeIds = useFlowRenderStore((state) => state.setDraggingNodeIds)
+  const setLocalFrameNodeIds = useFlowRenderStore((state) => state.setLocalFrameNodeIds)
   const setLastViewport = useFlowRenderStore((state) => state.setLastViewport)
   const setViewportMoving = useFlowRenderStore((state) => state.setViewportMoving)
   const addMediaConnection = useCanvasStore((state) => state.addMediaConnection)
@@ -95,6 +97,9 @@ export const useWorkflowFlowHandlers = () => {
         if (change.type === 'position' && change.position) {
           if (change.dragging) {
             const session = dragSession.current
+            if (!session) {
+              setLocalFrameNodeIds([change.id])
+            }
             if (session) {
               const previous = session.latest[change.id] ?? session.baseline[change.id]
               session.latest = {
@@ -131,7 +136,7 @@ export const useWorkflowFlowHandlers = () => {
         }
       }
     },
-    [applyRenderNodeChanges, removeGraphNodes, setNodeFrame],
+    [applyRenderNodeChanges, removeGraphNodes, setLocalFrameNodeIds, setNodeFrame],
   )
 
   const onNodeDragStart = useCallback<NodeMouseHandler<WorkflowFlowNode>>((_event, node) => {
@@ -143,8 +148,9 @@ export const useWorkflowFlowHandlers = () => {
         : state.flowNodes.filter((candidate) => candidate.id === node.id)
     dragSession.current = createNodeDragSession(nodes)
     setDraggingNodeIds(dragSession.current.nodeIds)
+    setLocalFrameNodeIds(dragSession.current.nodeIds)
     markCanvasPerformance('drag:start')
-  }, [setDraggingNodeIds])
+  }, [setDraggingNodeIds, setLocalFrameNodeIds])
 
   const onNodeDragStop = useCallback<NodeMouseHandler<WorkflowFlowNode>>(() => {
     const session = dragSession.current
@@ -168,9 +174,10 @@ export const useWorkflowFlowHandlers = () => {
     }
     dragSession.current = undefined
     setDraggingNodeIds([])
+    window.setTimeout(() => releaseLocalFrameNodeIds(session.nodeIds), 250)
     publishLocalDragging(undefined)
     markCanvasPerformance('drag:stop')
-  }, [commitNodeFrames, setDraggingNodeIds])
+  }, [commitNodeFrames, releaseLocalFrameNodeIds, setDraggingNodeIds])
 
   const onMove = useCallback<OnMove>((_event, viewport) => {
     publishLocalViewport(viewport)

@@ -36,7 +36,6 @@ import type {
 } from '../modules/workflows/collaboration/workflow-yjs-repository'
 import type {
   ReplaceWorkflowDefinitionInput,
-  UpdateNodeMediaViewPersistenceInput,
   WorkflowDefinitionCreate,
   WorkflowDefinitionRepository,
 } from '../modules/workflows/repositories/workflow-definition.repository'
@@ -553,45 +552,6 @@ export class FakeWorkflowDefinitionRepository implements WorkflowDefinitionRepos
     return cloneWorkflow(workflow)
   }
 
-  async updateNodeMediaView(input: UpdateNodeMediaViewPersistenceInput): Promise<Workflow> {
-    const workflow = this.#workflows.get(input.workflowId)
-    if (!workflow) {
-      throw new Error('Workflow not found.')
-    }
-    if (workflow.version !== input.expectedWorkflowVersion) {
-      throw new Error('WORKFLOW_VERSION_CONFLICT')
-    }
-
-    const nodes = workflow.nodes.map((node) => {
-      if (node.id !== input.nodeId) {
-        return normalizeWorkflowNode(node)
-      }
-      if (node.data.nodeType !== 'image_generation' && node.data.nodeType !== 'video_generation') {
-        return normalizeWorkflowNode(node)
-      }
-
-      const { mediaView: _mediaView, ...dataWithoutMediaView } = node.data
-      return normalizeWorkflowNode({
-        ...node,
-        data: input.mediaView
-          ? {
-              ...node.data,
-              mediaView: input.mediaView,
-            }
-          : dataWithoutMediaView,
-      })
-    })
-
-    const updated = workflowDto({
-      ...workflow,
-      edges: workflow.edges.map(normalizeWorkflowEdge),
-      nodes,
-      updatedAt: input.timestamp,
-      version: workflow.version + 1,
-    })
-    this.#workflows.set(workflow.id, cloneWorkflow(updated))
-    return cloneWorkflow(updated)
-  }
 }
 
 const isoDateOrUndefined = (value: string | undefined): Date | undefined => (value ? new Date(value) : undefined)

@@ -7,16 +7,47 @@ import { taskKeys } from '../../../api/workflow-keys'
 import { createNodeMediaPreview, useMediaPreviewStore } from '../../../media/media-preview-store'
 import { markCanvasNodeRender } from '../../../diagnostics/canvas-render-counts'
 import { useWorkflowRuntimeStore } from '../../../store/workflow-runtime-store'
-import type { ImageGenerationFlowNode, VideoGenerationFlowNode } from '../../../domain/flow-types'
+import type {
+  ImageGenerationFlowNode,
+  VideoGenerationFlowNode,
+  WorkflowFlowNodeData,
+} from '../../../domain/flow-types'
 import { ImagePreview } from './ImagePreview'
 import { MediaOutputStrip } from './MediaOutputStrip'
 import { VideoPosterPreview } from './VideoPosterPreview'
 
-export const MediaGenerationNode = memo(function MediaGenerationNode({
+type MediaGenerationNodeProps = NodeProps<ImageGenerationFlowNode | VideoGenerationFlowNode>
+
+interface MediaGenerationNodeViewProps {
+  data: WorkflowFlowNodeData & { nodeType: 'image_generation' | 'video_generation' }
+  id: string
+}
+
+const mediaGenerationNodeViewPropsEqual = (
+  previous: MediaGenerationNodeViewProps,
+  next: MediaGenerationNodeViewProps,
+): boolean =>
+  previous.id === next.id &&
+  previous.data.nodeId === next.data.nodeId &&
+  previous.data.nodeType === next.data.nodeType &&
+  previous.data.title === next.data.title &&
+  previous.data.mediaView?.taskId === next.data.mediaView?.taskId &&
+  previous.data.mediaView?.outputResourceId === next.data.mediaView?.outputResourceId &&
+  previous.data.mediaView?.outputIndex === next.data.mediaView?.outputIndex
+
+const mediaGenerationNodeRenderSignature = (data: MediaGenerationNodeViewProps['data']): string =>
+  JSON.stringify({
+    mediaView: data.mediaView,
+    nodeId: data.nodeId,
+    nodeType: data.nodeType,
+    title: data.title,
+  })
+
+const MediaGenerationNodeView = memo(function MediaGenerationNodeView({
   data,
   id,
-}: NodeProps<ImageGenerationFlowNode | VideoGenerationFlowNode>) {
-  markCanvasNodeRender(id)
+}: MediaGenerationNodeViewProps) {
+  markCanvasNodeRender(id, mediaGenerationNodeRenderSignature(data))
   const onSelectOutput = useWorkflowRuntimeStore((state) => state.actions.onSelectOutput)
   const mediaView = data.mediaView
   const taskId = mediaView?.taskId
@@ -67,4 +98,8 @@ export const MediaGenerationNode = memo(function MediaGenerationNode({
       <Handle className="mina-wc-handle" position={Position.Right} type="source" />
     </article>
   )
-})
+}, mediaGenerationNodeViewPropsEqual)
+
+export function MediaGenerationNode({ data, id }: MediaGenerationNodeProps) {
+  return <MediaGenerationNodeView data={data} id={id} />
+}

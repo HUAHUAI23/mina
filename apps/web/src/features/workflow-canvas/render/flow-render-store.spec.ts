@@ -10,6 +10,7 @@ useFlowRenderStore.setState({
   flowNodesById: {},
   interaction: {
     draggingNodeIds: [],
+    localFrameNodeIds: [],
     selectionDragActive: false,
     viewportMoving: false,
   },
@@ -66,6 +67,58 @@ if (!selectedAfter?.selected) {
 const selectedEdgeAfter = getFlowRenderSnapshot().flowEdgesById[fixture.edges[0]?.id ?? 'missing']
 if (!selectedEdgeAfter?.selected) {
   throw new Error('Hydrating document updates should preserve selected edge interaction state.')
+}
+
+useFlowRenderStore.getState().setLocalFrameNodeIds([firstNode.id])
+useFlowRenderStore.getState().applyNodeChanges([
+  {
+    dragging: true,
+    id: firstNode.id,
+    position: { x: firstNode.position.x + 90, y: firstNode.position.y + 45 },
+    type: 'position',
+  },
+])
+useFlowRenderStore.getState().hydrateFromDocument({
+  edges: fixture.edges,
+  nodes: fixture.nodes.map((node) =>
+    node.id === firstNode.id
+      ? {
+          ...node,
+          position: { x: firstNode.position.x + 500, y: firstNode.position.y + 500 },
+        }
+      : node,
+  ),
+})
+
+const locallyMovedAfterHydrate = getFlowRenderSnapshot().flowNodesById[firstNode.id]
+if (
+  !locallyMovedAfterHydrate ||
+  locallyMovedAfterHydrate.position.x !== firstNode.position.x + 90 ||
+  locallyMovedAfterHydrate.position.y !== firstNode.position.y + 45
+) {
+  throw new Error('Hydrating document updates should preserve local in-flight node frames.')
+}
+
+useFlowRenderStore.getState().releaseLocalFrameNodeIds([firstNode.id])
+useFlowRenderStore.getState().hydrateFromDocument({
+  edges: fixture.edges,
+  nodes: fixture.nodes.map((node) =>
+    node.id === firstNode.id
+      ? {
+          ...node,
+          position: { x: firstNode.position.x + 500, y: firstNode.position.y + 500 },
+        }
+      : node,
+  ),
+})
+
+const remoteMovedAfterRelease = getFlowRenderSnapshot().flowNodesById[firstNode.id]
+if (
+  !remoteMovedAfterRelease ||
+  remoteMovedAfterRelease.position.x !== firstNode.position.x + 500 ||
+  remoteMovedAfterRelease.position.y !== firstNode.position.y + 500
+) {
+  throw new Error('Hydrating document updates should reconcile remote frames after local frame release.')
 }
 
 console.log('flow render store checks passed')

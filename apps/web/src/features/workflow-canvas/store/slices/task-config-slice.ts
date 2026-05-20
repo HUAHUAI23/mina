@@ -1,37 +1,21 @@
-import { produce } from 'immer'
-import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
-
-import { isMediaGenerationNode } from '../../domain/canvas-node-types'
-import { commitDocumentTransaction } from '../store-helpers'
+import { workflowYjsCommands, type WorkflowYjsCommandContext } from '../../sync/yjs/workflow-yjs-commands'
 import type {
-  CanvasStore,
   CanvasSliceCreator,
   CanvasTaskConfigActions,
 } from '../store-types'
 
 export const createTaskConfigSlice: CanvasSliceCreator<
   CanvasTaskConfigActions
-> = (set) => ({
-  setNodeTaskConfig: (nodeId, task) =>
-    set(
-      produce<CanvasStore>((state) => {
-        const node = state.nodes.find((item: WorkflowCanvasNode) => item.id === nodeId)
-        if (!isMediaGenerationNode(node)) {
-          return
-        }
-        node.data.config.task = task
-        commitDocumentTransaction(state, { node, type: 'update_node' })
-      }),
-    ),
-  setNodeText: (nodeId, text) =>
-    set(
-      produce<CanvasStore>((state) => {
-        const node = state.nodes.find((item: WorkflowCanvasNode) => item.id === nodeId)
-        if (node?.data.nodeType !== 'text') {
-          return
-        }
-        node.data.config.text = text
-        commitDocumentTransaction(state, { node, type: 'update_node' })
-      }),
-    ),
-})
+> = (_set, get) => {
+  const context = (): WorkflowYjsCommandContext => {
+    const { edges, nodes, workflowId } = get()
+    return { edges, nodes, workflowId }
+  }
+
+  return {
+    setNodeTaskConfig: (nodeId, task) =>
+      workflowYjsCommands.setNodeTaskConfig(context(), nodeId, task),
+    setNodeText: (nodeId, text) =>
+      workflowYjsCommands.setNodeText(context(), nodeId, text),
+  }
+}

@@ -114,7 +114,7 @@ const mediaEdge = (index: number): WorkflowCanvasEdge => ({
   data: {
     connection: {
       kind: 'media_link',
-      targetSlot: 'inputImages',
+      targetSlot: index % 5 === 4 ? 'firstFrame' : 'inputImages',
       targetSlotItemId: `perf_slot_${index}`,
     },
   },
@@ -122,7 +122,9 @@ const mediaEdge = (index: number): WorkflowCanvasEdge => ({
 
 export const createCanvasPerformanceFixture = (nodeCount: number): CanvasPerformanceFixture => {
   const nodes = Array.from({ length: nodeCount }, (_unused, index) => fixtureNode(index))
-  const edges = Array.from({ length: Math.max(0, nodeCount - 1) }, (_unused, index) => mediaEdge(index + 1))
+  const edges = Array.from({ length: Math.max(0, nodeCount - 1) }, (_unused, index) => index + 1)
+    .filter((index) => index % 10 !== 9)
+    .map(mediaEdge)
   return { nodes, edges }
 }
 

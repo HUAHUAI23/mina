@@ -5,7 +5,8 @@ This file records important project changes.
 ## [Unreleased]
 
 ### Added
-- Added workflow canvas render-state separation, projection cache, drag-session diagnostics, 20/100/500-node performance fixtures, and Yjs shadow document mapping with snapshot parity checks.
+- Added workflow canvas Yjs single-source collaboration runtime with a live document registry, direct graph command layer with dry-run validation, one-way Zustand projection, server-side checkpoint validation/compaction/read-model refresh, per-workflow checkpoint locking, and state-vector checkpoint acknowledgements.
+- Added workflow canvas render-state separation, projection cache, drag-session diagnostics, 20/100/500-node performance fixtures, and Yjs document mapping with snapshot parity checks.
 - Added Playwright workflow canvas regression coverage for drag/save/reload, selection drag, save failure retry, Yjs parity, 500-node visible-element clipping, and drag-time unrelated-node render counts.
 - Added automated workflow canvas performance evidence generation with Chromium trace files and React Profiler commit summaries for 20/100/500-node fixtures.
 - Added an authenticated workflow collaboration snapshot endpoint and y-websocket-compatible collaboration room with Yjs update persistence, snapshot compaction, awareness broadcast, and restart recovery tests.
@@ -27,14 +28,19 @@ This file records important project changes.
 - Added opt-in PostgreSQL-backed workflow repository concurrency tests for run claiming, leases, node state predicates, and duplicate node starts.
 
 ### Changed
+- Reworked workflow canvas collaboration so Yjs is the only graph source of truth. Autosave/manual save now posts `{ name? }` to the collaboration checkpoint, clients no longer send `stateUpdate` or reconcile checkpoint snapshots back into ydoc, and `workflows.nodes/edges` is maintained as a server read model for runs and non-collaboration reads.
+- Changed workflow canvas graph/media/task store actions to delegate to Yjs commands and removed the draft revision/document transaction queue from graph persistence.
+- Changed workflow run creation to checkpoint the authoritative server ydoc before creating the run snapshot.
+- Reworked workflow canvas primary collaboration persistence so Yjs is the durable graph source: local graph commands write into the live Yjs document immediately, autosave/manual save call a server-side collaboration checkpoint, and the frontend no longer uploads full nodes/edges through REST `PUT` in primary mode.
+- Changed workflow canvas MediaView output selection to commit a Yjs graph command instead of using a version-sensitive REST media-view patch in the primary collaboration path.
 - Reworked workflow canvas React Flow integration so high-frequency node/edge changes update a dedicated render store, while document commits and autosave happen only on semantic graph transactions.
-- Recorded local workflow canvas document transactions and mapped them into Yjs transactions, while remote Yjs updates now export snapshots back into the document/render path.
-- Added a runtime toggle for workflow canvas Yjs shadow sync while keeping REST snapshot persistence as the default save/export path.
+- Remote Yjs updates now project snapshots one-way into the document/render path.
+- Removed non-primary workflow canvas sync modes and the `VITE_WORKFLOW_CANVAS_SYNC_MODE` configuration.
 - Moved workflow canvas node display data out of broad store subscriptions and runtime objects; node components now consume stable flow-node data plus narrow runtime/action stores.
 - Changed video canvas nodes to render poster-only previews in the canvas and avoid mounting playable `<video>` elements in normal node bodies.
 - Reworked workflow canvas image/video nodes as MediaView previews: image nodes render selected images directly, while video nodes render a poster and mount video playback only after user interaction.
 - Reworked the workflow canvas composer into a selected-node floating card below image/video MediaView nodes, anchored through React Flow `NodeToolbar` so positioning follows React Flow internals while preserving a white glass UI aligned to `apps/web/DESIGN.md`.
-- Split workflow canvas draft state from UI state: node selection/config panel state now lives in a dedicated UI store, while the draft store keeps persisted nodes/edges and revision-based saves.
+- Split workflow canvas graph projection state from UI state: node selection/config panel state now lives in a dedicated UI store, while graph nodes/edges are projected from Yjs.
 - Refined workflow media input UX with direct thumbnail drag ordering, in-thumbnail replace/delete actions, dashed upload wells, and a more compact floating composer layout.
 - Added debounced workflow canvas auto-save so uploaded media slots, drag ordering, and node edits persist without requiring a manual save before refresh.
 - Unified image-generation node media input semantics: image nodes now expose one ordered image media slot, treat any image input as image-to-image, and reject image-task `referenceImages` instead of migrating or merging them.
@@ -50,7 +56,19 @@ This file records important project changes.
 - Workflow reconciliation now claims due running runs before processing and updates individual `workflow_run_node_states` rows instead of rewriting run-level JSON state.
 
 ### Fixed
+- Fixed multi-client workflow canvas reverts, remote overwrite, and transient empty-canvas states caused by dual state sources, checkpoint snapshot re-import, and broadcast echo paths.
+- Fixed pre-sync empty Yjs projection wiping a hydrated canvas by guarding empty Yjs snapshots until provider sync, with a store-level empty snapshot sanity check.
+- Fixed false saved state while disconnected by delaying autosave until Yjs is synced/connected and acknowledging checkpoint success only when the local state vector matches the server response.
+- Fixed newly added image nodes disappearing after primary collaboration save by removing client full-state checkpoint uploads and keeping the server room ydoc authoritative.
+- Fixed workflow canvas collaborative handoff where page A's recent position could reappear after page B moved the same node by removing save-response ydoc re-import and stale checkpoint snapshot overwrite paths.
+- Fixed primary collaboration save conflicts and data-loss risk by replacing the previous stale-version retry behavior with server-side Yjs checkpoint persistence.
+- Fixed workflow canvas collaboration regressions where stale node config updates could overwrite newer node positions, coarse snapshot replacements could remove unrelated collaborative graph state, and dirty local edits could be overwritten by remote snapshots.
+- Fixed workflow canvas save/reload consistency in primary collaboration mode by checkpointing the server room ydoc, serializing read-model refresh, and keeping idle collaboration rooms briefly available for immediate diagnostic snapshots.
 - Fixed workflow canvas Zustand subscriptions that returned fresh projection objects on every render, preventing React's `getSnapshot` infinite update warning and maximum-depth crash.
 - Enabled Vite websocket proxy upgrades for `/api` workflow event streams and kept the canvas event socket stable across local dirty/version/selection changes.
 - Reduced workflow canvas pan/zoom jank by moving the node config composer out of React Flow's transform-following toolbar layer and removing costly blur/filter effects from active canvas elements.
 - Fixed controlled React Flow node dragging by syncing in-flight position changes into the canvas node state without marking the draft dirty until drag stop.
+
+### Removed
+- Removed workflow canvas shadow/full-save rollback paths from production code, including document transaction replay state, Yjs transaction helpers, save-response ydoc re-import, remote update banner wiring, REST media-view patch persistence, and the web collaboration snapshot client.
+- Removed the public full-graph `PUT /api/workflows/:id` workflow update path so collaborative graph writes only enter through Yjs sync and server checkpoint read-model refresh.

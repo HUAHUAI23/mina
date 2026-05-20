@@ -1,7 +1,6 @@
 import { z } from 'zod'
 
 import {
-  NodeMediaViewStateSchema,
   WorkflowCanvasEdgeSchema,
   WorkflowCanvasNodeSchema,
 } from '../canvas/canvas.schemas'
@@ -56,11 +55,8 @@ export const CreateWorkflowSchema = z.object({
   edges: z.array(WorkflowCanvasEdgeSchema).default([]),
 })
 
-export const UpdateWorkflowSchema = z.object({
+export const CheckpointWorkflowCollaborationSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
-  version: z.number().int().min(1),
-  nodes: z.array(WorkflowCanvasNodeSchema),
-  edges: z.array(WorkflowCanvasEdgeSchema),
 })
 
 export const WorkflowParamsSchema = z.object({
@@ -74,11 +70,6 @@ export const WorkflowRunParamsSchema = z.object({
 export const CreateWorkflowRunSchema = z.object({
   selectedNodeId: z.string().min(1),
   expectedWorkflowVersion: z.number().int().min(1),
-})
-
-export const UpdateNodeMediaViewSchema = z.object({
-  expectedWorkflowVersion: z.number().int().min(1),
-  mediaView: NodeMediaViewStateSchema.optional(),
 })
 
 export const WorkflowNodeTaskHistoryItemSchema = z.object({
@@ -99,6 +90,11 @@ export const WorkflowResponseSchema = z.object({
   item: WorkflowSchema,
 })
 
+export const WorkflowCollaborationCheckpointResponseSchema = z.object({
+  item: WorkflowSchema,
+  yjsStateVector: z.array(z.number().int().min(0).max(255)),
+})
+
 export const WorkflowRunListResponseSchema = z.object({
   items: z.array(WorkflowRunSchema),
 })
@@ -116,11 +112,10 @@ export const CancelWorkflowRunResponseSchema = z.object({
 })
 
 export type CancelWorkflowRunResponse = z.infer<typeof CancelWorkflowRunResponseSchema>
+export type CheckpointWorkflowCollaborationInput = z.infer<typeof CheckpointWorkflowCollaborationSchema>
 export type CreateWorkflowInput = z.infer<typeof CreateWorkflowSchema>
 export type CreateWorkflowRunInput = z.infer<typeof CreateWorkflowRunSchema>
 export type DeleteWorkflowResponse = z.infer<typeof DeleteWorkflowResponseSchema>
-export type UpdateNodeMediaViewInput = z.infer<typeof UpdateNodeMediaViewSchema>
-export type UpdateWorkflowInput = z.infer<typeof UpdateWorkflowSchema>
 export type Workflow = z.infer<typeof WorkflowSchema>
 export type WorkflowListResponse = z.infer<typeof WorkflowListResponseSchema>
 export type WorkflowNodeTaskHistoryItem = z.infer<typeof WorkflowNodeTaskHistoryItemSchema>
@@ -128,6 +123,7 @@ export type WorkflowNodeTaskHistoryResponse = z.infer<typeof WorkflowNodeTaskHis
 export type WorkflowNodeRunStatus = z.infer<typeof WorkflowNodeRunStatusSchema>
 export type WorkflowParams = z.infer<typeof WorkflowParamsSchema>
 export type WorkflowResponse = z.infer<typeof WorkflowResponseSchema>
+export type WorkflowCollaborationCheckpointResponse = z.infer<typeof WorkflowCollaborationCheckpointResponseSchema>
 export type WorkflowRun = z.infer<typeof WorkflowRunSchema>
 export type WorkflowRunListResponse = z.infer<typeof WorkflowRunListResponseSchema>
 export type WorkflowRunMode = z.infer<typeof WorkflowRunModeSchema>

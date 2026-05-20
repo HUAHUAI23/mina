@@ -1,7 +1,5 @@
 import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 
-import type { CanvasDocumentTransaction, CanvasStore } from './store-types'
-
 export const createStoreId = (prefix: string): string =>
   `${prefix}_${crypto.randomUUID()}`
 
@@ -10,29 +8,8 @@ export const indexNodes = (
 ): Record<string, number> =>
   Object.fromEntries(nodes.map((node, index) => [node.id, index]))
 
-export const markDraftChanged = (state: CanvasStore): void => {
-  state.dirty = true
-  state.draftRevision += 1
-}
-
-export const commitDraftChanged = (state: CanvasStore): void => {
-  markDraftChanged(state)
-  state.nodeIndexById = indexNodes(state.nodes)
-}
-
-export const commitDocumentTransaction = (
-  state: CanvasStore,
-  transaction: CanvasDocumentTransaction,
-): void => {
-  commitDraftChanged(state)
-  state.lastDocumentTransaction = {
-    revision: state.draftRevision,
-    transaction,
-  }
-}
-
 export const findNodeById = (
-  state: Pick<CanvasStore, 'nodeIndexById' | 'nodes'>,
+  state: { nodeIndexById: Record<string, number>; nodes: readonly WorkflowCanvasNode[] },
   nodeId: string,
 ): WorkflowCanvasNode | undefined => {
   const index = state.nodeIndexById[nodeId]

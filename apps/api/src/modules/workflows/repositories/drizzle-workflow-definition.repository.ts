@@ -1,6 +1,6 @@
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import type { Workflow } from '@mina/contracts/modules/workflows'
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull } from 'drizzle-orm'
 
 import type { MinaDbClient, MinaDbTransaction } from '../../../db/client'
 import { workflowEdges, workflowNodes, workflows } from '../../../db/schema'
@@ -12,7 +12,6 @@ import {
 } from './workflow-mappers'
 import type {
   ReplaceWorkflowDefinitionInput,
-  UpdateNodeMediaViewPersistenceInput,
   WorkflowDefinitionCreate,
   WorkflowDefinitionRepository,
 } from './workflow-definition.repository'
@@ -220,60 +219,6 @@ export class DrizzleWorkflowDefinitionRepository implements WorkflowDefinitionRe
     return workflow
   }
 
-  async updateNodeMediaView(input: UpdateNodeMediaViewPersistenceInput): Promise<Workflow> {
-    const timestamp = new Date(input.timestamp)
-    await this.db.transaction(async (tx) => {
-      const [workflowRow] = await tx
-        .select({ id: workflows.id, version: workflows.version })
-        .from(workflows)
-        .where(and(eq(workflows.id, input.workflowId), isNull(workflows.deletedAt)))
-        .limit(1)
-        .for('update')
-      if (!workflowRow) {
-        throw new Error('Workflow not found.')
-      }
-      if (workflowRow.version !== input.expectedWorkflowVersion) {
-        throw new Error('WORKFLOW_VERSION_CONFLICT')
-      }
-
-      const [node] = await tx
-        .select()
-        .from(workflowNodes)
-        .where(and(eq(workflowNodes.workflowId, input.workflowId), eq(workflowNodes.nodeId, input.nodeId)))
-        .limit(1)
-        .for('update')
-      if (!node) {
-        throw new Error('Workflow node not found.')
-      }
-      if (node.type !== 'image_generation' && node.type !== 'video_generation') {
-        return
-      }
-
-      await tx
-        .update(workflowNodes)
-        .set({
-          data: input.mediaView
-            ? sql`${workflowNodes.data} || ${JSON.stringify({ mediaView: input.mediaView })}::jsonb`
-            : sql`${workflowNodes.data} - 'mediaView'`,
-          updatedAt: timestamp,
-        })
-        .where(and(eq(workflowNodes.workflowId, input.workflowId), eq(workflowNodes.nodeId, input.nodeId)))
-
-      await tx
-        .update(workflows)
-        .set({
-          version: sql`${workflows.version} + 1`,
-          updatedAt: timestamp,
-        })
-        .where(and(eq(workflows.id, input.workflowId), eq(workflows.version, input.expectedWorkflowVersion)))
-    })
-
-    const workflow = await this.findById(input.workflowId)
-    if (!workflow) {
-      throw new Error('Workflow not found.')
-    }
-    return workflow
-  }
 }
 
 export const workflowDefinitionNodeInsertRows = nodeInsertRows

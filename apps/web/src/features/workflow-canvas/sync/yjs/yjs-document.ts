@@ -1,10 +1,16 @@
 import * as Y from 'yjs'
-import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
+import {
+  WorkflowCanvasEdgeSchema,
+  WorkflowCanvasNodeSchema,
+  type WorkflowCanvasEdge,
+  type WorkflowCanvasNode,
+} from '@mina/contracts/modules/canvas'
 
 export interface WorkflowYDocHandles {
   edgeOrder: Y.Array<string>
   edges: Y.Map<unknown>
   meta: Y.Map<unknown>
+  nodeFrames: Y.Map<unknown>
   nodeOrder: Y.Array<string>
   nodes: Y.Map<unknown>
   ydoc: Y.Doc
@@ -21,6 +27,7 @@ export const createWorkflowYDoc = (): WorkflowYDocHandles => {
     edgeOrder: ydoc.getArray<string>('edgeOrder'),
     edges: ydoc.getMap<unknown>('edges'),
     meta: ydoc.getMap<unknown>('meta'),
+    nodeFrames: ydoc.getMap<unknown>('nodeFrames'),
     nodeOrder: ydoc.getArray<string>('nodeOrder'),
     nodes: ydoc.getMap<unknown>('nodes'),
     ydoc,
@@ -38,6 +45,32 @@ const replaceYArray = <TValue>(array: Y.Array<TValue>, values: readonly TValue[]
 
 const unique = <TValue>(values: readonly TValue[]): TValue[] => Array.from(new Set(values))
 
+type WorkflowYNodeFrame = Pick<WorkflowCanvasNode, 'position'> &
+  Partial<Pick<WorkflowCanvasNode, 'extent' | 'height' | 'parentId' | 'width'>>
+
+const nodeFrameFromNode = (node: WorkflowCanvasNode): WorkflowYNodeFrame => ({
+  position: node.position,
+  ...(node.parentId ? { parentId: node.parentId } : {}),
+  ...(node.extent ? { extent: node.extent } : {}),
+  ...(node.width !== undefined ? { width: node.width } : {}),
+  ...(node.height !== undefined ? { height: node.height } : {}),
+})
+
+const applyNodeFrame = (node: WorkflowCanvasNode, frame: unknown): WorkflowCanvasNode => {
+  if (!frame || typeof frame !== 'object' || !('position' in frame)) {
+    return node
+  }
+  const typedFrame = frame as WorkflowYNodeFrame
+  return {
+    ...node,
+    position: typedFrame.position,
+    ...(typedFrame.parentId ? { parentId: typedFrame.parentId } : {}),
+    ...(typedFrame.extent ? { extent: typedFrame.extent } : {}),
+    ...(typedFrame.width !== undefined ? { width: typedFrame.width } : {}),
+    ...(typedFrame.height !== undefined ? { height: typedFrame.height } : {}),
+  }
+}
+
 export const importWorkflowSnapshotToYjs = (
   y: WorkflowYDocHandles,
   snapshot: WorkflowYSnapshot,
@@ -45,8 +78,10 @@ export const importWorkflowSnapshotToYjs = (
 ): void => {
   y.ydoc.transact(() => {
     y.nodes.clear()
+    y.nodeFrames.clear()
     for (const node of snapshot.nodes) {
       y.nodes.set(node.id, node)
+      y.nodeFrames.set(node.id, nodeFrameFromNode(node))
     }
     replaceYArray(y.nodeOrder, unique(snapshot.nodes.map((node) => node.id)))
 
@@ -58,13 +93,30 @@ export const importWorkflowSnapshotToYjs = (
   }, origin)
 }
 
+const orderedValues = <TValue>(
+  order: Y.Array<string>,
+  values: Y.Map<unknown>,
+): TValue[] => {
+  const seen = new Set<string>()
+  const ordered = unique(order.toArray())
+    .flatMap((id) => {
+      const value = values.get(id)
+      if (!value) {
+        return []
+      }
+      seen.add(id)
+      return [value as TValue]
+    })
+  const missingFromOrder = Array.from(values.entries())
+    .filter(([id, value]) => !seen.has(id) && Boolean(value))
+    .map(([, value]) => value as TValue)
+  return [...ordered, ...missingFromOrder]
+}
+
 export const exportWorkflowSnapshotFromYjs = (y: WorkflowYDocHandles): WorkflowYSnapshot => {
-  const nodes = unique(y.nodeOrder.toArray())
-    .map((nodeId) => y.nodes.get(nodeId))
-    .filter((node): node is WorkflowCanvasNode => Boolean(node))
-  const edges = unique(y.edgeOrder.toArray())
-    .map((edgeId) => y.edges.get(edgeId))
-    .filter((edge): edge is WorkflowCanvasEdge => Boolean(edge))
+  const nodes = orderedValues<WorkflowCanvasNode>(y.nodeOrder, y.nodes)
+    .map((node) => applyNodeFrame(node, y.nodeFrames.get(node.id)))
+  const edges = orderedValues<WorkflowCanvasEdge>(y.edgeOrder, y.edges)
   return { edges, nodes }
 }
 
@@ -72,5 +124,11 @@ export const workflowYjsSnapshotMatches = (
   left: WorkflowYSnapshot,
   right: WorkflowYSnapshot,
 ): boolean =>
-  JSON.stringify({ edges: left.edges, nodes: left.nodes }) ===
-  JSON.stringify({ edges: right.edges, nodes: right.nodes })
+  JSON.stringify({
+    edges: left.edges.map((edge) => WorkflowCanvasEdgeSchema.parse(edge)),
+    nodes: left.nodes.map((node) => WorkflowCanvasNodeSchema.parse(node)),
+  }) ===
+  JSON.stringify({
+    edges: right.edges.map((edge) => WorkflowCanvasEdgeSchema.parse(edge)),
+    nodes: right.nodes.map((node) => WorkflowCanvasNodeSchema.parse(node)),
+  })

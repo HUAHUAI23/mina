@@ -12,6 +12,7 @@ import type { WorkflowFlowEdge, WorkflowFlowNode } from '../domain/flow-types'
 
 interface FlowRenderInteraction {
   draggingNodeIds: string[]
+  localFrameNodeIds: string[]
   selectionDragActive: boolean
   viewportMoving: boolean
 }
@@ -32,7 +33,9 @@ interface FlowRenderActions {
     edges: readonly WorkflowCanvasEdge[]
     nodes: readonly WorkflowCanvasNode[]
   }): void
+  releaseLocalFrameNodeIds(nodeIds: readonly string[]): void
   setDraggingNodeIds(nodeIds: readonly string[]): void
+  setLocalFrameNodeIds(nodeIds: readonly string[]): void
   setLastViewport(viewport: Viewport): void
   setViewportMoving(moving: boolean): void
 }
@@ -48,10 +51,22 @@ const indexFlowEdges = (edges: readonly WorkflowFlowEdge[]): Record<string, Work
 const preserveNodeInteraction = (
   nodes: readonly WorkflowFlowNode[],
   previousNodes: Readonly<Record<string, WorkflowFlowNode>>,
+  localFrameNodeIds: ReadonlySet<string>,
 ): WorkflowFlowNode[] => {
   let changed = false
   const nextNodes = nodes.map((node) => {
     const previous = previousNodes[node.id]
+    if (previous && localFrameNodeIds.has(node.id)) {
+      changed = true
+      return {
+        ...node,
+        height: previous.height,
+        measured: previous.measured,
+        parentId: previous.parentId,
+        position: previous.position,
+        width: previous.width,
+      } as WorkflowFlowNode
+    }
     if (previous?.selected === undefined || previous.selected === node.selected) {
       return node
     }
@@ -79,6 +94,7 @@ const preserveEdgeInteraction = (
 
 const emptyInteraction = (): FlowRenderInteraction => ({
   draggingNodeIds: [],
+  localFrameNodeIds: [],
   selectionDragActive: false,
   viewportMoving: false,
 })
@@ -113,12 +129,13 @@ export const useFlowRenderStore = create<FlowRenderStore>((set, get) => ({
     })
   },
   hydrateFromDocument: (input) => {
-    if (get().interaction.draggingNodeIds.length > 0) {
-      return
-    }
     const projected = flowProjectionCache.projectGraph(input)
     const state = get()
-    const flowNodes = preserveNodeInteraction(projected.nodes, state.flowNodesById)
+    const localFrameNodeIds = new Set([
+      ...state.interaction.draggingNodeIds,
+      ...state.interaction.localFrameNodeIds,
+    ])
+    const flowNodes = preserveNodeInteraction(projected.nodes, state.flowNodesById, localFrameNodeIds)
     const flowEdges = preserveEdgeInteraction(projected.edges, state.flowEdgesById)
     if (state.flowNodes === flowNodes && state.flowEdges === flowEdges) {
       return
@@ -131,6 +148,23 @@ export const useFlowRenderStore = create<FlowRenderStore>((set, get) => ({
       flowNodesById: indexFlowNodes(flowNodes),
     })
   },
+  releaseLocalFrameNodeIds: (nodeIds) =>
+    set((state) => {
+      const releasedIds = new Set(nodeIds)
+      if (releasedIds.size === 0 || state.interaction.localFrameNodeIds.length === 0) {
+        return state
+      }
+      const localFrameNodeIds = state.interaction.localFrameNodeIds.filter((nodeId) => !releasedIds.has(nodeId))
+      if (localFrameNodeIds.length === state.interaction.localFrameNodeIds.length) {
+        return state
+      }
+      return {
+        interaction: {
+          ...state.interaction,
+          localFrameNodeIds,
+        },
+      }
+    }),
   setDraggingNodeIds: (nodeIds) =>
     set((state) => ({
       interaction: {
@@ -138,6 +172,22 @@ export const useFlowRenderStore = create<FlowRenderStore>((set, get) => ({
         draggingNodeIds: Array.from(new Set(nodeIds)),
       },
     })),
+  setLocalFrameNodeIds: (nodeIds) =>
+    set((state) => {
+      const localFrameNodeIds = Array.from(new Set(nodeIds))
+      if (
+        state.interaction.localFrameNodeIds.length === localFrameNodeIds.length &&
+        state.interaction.localFrameNodeIds.every((nodeId, index) => nodeId === localFrameNodeIds[index])
+      ) {
+        return state
+      }
+      return {
+        interaction: {
+          ...state.interaction,
+          localFrameNodeIds,
+        },
+      }
+    }),
   setLastViewport: (viewport) => set({ lastViewport: viewport }),
   setViewportMoving: (moving) =>
     set((state) => {

@@ -27,8 +27,9 @@ flowchart TD
 | ADR-DATA-001 | Use PostgreSQL-backed Drizzle repositories for application business runtime; keep fakes only in tests. | Accepted | API |
 | ADR-WEB-001 | Keep the browser-sized app shell in the TanStack root layout; route pages render only inside the stable route frame. | Accepted | Web |
 | ADR-WEB-002 | Gate unauthenticated browser usage at the app provider layer with a centered password login/register card, typed Hono RPC calls, and contract-parsed responses. | Accepted | Web, Auth |
-| ADR-WF-002 | Split workflow canvas render state from persisted document state; React Flow interaction frames update render state while autosave follows document revisions. | Accepted | Web, Workflows |
-| ADR-WF-003 | Introduce Yjs as a shadow collaboration document before replacing REST snapshot persistence. | Accepted | Web, API, Workflows |
+| ADR-WF-002 | Split workflow canvas render state from persisted document projection; React Flow interaction frames update render state while graph commits write Yjs. | Accepted | Web, Workflows |
+| ADR-WF-003 | Use Yjs as the workflow canvas graph single source of truth; REST workflow definitions are read models. | Accepted | Web, API, Workflows |
+| ADR-WF-004 | Collaboration checkpoints perform server-side Yjs compaction and read-model refresh only; clients do not upload full graph state. | Accepted | Web, API, Workflows |
 
 ## Runtime Flow
 ```mermaid
@@ -57,14 +58,15 @@ flowchart TD
   RF[React Flow] --> RS[Render Store: flowNodes / flowEdges]
   RF --> PS[Presence Store: cursor / selection / dragging / viewport]
   RS --> DC[Drag Stop Diff]
-  DC --> DS[Document Draft Store: persisted nodes / edges / revisions]
-  DS --> SAVE[Autosave REST Snapshot]
-  DS --> PROJ[Projection Cache]
+  DC --> CMD[Yjs Command Layer]
+  UI[Composer / Media Slots / Toolbar] --> CMD
+  CMD --> YJS[Client Yjs Document]
+  YJS --> PROJ[Zustand Projection: nodes / edges]
   PROJ --> RS
-  DS --> YJS[Yjs Shadow Document]
-  YJS --> YWS[Authenticated y-websocket Room]
+  YJS <--> YWS[Authenticated y-websocket Room]
   YWS --> YPERSIST[Yjs Updates / Snapshots]
-  YJS --> PARITY[Snapshot Parity Checks]
+  YWS --> READ[Workflow Definition Read Model]
+  READ --> RUN[Workflow Run Snapshot]
 ```
 
 ## Workflow Collaboration Flow
@@ -82,8 +84,11 @@ sequenceDiagram
   Room->>Store: load snapshot and updates
   Room-->>ClientA: y-websocket sync step
   ClientA->>Room: Yjs update
-  Room->>Store: append update / compact snapshot
+  Room->>Store: append update
+  Room->>Room: apply update to server ydoc
   Room-->>ClientB: broadcast Yjs update
   ClientA->>Room: awareness update
   Room-->>ClientB: broadcast awareness
+  ClientA->>API: POST /collab/checkpoint { name? }
+  API->>Room: validate graph, compact server ydoc, return state vector, refresh read model
 ```

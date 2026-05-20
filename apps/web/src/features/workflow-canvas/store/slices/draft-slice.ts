@@ -1,6 +1,5 @@
 import { produce } from 'immer'
 
-import { markDraftChanged } from '../store-helpers'
 import type {
   CanvasStore,
   CanvasDraftActions,
@@ -10,35 +9,29 @@ import type {
 
 export const initialDraftState: CanvasDraftState = {
   dirty: false,
-  draftRevision: 0,
-  lastDocumentTransaction: undefined,
-  savedRevision: 0,
   saving: false,
   version: 1,
+  yjsConnectionStatus: 'connecting',
 }
 
 export const createDraftSlice: CanvasSliceCreator<
   CanvasDraftState & CanvasDraftActions
 > = (set) => ({
   ...initialDraftState,
-  acknowledgeSaved: ({ revision, version }) =>
+  acknowledgeSaved: ({ version }) =>
     set(
       produce<CanvasStore>((state) => {
         state.version = version
         state.saving = false
-        if (state.draftRevision === revision) {
-          state.dirty = false
-          state.savedRevision = revision
-          state.remoteUpdatePending = false
-          state.remoteVersion = undefined
-        }
+        state.dirty = false
       }),
     ),
   markDraftChanged: () =>
     set(
       produce<CanvasStore>((state) => {
-        markDraftChanged(state)
+        state.dirty = true
       }),
     ),
   setSaving: (saving) => set({ saving }),
+  setYjsConnectionStatus: (yjsConnectionStatus) => set({ yjsConnectionStatus }),
 })

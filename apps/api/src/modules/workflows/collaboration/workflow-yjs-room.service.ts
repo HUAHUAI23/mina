@@ -3,7 +3,6 @@ import * as syncProtocol from 'y-protocols/sync'
 import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
 import * as Y from 'yjs'
-import type { WSContext } from 'hono/ws'
 
 import type { Workflow } from '@mina/contracts/modules/workflows'
 
@@ -14,19 +13,26 @@ import {
   type WorkflowYDocHandles,
 } from './workflow-yjs-document'
 import type { WorkflowYjsRepository } from './workflow-yjs-repository'
+import { validateCanvas } from '../validation'
 
 const messageSync = 0
 const messageAwareness = 1
 const messageQueryAwareness = 3
 const snapshotCompactionThreshold = 50
 const maxMessageBytes = 2 * 1024 * 1024
+const roomIdleCleanupMs = 30_000
 
 export type WorkflowYjsRoomMessage = string | Blob | ArrayBufferLike | Uint8Array
 
-type WorkflowRoomConnection = Pick<WSContext, 'close' | 'readyState' | 'send'>
+type WorkflowRoomConnection = {
+  close(code?: number, reason?: string): void
+  readyState: number
+  send(source: string | ArrayBuffer | Uint8Array): void
+}
 
 interface WorkflowCollaborationRoom {
   awareness: awarenessProtocol.Awareness
+  cleanupTimer: ReturnType<typeof setTimeout> | undefined
   connections: Set<WorkflowRoomConnection>
   persistedUpdatesSinceSnapshot: number
   snapshotVersion: number
@@ -73,7 +79,6 @@ const readSyncMessage = (
   decoder: decoding.Decoder,
   encoder: encoding.Encoder,
   doc: Y.Doc,
-  origin: unknown,
 ): { syncMessageType: number; update?: Uint8Array | undefined } => {
   const syncMessageType = decoding.readVarUint(decoder)
   if (syncMessageType === syncProtocol.messageYjsSyncStep1) {
@@ -81,12 +86,11 @@ const readSyncMessage = (
     return { syncMessageType }
   }
   if (syncMessageType === syncProtocol.messageYjsSyncStep2) {
-    Y.applyUpdate(doc, decoding.readVarUint8Array(decoder), origin)
-    return { syncMessageType }
+    const update = decoding.readVarUint8Array(decoder)
+    return { syncMessageType, update }
   }
   if (syncMessageType === syncProtocol.messageYjsUpdate) {
     const update = decoding.readVarUint8Array(decoder)
-    Y.applyUpdate(doc, update, origin)
     return { syncMessageType, update }
   }
   throw new Error('Unknown Yjs sync message type.')
@@ -116,6 +120,7 @@ const broadcast = (
 
 export class WorkflowYjsRoomService {
   readonly #rooms = new Map<string, Promise<WorkflowCollaborationRoom>>()
+  readonly #workflowLocks = new Map<string, Promise<void>>()
 
   constructor(private readonly repository: WorkflowYjsRepository) {}
 
@@ -124,6 +129,7 @@ export class WorkflowYjsRoomService {
     workflow: Workflow
   }): Promise<() => void> {
     const room = await this.#getRoom(input.workflow)
+    this.#clearRoomCleanup(room)
     room.connections.add(input.connection)
 
     sendBinary(input.connection, encodeSyncStep1(room.y.ydoc))
@@ -134,9 +140,7 @@ export class WorkflowYjsRoomService {
     return () => {
       room.connections.delete(input.connection)
       if (room.connections.size === 0) {
-        room.awareness.destroy()
-        room.y.ydoc.destroy()
-        this.#rooms.delete(room.workflowId)
+        this.#scheduleRoomCleanup(room)
       }
     }
   }
@@ -171,15 +175,21 @@ export class WorkflowYjsRoomService {
 
     if (messageType === messageSync) {
       encoding.writeVarUint(encoder, messageSync)
-      const { syncMessageType, update } = readSyncMessage(decoder, encoder, room.y.ydoc, input.connection)
+      const { syncMessageType, update } = readSyncMessage(decoder, encoder, room.y.ydoc)
       if (encoding.length(encoder) > 1) {
         sendBinary(input.connection, encoding.toUint8Array(encoder))
       }
-      if (syncMessageType === syncProtocol.messageYjsUpdate) {
-        if (update) {
+      if (
+        (syncMessageType === syncProtocol.messageYjsUpdate ||
+          syncMessageType === syncProtocol.messageYjsSyncStep2) &&
+        update &&
+        update.byteLength > 0
+      ) {
+        await this.#withWorkflowLock(room.workflowId, async () => {
           await this.#persistUpdate(room, update)
-          broadcast(room, encodeSyncUpdate(update), input.connection)
-        }
+          Y.applyUpdate(room.y.ydoc, update, input.connection)
+        })
+        broadcast(room, encodeSyncUpdate(update), input.connection)
       }
       return
     }
@@ -203,11 +213,57 @@ export class WorkflowYjsRoomService {
     workflowId: string
   }> {
     const room = await this.#getRoom(workflow)
+    this.#clearRoomCleanup(room)
+    const snapshot = exportWorkflowSnapshotFromYDoc(room.y)
+    if (room.connections.size === 0) {
+      this.#scheduleRoomCleanup(room)
+    }
     return {
-      ...exportWorkflowSnapshotFromYDoc(room.y),
+      ...snapshot,
       version: workflow.version,
       workflowId: workflow.id,
     }
+  }
+
+  async checkpointForWorkflow(
+    workflow: Workflow,
+  ): Promise<{
+    edges: Workflow['edges']
+    nodes: Workflow['nodes']
+    yjsStateVector: Uint8Array
+  }> {
+    return this.checkpointWorkflowReadModel(workflow, async (snapshot) => snapshot)
+  }
+
+  async checkpointWorkflowReadModel<T>(
+    workflow: Workflow,
+    persistReadModel: (snapshot: {
+      edges: Workflow['edges']
+      nodes: Workflow['nodes']
+      yjsStateVector: Uint8Array
+    }) => Promise<T>,
+  ): Promise<T> {
+    const room = await this.#getRoom(workflow)
+    this.#clearRoomCleanup(room)
+    const result = await this.#withWorkflowLock(workflow.id, async () => {
+      const snapshot = exportWorkflowSnapshotFromYDoc(room.y)
+      validateCanvas(snapshot.nodes, snapshot.edges)
+      const stateVector = Y.encodeStateVector(room.y.ydoc)
+      const nextSnapshotVersion = Math.max(room.snapshotVersion + 1, workflow.version + 1)
+      await this.repository.saveSnapshot({
+        snapshotBin: Y.encodeStateAsUpdate(room.y.ydoc),
+        stateVector,
+        version: nextSnapshotVersion,
+        workflowId: workflow.id,
+      })
+      room.persistedUpdatesSinceSnapshot = 0
+      room.snapshotVersion = nextSnapshotVersion
+      return persistReadModel({ ...snapshot, yjsStateVector: stateVector })
+    })
+    if (room.connections.size === 0) {
+      this.#scheduleRoomCleanup(room)
+    }
+    return result
   }
 
   async #getRoom(workflow: Workflow): Promise<WorkflowCollaborationRoom> {
@@ -241,6 +297,7 @@ export class WorkflowYjsRoomService {
 
     const room: WorkflowCollaborationRoom = {
       awareness: new awarenessProtocol.Awareness(y.ydoc),
+      cleanupTimer: undefined,
       connections: new Set(),
       persistedUpdatesSinceSnapshot: 0,
       snapshotVersion: persistedSnapshot?.version ?? workflow.version,
@@ -249,6 +306,31 @@ export class WorkflowYjsRoomService {
     }
     room.awareness.setLocalState(null)
     return room
+  }
+
+  #clearRoomCleanup(room: WorkflowCollaborationRoom): void {
+    if (!room.cleanupTimer) {
+      return
+    }
+    clearTimeout(room.cleanupTimer)
+    room.cleanupTimer = undefined
+  }
+
+  #scheduleRoomCleanup(room: WorkflowCollaborationRoom): void {
+    if (room.cleanupTimer) {
+      return
+    }
+    room.cleanupTimer = setTimeout(() => {
+      void this.#rooms.get(room.workflowId)?.then((currentRoom) => {
+        if (currentRoom !== room || room.connections.size > 0) {
+          return
+        }
+        room.awareness.destroy()
+        room.y.ydoc.destroy()
+        this.#rooms.delete(room.workflowId)
+      })
+    }, roomIdleCleanupMs)
+    ;(room.cleanupTimer as { unref?: () => void }).unref?.()
   }
 
   async #persistUpdate(room: WorkflowCollaborationRoom, update: Uint8Array): Promise<void> {
@@ -267,6 +349,25 @@ export class WorkflowYjsRoomService {
       })
       room.persistedUpdatesSinceSnapshot = 0
       room.snapshotVersion += 1
+    }
+  }
+
+  async #withWorkflowLock<T>(workflowId: string, task: () => Promise<T>): Promise<T> {
+    const previous = this.#workflowLocks.get(workflowId) ?? Promise.resolve()
+    let release!: () => void
+    const current = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const chained = previous.then(() => current)
+    this.#workflowLocks.set(workflowId, chained)
+    await previous
+    try {
+      return await task()
+    } finally {
+      release()
+      if (this.#workflowLocks.get(workflowId) === chained) {
+        this.#workflowLocks.delete(workflowId)
+      }
     }
   }
 }

@@ -5,6 +5,7 @@ import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
 import * as syncProtocol from 'y-protocols/sync'
 import * as Y from 'yjs'
+import type { WorkflowResponse } from '@mina/contracts/modules/workflows'
 
 import { createTestApp } from '../../test/app'
 
@@ -40,12 +41,12 @@ const connectedNode = {
       },
     },
     mediaSlots: {
-      image: [
+      inputImages: [
         {
           id: 'slot_item_1',
           order: 0,
           required: true,
-          slot: 'image',
+          slot: 'inputImages',
           source: {
             type: 'node_output',
             nodeId: 'node_1',
@@ -65,7 +66,7 @@ const edge = {
   data: {
     connection: {
       kind: 'media_link',
-      targetSlot: 'image',
+      targetSlot: 'inputImages',
       targetSlotItemId: 'slot_item_1',
     },
   },
@@ -267,17 +268,16 @@ describe('workflow collaboration routes', () => {
       readServerMessagesIntoDoc(secondDoc, secondMessages)
 
       sendLocalTransaction(firstSocket, firstDoc, () => {
-        firstDoc.getMap('nodes').set('node_1', {
-          ...node,
-          position: { x: 360, y: 180 },
-        })
+        firstDoc.getMap('nodeFrames').set('node_1', { position: { x: 360, y: 180 } })
       })
       await waitForSyncedDoc(secondDoc, secondMessages, () => {
-        const candidate = secondDoc.getMap('nodes').get('node_1') as { position?: { x: number; y: number } } | undefined
+        const candidate = secondDoc.getMap('nodeFrames').get('node_1') as
+          | { position?: { x: number; y: number } }
+          | undefined
         return candidate?.position?.x === 360 && candidate.position.y === 180
       })
-      const syncedNode = secondDoc.getMap('nodes').get('node_1') as { position: { x: number; y: number } }
-      expect(syncedNode.position).toEqual({ x: 360, y: 180 })
+      const syncedFrame = secondDoc.getMap('nodeFrames').get('node_1') as { position: { x: number; y: number } }
+      expect(syncedFrame.position).toEqual({ x: 360, y: 180 })
 
       sendLocalTransaction(firstSocket, firstDoc, () => {
         firstDoc.getMap('nodes').set('node_2', connectedNode)
@@ -294,7 +294,6 @@ describe('workflow collaboration routes', () => {
       sendLocalTransaction(secondSocket, secondDoc, () => {
         secondDoc.getMap('nodes').set('node_2', {
           ...connectedNode,
-          position: { x: 520, y: 240 },
           data: {
             ...connectedNode.data,
             config: {
@@ -305,46 +304,73 @@ describe('workflow collaboration routes', () => {
             },
           },
         })
+        secondDoc.getMap('nodeFrames').set('node_2', { position: { x: 520, y: 240 } })
       })
       await waitForSyncedDoc(firstDoc, firstMessages, () => {
         const candidate = firstDoc.getMap('nodes').get('node_2') as
-          | { data?: { config?: { task?: { prompt?: string } } }; position?: { x: number; y: number } }
+          | { data?: { config?: { task?: { prompt?: string } } } }
+          | undefined
+        const frame = firstDoc.getMap('nodeFrames').get('node_2') as
+          | { position?: { x: number; y: number } }
           | undefined
         return (
-          candidate?.position?.x === 520 &&
-          candidate.position.y === 240 &&
-          candidate.data?.config?.task?.prompt === 'edited prompt'
+          frame?.position?.x === 520 &&
+          frame.position.y === 240 &&
+          candidate?.data?.config?.task?.prompt === 'edited prompt'
         )
       })
       const editedNode = firstDoc.getMap('nodes').get('node_2') as {
         data: { config: { task: { prompt: string } } }
-        position: { x: number; y: number }
       }
-      expect(editedNode.position).toEqual({ x: 520, y: 240 })
+      const editedFrame = firstDoc.getMap('nodeFrames').get('node_2') as { position: { x: number; y: number } }
+      expect(editedFrame.position).toEqual({ x: 520, y: 240 })
       expect(editedNode.data.config.task.prompt).toBe('edited prompt')
 
       sendLocalTransaction(firstSocket, firstDoc, () => {
-        firstDoc.getMap('nodes').set('node_1', {
-          ...node,
-          position: { x: 600, y: 100 },
-        })
+        firstDoc.getMap('nodeFrames').set('node_1', { position: { x: 600, y: 100 } })
       })
       await waitForSyncedDoc(secondDoc, secondMessages, () => {
-        const candidate = secondDoc.getMap('nodes').get('node_1') as { position?: { x: number; y: number } } | undefined
+        const candidate = secondDoc.getMap('nodeFrames').get('node_1') as
+          | { position?: { x: number; y: number } }
+          | undefined
         return candidate?.position?.x === 600 && candidate.position.y === 100
       })
       sendLocalTransaction(secondSocket, secondDoc, () => {
-        secondDoc.getMap('nodes').set('node_1', {
-          ...node,
-          position: { x: 720, y: 260 },
-        })
+        secondDoc.getMap('nodeFrames').set('node_1', { position: { x: 720, y: 260 } })
       })
       await waitForSyncedDoc(firstDoc, firstMessages, () => {
-        const candidate = firstDoc.getMap('nodes').get('node_1') as { position?: { x: number; y: number } } | undefined
+        const candidate = firstDoc.getMap('nodeFrames').get('node_1') as
+          | { position?: { x: number; y: number } }
+          | undefined
         return candidate?.position?.x === 720 && candidate.position.y === 260
       })
-      const conflictNode = firstDoc.getMap('nodes').get('node_1') as { position: { x: number; y: number } }
-      expect(conflictNode.position).toEqual({ x: 720, y: 260 })
+      const conflictFrame = firstDoc.getMap('nodeFrames').get('node_1') as { position: { x: number; y: number } }
+      expect(conflictFrame.position).toEqual({ x: 720, y: 260 })
+
+      const checkpointResponse = await app.request(`/api/workflows/${workflowId}/collab/checkpoint`, {
+        body: JSON.stringify({}),
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      })
+      expect(checkpointResponse.status).toBe(200)
+      const checkpointPayload = await checkpointResponse.json() as WorkflowResponse
+      const checkpointNode = checkpointPayload.item.nodes.find((item: { id: string }) => item.id === 'node_1') as
+        | { position: { x: number; y: number } }
+        | undefined
+      expect(checkpointNode?.position).toEqual({ x: 720, y: 260 })
+
+      const persistedWorkflowResponse = await app.request(`/api/workflows/${workflowId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      expect(persistedWorkflowResponse.status).toBe(200)
+      const persistedWorkflowPayload = await persistedWorkflowResponse.json() as WorkflowResponse
+      const persistedNode = persistedWorkflowPayload.item.nodes.find((item: { id: string }) => item.id === 'node_1') as
+        | { position: { x: number; y: number } }
+        | undefined
+      expect(persistedNode?.position).toEqual({ x: 720, y: 260 })
 
       sendLocalTransaction(secondSocket, secondDoc, () => {
         secondDoc.getMap('nodes').delete('node_2')
@@ -373,13 +399,13 @@ describe('workflow collaboration routes', () => {
       readServerMessagesIntoDoc(reconnectedDoc, reconnectedMessages)
       reconnectedSocket.send(encodeClientSyncStep1(reconnectedDoc))
       await waitForSyncedDoc(reconnectedDoc, reconnectedMessages, () => {
-        const candidate = reconnectedDoc.getMap('nodes').get('node_1') as
+        const candidate = reconnectedDoc.getMap('nodeFrames').get('node_1') as
           | { position?: { x: number; y: number } }
           | undefined
         return candidate?.position?.x === 720 && candidate.position.y === 260
       })
-      const reconnectedNode = reconnectedDoc.getMap('nodes').get('node_1') as { position: { x: number; y: number } }
-      expect(reconnectedNode.position).toEqual({ x: 720, y: 260 })
+      const reconnectedFrame = reconnectedDoc.getMap('nodeFrames').get('node_1') as { position: { x: number; y: number } }
+      expect(reconnectedFrame.position).toEqual({ x: 720, y: 260 })
       expect(reconnectedDoc.getMap('nodes').has('node_2')).toBe(false)
 
       const firstAwarenessDoc = new Y.Doc()

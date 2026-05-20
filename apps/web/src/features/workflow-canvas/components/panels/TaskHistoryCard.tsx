@@ -1,8 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 
 import { workflowKeys } from '../../api/workflow-keys'
-import { listNodeTasks, patchNodeMediaView } from '../../api/workflow-queries'
+import { listNodeTasks } from '../../api/workflow-queries'
 import { selectableResources } from '../../utils/media-view'
 import { previewUrlForMedia } from '../../utils/media-url'
 import { useCanvasStore } from '../../store/canvas-store'
@@ -14,28 +14,11 @@ interface TaskHistoryCardProps {
 }
 
 export function TaskHistoryCard({ node, open, workflowId }: TaskHistoryCardProps) {
-  const queryClient = useQueryClient()
-  const version = useCanvasStore((state) => state.version)
-  const applyRemoteMediaView = useCanvasStore((state) => state.applyRemoteMediaView)
+  const setNodeMediaView = useCanvasStore((state) => state.setNodeMediaView)
   const query = useQuery({
     enabled: open && (node.data.nodeType === 'image_generation' || node.data.nodeType === 'video_generation'),
     queryFn: () => listNodeTasks(workflowId, node.id),
     queryKey: workflowKeys.nodeTasks(workflowId, node.id),
-  })
-  const mutation = useMutation({
-    mutationFn: (input: { outputIndex: number; outputResourceId: string; taskId: string }) =>
-      patchNodeMediaView(workflowId, node.id, {
-        expectedWorkflowVersion: version,
-        mediaView: input,
-      }),
-    onSuccess: (response) => {
-      const updated = response.item.nodes.find((item) => item.id === node.id)
-      if (updated?.data.nodeType === 'image_generation' || updated?.data.nodeType === 'video_generation') {
-        applyRemoteMediaView(node.id, updated.data.mediaView, response.item.version)
-      }
-      queryClient.setQueryData(workflowKeys.detail(workflowId), response)
-      void queryClient.invalidateQueries({ queryKey: workflowKeys.nodeTasks(workflowId, node.id) })
-    },
   })
 
   return (
@@ -62,7 +45,7 @@ export function TaskHistoryCard({ node, open, workflowId }: TaskHistoryCardProps
                       aria-label={`Select ${resource.role ?? resource.kind} ${resource.index + 1}`}
                       key={resource.id}
                       onClick={() =>
-                        mutation.mutate({
+                        setNodeMediaView(node.id, {
                           taskId: item.task.id,
                           outputResourceId: resource.id,
                           outputIndex: resource.index,

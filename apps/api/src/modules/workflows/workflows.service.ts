@@ -1,8 +1,6 @@
 import type {
   CreateWorkflowInput,
   CreateWorkflowRunInput,
-  UpdateNodeMediaViewInput,
-  UpdateWorkflowInput,
   Workflow,
   WorkflowNodeTaskHistoryItem,
   WorkflowRun,
@@ -131,64 +129,32 @@ export class WorkflowsService {
     return this.repositories.definitions.list(accountId)
   }
 
-  async updateNodeMediaView(
-    workflowId: string,
-    nodeId: string,
-    input: UpdateNodeMediaViewInput,
+  async checkpointWorkflow(
+    id: string,
+    input: {
+      edges: WorkflowCanvasEdge[]
+      name?: string | undefined
+      nodes: WorkflowCanvasNode[]
+    },
     accountId: string,
   ): Promise<Workflow> {
-    await this.getWorkflow(workflowId, accountId)
-    if (input.mediaView?.taskId) {
-      await this.workflowRunsService.getTask(accountId, input.mediaView.taskId)
-    }
-    const timestamp = nowIso()
-    try {
-      const workflow = await this.repositories.definitions.updateNodeMediaView({
-        workflowId,
-        nodeId,
-        expectedWorkflowVersion: input.expectedWorkflowVersion,
-        mediaView: input.mediaView,
-        timestamp,
-      })
-      this.publishWorkflowEvent({
-        id: createWorkflowEventId(),
-        accountId: workflow.accountId,
-        createdAt: timestamp,
-        payload: { nodeId, ...(input.mediaView ? { mediaView: input.mediaView } : {}) },
-        type: 'workflow.node.mediaView.updated',
-        version: workflow.version,
-        workflowId: workflow.id,
-      })
-      return workflow
-    } catch (error) {
-      if (error instanceof Error && error.message === 'WORKFLOW_VERSION_CONFLICT') {
-        throw new HttpError(409, 'WORKFLOW_VERSION_CONFLICT', 'Workflow version is stale.')
-      }
-      throw error
-    }
-  }
-
-  async updateWorkflow(id: string, input: UpdateWorkflowInput, accountId: string): Promise<Workflow> {
     const current = await this.getWorkflow(id, accountId)
-    if (current.version !== input.version) {
-      throw new HttpError(409, 'WORKFLOW_VERSION_CONFLICT', 'Workflow version is stale.')
-    }
-
     const nodes = cloneNodes(input.nodes)
     const edges = cloneEdges(input.edges)
     validateCanvas(nodes, edges)
+    const timestamp = nowIso()
     const workflow = await this.repositories.definitions.replaceDefinition({
       id,
       name: input.name ?? current.name,
       nodes,
       edges,
       version: current.version + 1,
-      timestamp: nowIso(),
+      timestamp,
     })
     this.publishWorkflowEvent({
       id: createWorkflowEventId(),
       accountId: workflow.accountId,
-      createdAt: workflow.updatedAt,
+      createdAt: timestamp,
       payload: {
         changedEdgeIds: edges.map((edge) => edge.id),
         changedNodeIds: nodes.map((node) => node.id),

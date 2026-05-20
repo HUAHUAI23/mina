@@ -25,6 +25,7 @@ if (!renderBeforeDrag) {
 }
 
 useFlowRenderStore.getState().setDraggingNodeIds([draggedNode.id])
+useFlowRenderStore.getState().setLocalFrameNodeIds([draggedNode.id])
 useFlowRenderStore.getState().applyNodeChanges([
   {
     dragging: true,
@@ -72,6 +73,7 @@ if (
 }
 
 useFlowRenderStore.getState().setDraggingNodeIds([])
+useFlowRenderStore.getState().releaseLocalFrameNodeIds([draggedNode.id])
 useFlowRenderStore.getState().hydrateFromDocument({
   edges: useCanvasStore.getState().edges,
   nodes: useCanvasStore.getState().nodes,

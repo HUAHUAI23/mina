@@ -400,7 +400,7 @@ describe('mina api', () => {
   })
 
   test(
-    'workflow routes expose CRUD, node tasks, runs, run detail, and cancellation payloads',
+    'workflow routes expose create/list/detail, node tasks, runs, run detail, and cancellation payloads',
     async () => {
       const { headers } = await registerAndAuthHeaders()
       const createResponse = await app.request('/api/workflows', {
@@ -446,53 +446,27 @@ describe('mina api', () => {
       expect(detailResponse.status).toBe(200)
       expect(detailPayload.item.id).toBe(workflowPayload.item.id)
 
-      const updateResponse = await app.request(`/api/workflows/${workflowPayload.item.id}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({
-          name: 'Updated route coverage workflow',
-          version: workflowPayload.item.version,
-          nodes: workflowPayload.item.nodes,
-          edges: workflowPayload.item.edges,
-        }),
-      })
-      const updatedPayload = (await updateResponse.json()) as WorkflowResponse
-      expect(updateResponse.status).toBe(200)
-      expect(updatedPayload.item.version).toBe(workflowPayload.item.version + 1)
-
-      const mediaViewResponse = await app.request(
-        `/api/workflows/${updatedPayload.item.id}/nodes/image/media-view`,
-        {
-          method: 'PATCH',
-          headers,
-          body: JSON.stringify({ expectedWorkflowVersion: updatedPayload.item.version }),
-        },
-      )
-      const mediaViewPayload = (await mediaViewResponse.json()) as WorkflowResponse
-      expect(mediaViewResponse.status).toBe(200)
-      expect(mediaViewPayload.item.version).toBe(updatedPayload.item.version + 1)
-
-      const nodeTasksResponse = await app.request(`/api/workflows/${updatedPayload.item.id}/nodes/image/tasks`, { headers })
+      const nodeTasksResponse = await app.request(`/api/workflows/${workflowPayload.item.id}/nodes/image/tasks`, { headers })
       const nodeTasksPayload = (await nodeTasksResponse.json()) as WorkflowNodeTaskHistoryResponse
       expect(nodeTasksResponse.status).toBe(200)
       expect(nodeTasksPayload.items).toEqual([])
 
-      const runListBeforeResponse = await app.request(`/api/workflows/${updatedPayload.item.id}/runs`, { headers })
+      const runListBeforeResponse = await app.request(`/api/workflows/${workflowPayload.item.id}/runs`, { headers })
       const runListBeforePayload = (await runListBeforeResponse.json()) as WorkflowRunListResponse
       expect(runListBeforeResponse.status).toBe(200)
       expect(runListBeforePayload.items).toEqual([])
 
-      const runResponse = await app.request(`/api/workflows/${updatedPayload.item.id}/runs`, {
+      const runResponse = await app.request(`/api/workflows/${workflowPayload.item.id}/runs`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
           selectedNodeId: 'image',
-          expectedWorkflowVersion: mediaViewPayload.item.version,
+          expectedWorkflowVersion: workflowPayload.item.version,
         }),
       })
       const runPayload = (await runResponse.json()) as WorkflowRunResponse
       expect(runResponse.status).toBe(201)
-      expect(runPayload.item.workflowId).toBe(updatedPayload.item.id)
+      expect(runPayload.item.workflowId).toBe(workflowPayload.item.id)
 
       const runDetailResponse = await app.request(`/api/workflow-runs/${runPayload.item.id}`, { headers })
       const runDetailPayload = (await runDetailResponse.json()) as WorkflowRunResponse
@@ -507,7 +481,7 @@ describe('mina api', () => {
       expect(cancelRunResponse.status).toBe(200)
       expect(cancelRunPayload.success).toBe(true)
 
-      const deleteResponse = await app.request(`/api/workflows/${updatedPayload.item.id}`, {
+      const deleteResponse = await app.request(`/api/workflows/${workflowPayload.item.id}`, {
         method: 'DELETE',
         headers,
       })

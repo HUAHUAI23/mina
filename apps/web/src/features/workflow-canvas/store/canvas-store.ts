@@ -21,11 +21,9 @@ export const getCanvasSnapshot = () => {
   const state = useCanvasStore.getState()
   return {
     dirty: state.dirty,
-    draftRevision: state.draftRevision,
     edges: state.edges,
     name: state.name,
     nodes: state.nodes,
-    savedRevision: state.savedRevision,
     version: state.version,
     workflowId: state.workflowId,
   }

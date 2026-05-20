@@ -282,19 +282,24 @@ describe('WorkflowsService execution semantics', () => {
       throw new Error('Selected output was not created.')
     }
 
-    const updatedWorkflow = await workflowsService.updateNodeMediaView(
-      workflow.id,
-      'a',
-      {
-        expectedWorkflowVersion: workflow.version,
-        mediaView: {
-          taskId: sourceTask.id,
-          outputResourceId: selectedOutput.id,
-          outputIndex: 1,
-        },
-      },
-      DEFAULT_ACCOUNT_ID,
-    )
+    const updatedWorkflow = await workflowsService.checkpointWorkflow(workflow.id, {
+      nodes: workflow.nodes.map((node) =>
+        node.id === 'a' && node.data.nodeType === 'image_generation'
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                mediaView: {
+                  taskId: sourceTask.id,
+                  outputResourceId: selectedOutput.id,
+                  outputIndex: 1,
+                },
+              },
+            }
+          : node,
+      ),
+      edges: workflow.edges,
+    }, DEFAULT_ACCOUNT_ID)
 
     const targetRun = await workflowsService.createRun(updatedWorkflow.id, {
       selectedNodeId: 'b',
@@ -533,12 +538,22 @@ describe('WorkflowsService execution semantics', () => {
     if (!taskAId) {
       throw new Error('Task A id was not created.')
     }
-    const workflowWithA = await workflowsService.updateNodeMediaView(sourceWorkflow.id, 'a', {
-      expectedWorkflowVersion: sourceWorkflow.version,
-      mediaView: {
-        taskId: taskAId,
-        outputIndex: 0,
-      },
+    const workflowWithA = await workflowsService.checkpointWorkflow(sourceWorkflow.id, {
+      nodes: sourceWorkflow.nodes.map((node) =>
+        node.id === 'a' && node.data.nodeType === 'image_generation'
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                mediaView: {
+                  taskId: taskAId,
+                  outputIndex: 0,
+                },
+              },
+            }
+          : node,
+      ),
+      edges: sourceWorkflow.edges,
     }, DEFAULT_ACCOUNT_ID)
     const runB = await workflowsService.createRun(sourceWorkflow.id, {
       selectedNodeId: 'b',
@@ -576,15 +591,24 @@ describe('WorkflowsService execution semantics', () => {
         },
       ],
     })
-    const workflowWithB = await workflowsService.updateNodeMediaView(sourceWorkflow.id, 'b', {
-      expectedWorkflowVersion: workflowWithA.version,
-      mediaView: {
-        taskId: taskBId,
-        outputIndex: 0,
-      },
+    const workflowWithB = await workflowsService.checkpointWorkflow(sourceWorkflow.id, {
+      nodes: workflowWithA.nodes.map((node) =>
+        node.id === 'b' && node.data.nodeType === 'image_generation'
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                mediaView: {
+                  taskId: taskBId,
+                  outputIndex: 0,
+                },
+              },
+            }
+          : node,
+      ),
+      edges: workflowWithA.edges,
     }, DEFAULT_ACCOUNT_ID)
-    const workflow = await workflowsService.updateWorkflow(sourceWorkflow.id, {
-      version: workflowWithB.version,
+    const workflow = await workflowsService.checkpointWorkflow(sourceWorkflow.id, {
       nodes: [
         workflowWithB.nodes[0] ?? baseA,
         workflowWithB.nodes[1] ?? baseB,
@@ -971,29 +995,6 @@ describe('WorkflowsService execution semantics', () => {
     const links = await workflowsService.getNodeTasks(workflow.id, 'video', DEFAULT_ACCOUNT_ID)
     expect(links).toHaveLength(1)
     expect(links[0]?.task.id).toBe(taskId)
-  })
-
-  test('mediaView update rejects stale workflow versions', async () => {
-    const { workflowsService } = createServices()
-    const workflow = await workflowsService.createWorkflow({
-      name: 'stale media view',
-      nodes: [imageNode('image', 1)],
-      edges: [],
-    }, DEFAULT_ACCOUNT_ID)
-
-    const updated = await workflowsService.updateNodeMediaView(workflow.id, 'image', {
-      expectedWorkflowVersion: workflow.version,
-    }, DEFAULT_ACCOUNT_ID)
-    expect(updated.version).toBe(workflow.version + 1)
-
-    await expect(
-      workflowsService.updateNodeMediaView(workflow.id, 'image', {
-        expectedWorkflowVersion: workflow.version,
-      }, DEFAULT_ACCOUNT_ID),
-    ).rejects.toMatchObject({
-      code: 'WORKFLOW_VERSION_CONFLICT',
-      status: 409,
-    })
   })
 
   test('reconcileRun preserves not-found error semantics', async () => {

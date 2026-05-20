@@ -5,6 +5,7 @@ export interface WorkflowYDocHandles {
   edgeOrder: Y.Array<string>
   edges: Y.Map<unknown>
   meta: Y.Map<unknown>
+  nodeFrames: Y.Map<unknown>
   nodeOrder: Y.Array<string>
   nodes: Y.Map<unknown>
   ydoc: Y.Doc
@@ -21,6 +22,7 @@ export const createWorkflowYDoc = (): WorkflowYDocHandles => {
     edgeOrder: ydoc.getArray<string>('edgeOrder'),
     edges: ydoc.getMap<unknown>('edges'),
     meta: ydoc.getMap<unknown>('meta'),
+    nodeFrames: ydoc.getMap<unknown>('nodeFrames'),
     nodeOrder: ydoc.getArray<string>('nodeOrder'),
     nodes: ydoc.getMap<unknown>('nodes'),
     ydoc,
@@ -38,6 +40,32 @@ const replaceArray = <T>(array: Y.Array<T>, values: readonly T[]): void => {
 
 const unique = <T>(values: readonly T[]): T[] => Array.from(new Set(values))
 
+type WorkflowYNodeFrame = Pick<WorkflowCanvasNode, 'position'> &
+  Partial<Pick<WorkflowCanvasNode, 'extent' | 'height' | 'parentId' | 'width'>>
+
+const nodeFrameFromNode = (node: WorkflowCanvasNode): WorkflowYNodeFrame => ({
+  position: node.position,
+  ...(node.parentId ? { parentId: node.parentId } : {}),
+  ...(node.extent ? { extent: node.extent } : {}),
+  ...(node.width !== undefined ? { width: node.width } : {}),
+  ...(node.height !== undefined ? { height: node.height } : {}),
+})
+
+const applyNodeFrame = (node: WorkflowCanvasNode, frame: unknown): WorkflowCanvasNode => {
+  if (!frame || typeof frame !== 'object' || !('position' in frame)) {
+    return node
+  }
+  const typedFrame = frame as WorkflowYNodeFrame
+  return {
+    ...node,
+    position: typedFrame.position,
+    ...(typedFrame.parentId ? { parentId: typedFrame.parentId } : {}),
+    ...(typedFrame.extent ? { extent: typedFrame.extent } : {}),
+    ...(typedFrame.width !== undefined ? { width: typedFrame.width } : {}),
+    ...(typedFrame.height !== undefined ? { height: typedFrame.height } : {}),
+  }
+}
+
 export const importWorkflowSnapshotToYDoc = (
   y: WorkflowYDocHandles,
   snapshot: WorkflowYjsExportSnapshot,
@@ -45,8 +73,10 @@ export const importWorkflowSnapshotToYDoc = (
 ): void => {
   y.ydoc.transact(() => {
     y.nodes.clear()
+    y.nodeFrames.clear()
     for (const node of snapshot.nodes) {
       y.nodes.set(node.id, node)
+      y.nodeFrames.set(node.id, nodeFrameFromNode(node))
     }
     replaceArray(y.nodeOrder, unique(snapshot.nodes.map((node) => node.id)))
 
@@ -58,11 +88,28 @@ export const importWorkflowSnapshotToYDoc = (
   }, origin)
 }
 
+const orderedValues = <TValue>(
+  order: Y.Array<string>,
+  values: Y.Map<unknown>,
+): TValue[] => {
+  const seen = new Set<string>()
+  const ordered = unique(order.toArray())
+    .flatMap((id) => {
+      const value = values.get(id)
+      if (!value) {
+        return []
+      }
+      seen.add(id)
+      return [value as TValue]
+    })
+  const missingFromOrder = Array.from(values.entries())
+    .filter(([id, value]) => !seen.has(id) && Boolean(value))
+    .map(([, value]) => value as TValue)
+  return [...ordered, ...missingFromOrder]
+}
+
 export const exportWorkflowSnapshotFromYDoc = (y: WorkflowYDocHandles): WorkflowYjsExportSnapshot => ({
-  edges: unique(y.edgeOrder.toArray())
-    .map((edgeId) => y.edges.get(edgeId))
-    .filter((edge): edge is WorkflowCanvasEdge => Boolean(edge)),
-  nodes: unique(y.nodeOrder.toArray())
-    .map((nodeId) => y.nodes.get(nodeId))
-    .filter((node): node is WorkflowCanvasNode => Boolean(node)),
+  edges: orderedValues<WorkflowCanvasEdge>(y.edgeOrder, y.edges),
+  nodes: orderedValues<WorkflowCanvasNode>(y.nodeOrder, y.nodes)
+    .map((node) => applyNodeFrame(node, y.nodeFrames.get(node.id))),
 })
