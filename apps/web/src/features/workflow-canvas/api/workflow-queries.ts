@@ -1,7 +1,5 @@
 import type {
-  CheckpointWorkflowCollaborationInput,
   CreateWorkflowRunInput,
-  WorkflowCollaborationCheckpointResponse,
   WorkflowNodeTaskHistoryResponse,
   WorkflowResponse,
   WorkflowRunListResponse,
@@ -10,7 +8,6 @@ import type {
 import type { TaskResponse } from '@mina/contracts/modules/tasks'
 import {
   WorkflowNodeTaskHistoryResponseSchema,
-  WorkflowCollaborationCheckpointResponseSchema,
   WorkflowResponseSchema,
   WorkflowRunListResponseSchema,
   WorkflowRunResponseSchema,
@@ -19,30 +16,10 @@ import { TaskResponseSchema } from '@mina/contracts/modules/tasks'
 
 import { apiClient } from '../../../lib/api-client'
 import { readJson } from '../../../lib/http'
-import { readStoredAuthToken } from '../../auth/auth-session'
-import { webEnv } from '../../../config/env'
 
 export const getWorkflow = async (workflowId: string): Promise<WorkflowResponse> => {
   const response = await apiClient.api.workflows[':id'].$get({ param: { id: workflowId } })
   return readJson(response, WorkflowResponseSchema)
-}
-
-export const checkpointWorkflowCollaboration = async (
-  workflowId: string,
-  input: CheckpointWorkflowCollaborationInput,
-): Promise<WorkflowCollaborationCheckpointResponse> => {
-  const base = webEnv.apiBaseUrl === '/' ? window.location.origin : webEnv.apiBaseUrl
-  const url = new URL(`/api/workflows/${encodeURIComponent(workflowId)}/collab/checkpoint`, base)
-  const token = readStoredAuthToken()
-  const response = await fetch(url, {
-    body: JSON.stringify(input),
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    method: 'POST',
-  })
-  return readJson(response, WorkflowCollaborationCheckpointResponseSchema)
 }
 
 export const listWorkflowRuns = async (workflowId: string): Promise<WorkflowRunListResponse> => {

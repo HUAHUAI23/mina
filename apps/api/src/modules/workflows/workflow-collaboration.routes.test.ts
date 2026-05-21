@@ -355,12 +355,7 @@ describe('workflow collaboration routes', () => {
         },
         method: 'POST',
       })
-      expect(checkpointResponse.status).toBe(200)
-      const checkpointPayload = await checkpointResponse.json() as WorkflowResponse
-      const checkpointNode = checkpointPayload.item.nodes.find((item: { id: string }) => item.id === 'node_1') as
-        | { position: { x: number; y: number } }
-        | undefined
-      expect(checkpointNode?.position).toEqual({ x: 720, y: 260 })
+      expect(checkpointResponse.status).toBe(404)
 
       const persistedWorkflowResponse = await app.request(`/api/workflows/${workflowId}`, {
         headers: { Authorization: `Bearer ${token}` },

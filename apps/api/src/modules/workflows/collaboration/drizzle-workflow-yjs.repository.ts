@@ -1,4 +1,4 @@
-import { and, asc, eq, gt } from 'drizzle-orm'
+import { and, asc, eq, gt, lte } from 'drizzle-orm'
 
 import type { MinaDbClient } from '../../../db/client'
 import { workflowYjsSnapshots, workflowYjsUpdates } from '../../../db/schema'
@@ -20,6 +20,16 @@ export class DrizzleWorkflowYjsRepository implements WorkflowYjsRepository {
       updateBin: Buffer.from(input.updateBin),
       workflowId: input.workflowId,
     })
+  }
+
+  async deleteUpdates(workflowId: string, through?: Date): Promise<void> {
+    await this.db
+      .delete(workflowYjsUpdates)
+      .where(
+        through
+          ? and(eq(workflowYjsUpdates.workflowId, workflowId), lte(workflowYjsUpdates.createdAt, through))
+          : eq(workflowYjsUpdates.workflowId, workflowId),
+      )
   }
 
   async getSnapshot(workflowId: string): Promise<WorkflowYjsSnapshotRecord | undefined> {

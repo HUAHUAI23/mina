@@ -14,6 +14,7 @@ export interface WorkflowYjsUpdateRecord {
 
 export interface WorkflowYjsRepository {
   appendUpdate(input: { id: string; updateBin: Uint8Array; workflowId: string }): Promise<void>
+  deleteUpdates(workflowId: string, through?: Date): Promise<void>
   getSnapshot(workflowId: string): Promise<WorkflowYjsSnapshotRecord | undefined>
   listUpdates(workflowId: string, after?: Date): Promise<WorkflowYjsUpdateRecord[]>
   saveSnapshot(input: WorkflowYjsSnapshotRecord): Promise<void>

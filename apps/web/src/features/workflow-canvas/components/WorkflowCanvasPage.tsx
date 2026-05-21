@@ -10,10 +10,9 @@ import {
   getWorkflow,
 } from '../api/workflow-queries'
 import { getWorkflowClientId, parseWorkflowEvent, workflowEventUrl } from '../api/workflow-ws'
-import { getCanvasSnapshot, useCanvasStore } from '../store/canvas-store'
+import { useCanvasStore } from '../store/canvas-store'
 import { incrementCanvasPerfCounter } from '../diagnostics/canvas-performance-marks'
 import { useCanvasUiStore } from '../store/canvas-ui-store'
-import { useWorkflowAutosave } from '../hooks/use-workflow-autosave'
 import { useWorkflowYjsSync } from '../sync/yjs/yjs-sync'
 import { CanvasToolbar } from './CanvasToolbar'
 import { SaveStatusPill } from './SaveStatusPill'
@@ -31,8 +30,6 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
     queryFn: () => getWorkflow(workflowId),
     queryKey: workflowKeys.detail(workflowId),
   })
-  const dirty = useCanvasStore((state) => state.dirty)
-  const saving = useCanvasStore((state) => state.saving)
   const version = useCanvasStore((state) => state.version)
   const yjsConnectionStatus = useCanvasStore((state) => state.yjsConnectionStatus)
   const hydratedWorkflowId = useCanvasStore((state) => state.hydratedWorkflowId)
@@ -41,12 +38,10 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
   const setNodeMediaView = useCanvasStore((state) => state.setNodeMediaView)
   const selectedNodeIds = useCanvasUiStore((state) => state.selectedNodeIds)
   const eventRuntimeRef = useRef({
-    dirty,
     selectedNodeId: selectedNodeIds[0],
     version,
   })
   eventRuntimeRef.current = {
-    dirty,
     selectedNodeId: selectedNodeIds[0],
     version,
   }
@@ -57,7 +52,7 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
     if (!workflow) {
       return
     }
-    if (!hydratedWorkflowId || hydratedWorkflowId !== workflow.id || (!dirty && workflow.version > version)) {
+    if (!hydratedWorkflowId || hydratedWorkflowId !== workflow.id || workflow.version > version) {
       hydrateFromServer({
         workflowId: workflow.id,
         version: workflow.version,
@@ -66,7 +61,7 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
         edges: workflow.edges,
       })
     }
-  }, [dirty, hydrateFromServer, hydratedWorkflowId, version, workflowQuery.data])
+  }, [hydrateFromServer, hydratedWorkflowId, version, workflowQuery.data])
 
   useEffect(() => {
     const clientId = getWorkflowClientId()
@@ -102,17 +97,8 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
     }
   }, [queryClient, workflowId])
 
-  const { saveNow, saveNowAsync } = useWorkflowAutosave({
-    fallbackName: workflowQuery.data?.item.name,
-    onError: setRunError,
-    workflowId,
-  })
-
   const runMutation = useMutation({
-    mutationFn: async (nodeId: string) => {
-      const currentVersion = getCanvasSnapshot().version
-      return createWorkflowRun(workflowId, { selectedNodeId: nodeId, expectedWorkflowVersion: currentVersion })
-    },
+    mutationFn: async (nodeId: string) => createWorkflowRun(workflowId, { selectedNodeId: nodeId }),
     onMutate: (nodeId) => {
       setRunError(undefined)
       setRunningNodeId(nodeId)
@@ -137,10 +123,9 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
         outputResourceId,
         outputIndex,
       })
-      void saveNowAsync()
       void queryClient.invalidateQueries({ queryKey: taskKeys.detail(taskId) })
     },
-    [queryClient, saveNowAsync, setNodeMediaView],
+    [queryClient, setNodeMediaView],
   )
 
   if (workflowQuery.isLoading) {
@@ -166,7 +151,7 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
           </div>
         </div>
         <div className="mina-wc-header-actions">
-          <SaveStatusPill dirty={dirty} saving={saving} yjsConnectionStatus={yjsConnectionStatus} />
+          <SaveStatusPill yjsConnectionStatus={yjsConnectionStatus} />
         </div>
       </header>
 
@@ -177,7 +162,7 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
           runError={runError}
           runningNodeId={runningNodeId}
         />
-        <CanvasToolbar dirty={dirty} onAddNode={addNode} onSave={saveNow} saving={saving} />
+        <CanvasToolbar onAddNode={addNode} />
       </section>
     </div>
   )

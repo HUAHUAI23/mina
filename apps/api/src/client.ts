@@ -21,8 +21,6 @@ import type {
 } from '@mina/contracts/modules/media/media-object'
 import type {
   CancelWorkflowRunResponse,
-  CheckpointWorkflowCollaborationInput,
-  WorkflowCollaborationCheckpointResponse,
   CreateWorkflowInput,
   CreateWorkflowRunInput,
   DeleteWorkflowResponse,
@@ -86,9 +84,6 @@ type ClientSchema = {
   '/api/workflows/:id': {
     $get: JsonEndpoint<{ param: { id: string } }, WorkflowResponse>
     $delete: JsonEndpoint<{ param: { id: string } }, DeleteWorkflowResponse>
-  }
-  '/api/workflows/:id/collab/checkpoint': {
-    $post: JsonEndpoint<{ json: CheckpointWorkflowCollaborationInput; param: { id: string } }, WorkflowCollaborationCheckpointResponse>
   }
   '/api/workflows/:id/nodes/:nodeId/tasks': {
     $get: JsonEndpoint<{ param: { id: string; nodeId: string } }, WorkflowNodeTaskHistoryResponse>

@@ -419,10 +419,7 @@ describe('mina api', () => {
     const runResponse = await app.request(`/api/workflows/${workflowPayload.item.id}/runs`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        selectedNodeId: 'image',
-        expectedWorkflowVersion: workflowPayload.item.version,
-      }),
+      body: JSON.stringify({ selectedNodeId: 'image' }),
     })
     const runPayload = (await runResponse.json()) as WorkflowRunResponse
 
@@ -491,10 +488,7 @@ describe('mina api', () => {
       const runResponse = await app.request(`/api/workflows/${workflowPayload.item.id}/runs`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          selectedNodeId: 'image',
-          expectedWorkflowVersion: workflowPayload.item.version,
-        }),
+        body: JSON.stringify({ selectedNodeId: 'image' }),
       })
       const runPayload = (await runResponse.json()) as WorkflowRunResponse
       expect(runResponse.status).toBe(201)
@@ -562,10 +556,7 @@ describe('mina api', () => {
     const runResponse = await app.request(`/api/workflows/${workflowPayload.item.id}/runs`, {
       method: 'POST',
       headers: owner.headers,
-      body: JSON.stringify({
-        selectedNodeId: 'image',
-        expectedWorkflowVersion: workflowPayload.item.version,
-      }),
+      body: JSON.stringify({ selectedNodeId: 'image' }),
     })
     const runPayload = (await runResponse.json()) as WorkflowRunResponse
 

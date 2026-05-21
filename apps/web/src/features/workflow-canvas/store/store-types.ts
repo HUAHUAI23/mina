@@ -42,16 +42,11 @@ export interface CanvasGraphActions {
 }
 
 export interface CanvasDraftState {
-  dirty: boolean
-  saving: boolean
   version: number
   yjsConnectionStatus: 'connected' | 'connecting' | 'disconnected' | 'synced'
 }
 
 export interface CanvasDraftActions {
-  acknowledgeSaved(input: { version: number }): void
-  markDraftChanged(): void
-  setSaving(saving: boolean): void
   setYjsConnectionStatus(status: CanvasDraftState['yjsConnectionStatus']): void
 }
 

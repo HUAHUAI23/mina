@@ -96,10 +96,20 @@ const readServerMessagesIntoDoc = (doc: Y.Doc, messages: Uint8Array[]): void => 
 
 const binaryMessage = (message: Uint8Array): WorkflowYjsRoomMessage => message
 
+const createInitializedService = async (
+  repository = new FakeWorkflowYjsRepository(),
+): Promise<{ repository: FakeWorkflowYjsRepository; service: WorkflowYjsRoomService }> => {
+  const service = new WorkflowYjsRoomService(repository)
+  await service.initializeWorkflow(workflow, {
+    edges: workflow.edges,
+    nodes: workflow.nodes,
+  })
+  return { repository, service }
+}
+
 describe('WorkflowYjsRoomService', () => {
   test('syncs yjs updates between two workflow connections and persists updates', async () => {
-    const repository = new FakeWorkflowYjsRepository()
-    const service = new WorkflowYjsRoomService(repository)
+    const { repository, service } = await createInitializedService()
     const first = new MockConnection()
     const second = new MockConnection()
     await service.connect({ connection: first, workflow })
@@ -135,7 +145,7 @@ describe('WorkflowYjsRoomService', () => {
   })
 
   test('preserves concurrent node frame changes when stale node data arrives', async () => {
-    const service = new WorkflowYjsRoomService(new FakeWorkflowYjsRepository())
+    const { service } = await createInitializedService()
     const first = new MockConnection()
     await service.connect({ connection: first, workflow })
 
@@ -173,7 +183,7 @@ describe('WorkflowYjsRoomService', () => {
 
   test('restores a room from persisted yjs updates after service restart', async () => {
     const repository = new FakeWorkflowYjsRepository()
-    const firstService = new WorkflowYjsRoomService(repository)
+    const { service: firstService } = await createInitializedService(repository)
     const firstConnection = new MockConnection()
     await firstService.connect({ connection: firstConnection, workflow })
 
@@ -198,9 +208,38 @@ describe('WorkflowYjsRoomService', () => {
     expect(restored.position).toEqual({ x: 240, y: 160 })
   })
 
-  test('checkpoints the current server yjs graph and compacts the persisted snapshot', async () => {
+  test('compacts loaded updates after service restart with a new snapshot version', async () => {
     const repository = new FakeWorkflowYjsRepository()
-    const service = new WorkflowYjsRoomService(repository)
+    const { service: firstService } = await createInitializedService(repository)
+    const firstConnection = new MockConnection()
+    await firstService.connect({ connection: firstConnection, workflow })
+
+    const clientDoc = new Y.Doc()
+    readServerMessagesIntoDoc(clientDoc, firstConnection.received)
+    await firstService.handleMessage({
+      connection: firstConnection,
+      message: binaryMessage(encodeClientSyncStep1(clientDoc)),
+      workflow,
+    })
+    readServerMessagesIntoDoc(clientDoc, firstConnection.received)
+    clientDoc.getMap('nodeFrames').set('node_1', { position: { x: 360, y: 260 } })
+    await firstService.handleMessage({
+      connection: firstConnection,
+      message: binaryMessage(encodeClientUpdate(Y.encodeStateAsUpdate(clientDoc))),
+      workflow,
+    })
+
+    const restartedService = new WorkflowYjsRoomService(repository)
+    const compacted = await restartedService.compactWorkflow(workflow, 'restart_compaction')
+    const compactedNode = compacted.nodes[0] as { position: { x: number; y: number } }
+
+    expect(compacted.version).toBe(workflow.version + 1)
+    expect(compactedNode.position).toEqual({ x: 360, y: 260 })
+    expect(await repository.listUpdates(workflow.id)).toHaveLength(0)
+  })
+
+  test('compacts the current server yjs graph into the persisted snapshot', async () => {
+    const { repository, service } = await createInitializedService()
     const connection = new MockConnection()
     await service.connect({ connection, workflow })
 
@@ -219,15 +258,40 @@ describe('WorkflowYjsRoomService', () => {
       workflow,
     })
 
-    const checkpoint = await service.checkpointForWorkflow(workflow)
-    const checkpointNode = checkpoint.nodes[0] as { position: { x: number; y: number } }
-    expect(checkpointNode.position).toEqual({ x: 410, y: 270 })
+    const compacted = await service.compactWorkflow(workflow, 'test_compaction')
+    const compactedNode = compacted.nodes[0] as { position: { x: number; y: number } }
+    expect(compactedNode.position).toEqual({ x: 410, y: 270 })
     expect((await repository.getSnapshot(workflow.id))?.version).toBe(workflow.version + 1)
+    expect(await repository.listUpdates(workflow.id)).toHaveLength(0)
   })
 
-  test('serializes checkpoint compaction and read-model persistence under the workflow lock', async () => {
-    const repository = new FakeWorkflowYjsRepository()
-    const service = new WorkflowYjsRoomService(repository)
+  test('returns persisted and active room snapshot versions', async () => {
+    const { service } = await createInitializedService()
+    expect(await service.getSnapshotVersion(workflow.id)).toBe(workflow.version)
+
+    const connection = new MockConnection()
+    await service.connect({ connection, workflow })
+    const clientDoc = new Y.Doc()
+    readServerMessagesIntoDoc(clientDoc, connection.received)
+    await service.handleMessage({
+      connection,
+      message: binaryMessage(encodeClientSyncStep1(clientDoc)),
+      workflow,
+    })
+    readServerMessagesIntoDoc(clientDoc, connection.received)
+    clientDoc.getMap('nodeFrames').set('node_1', { position: { x: 460, y: 280 } })
+    await service.handleMessage({
+      connection,
+      message: binaryMessage(encodeClientUpdate(Y.encodeStateAsUpdate(clientDoc))),
+      workflow,
+    })
+
+    await service.compactWorkflow(workflow, 'version_lookup')
+    expect(await service.getSnapshotVersion(workflow.id)).toBe(workflow.version + 1)
+  })
+
+  test('serializes compaction under the workflow lock', async () => {
+    const { repository, service } = await createInitializedService()
     const connection = new MockConnection()
     await service.connect({ connection, workflow })
 
@@ -248,34 +312,25 @@ describe('WorkflowYjsRoomService', () => {
 
     const persisted: Array<{ nodeX: number; snapshotVersion: number }> = []
     await Promise.all([
-      service.checkpointWorkflowReadModel(workflow, async (snapshot) => {
+      service.compactWorkflow(workflow, 'first').then(async (snapshot) => {
         await Bun.sleep(25)
         const node = snapshot.nodes[0] as { position: { x: number } }
-        persisted.push({
-          nodeX: node.position.x,
-          snapshotVersion: (await repository.getSnapshot(workflow.id))?.version ?? 0,
-        })
-        return snapshot
+        persisted.push({ nodeX: node.position.x, snapshotVersion: (await repository.getSnapshot(workflow.id))?.version ?? 0 })
       }),
-      service.checkpointWorkflowReadModel({ ...workflow, version: 2 }, async (snapshot) => {
+      service.compactWorkflow({ ...workflow, version: 2 }, 'second').then(async (snapshot) => {
         const node = snapshot.nodes[0] as { position: { x: number } }
-        persisted.push({
-          nodeX: node.position.x,
-          snapshotVersion: (await repository.getSnapshot(workflow.id))?.version ?? 0,
-        })
-        return snapshot
+        persisted.push({ nodeX: node.position.x, snapshotVersion: (await repository.getSnapshot(workflow.id))?.version ?? 0 })
       }),
     ])
 
     expect(persisted).toEqual([
       { nodeX: 120, snapshotVersion: 2 },
-      { nodeX: 120, snapshotVersion: 3 },
+      { nodeX: 120, snapshotVersion: 2 },
     ])
   })
 
-  test('rejects invalid yjs graph during checkpoint validation', async () => {
-    const repository = new FakeWorkflowYjsRepository()
-    const service = new WorkflowYjsRoomService(repository)
+  test('rejects invalid yjs graph during compaction validation', async () => {
+    const { repository, service } = await createInitializedService()
     const connection = new MockConnection()
     await service.connect({ connection, workflow })
 
@@ -310,18 +365,17 @@ describe('WorkflowYjsRoomService', () => {
 
     expect(await repository.listUpdates(workflow.id)).toHaveLength(1)
 
-    await expect(service.checkpointWorkflowReadModel(workflow, async () => {
-      throw new Error('Read model should not be persisted for an invalid graph.')
-    })).rejects.toThrow('Workflow edge source and target must exist.')
+    await expect(service.compactWorkflow(workflow, 'invalid_graph')).rejects.toThrow(
+      'Workflow edge source and target must exist.',
+    )
 
     const snapshot = await service.snapshotForWorkflow(workflow)
     expect(snapshot.edges).toHaveLength(1)
     expect((await repository.getSnapshot(workflow.id))?.version).toBe(workflow.version)
   })
 
-  test('applies client yjs state update during checkpoint before websocket delivery', async () => {
-    const repository = new FakeWorkflowYjsRepository()
-    const service = new WorkflowYjsRoomService(repository)
+  test('applies client yjs state update during compaction before websocket delivery', async () => {
+    const { repository, service } = await createInitializedService()
     const connection = new MockConnection()
     await service.connect({ connection, workflow })
 
@@ -368,15 +422,14 @@ describe('WorkflowYjsRoomService', () => {
       message: binaryMessage(encodeClientUpdate(Y.encodeStateAsUpdate(clientDoc))),
       workflow,
     })
-    const checkpoint = await service.checkpointForWorkflow(workflow)
+    const compacted = await service.compactWorkflow(workflow, 'unsent_update')
 
-    expect(checkpoint.nodes.some((node) => node.id === newNode.id)).toBe(true)
-    expect(await repository.listUpdates(workflow.id)).toHaveLength(1)
+    expect(compacted.nodes.some((node) => node.id === newNode.id)).toBe(true)
+    expect(await repository.listUpdates(workflow.id)).toHaveLength(0)
   })
 
   test('keeps an idle room available for immediate snapshot reloads', async () => {
-    const repository = new FakeWorkflowYjsRepository()
-    const service = new WorkflowYjsRoomService(repository)
+    const { service } = await createInitializedService()
     const connection = new MockConnection()
     const cleanup = await service.connect({ connection, workflow })
 
@@ -404,7 +457,7 @@ describe('WorkflowYjsRoomService', () => {
   })
 
   test('broadcasts awareness updates to peers', async () => {
-    const service = new WorkflowYjsRoomService(new FakeWorkflowYjsRepository())
+    const { service } = await createInitializedService()
     const first = new MockConnection()
     const second = new MockConnection()
     await service.connect({ connection: first, workflow })

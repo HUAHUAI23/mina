@@ -1100,8 +1100,7 @@ a {
   width: 36px;
 }
 
-.mina-wc-toolbar button:hover,
-.mina-wc-toolbar button[data-dirty='true'] {
+.mina-wc-toolbar button:hover {
   background: var(--surface-container-low);
   color: var(--foreground);
 }

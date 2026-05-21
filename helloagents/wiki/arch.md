@@ -28,8 +28,8 @@ flowchart TD
 | ADR-WEB-001 | Keep the browser-sized app shell in the TanStack root layout; route pages render only inside the stable route frame. | Accepted | Web |
 | ADR-WEB-002 | Gate unauthenticated browser usage at the app provider layer with a centered password login/register card, typed Hono RPC calls, and contract-parsed responses. | Accepted | Web, Auth |
 | ADR-WF-002 | Split workflow canvas render state from persisted document projection; React Flow interaction frames update render state while graph commits write Yjs. | Accepted | Web, Workflows |
-| ADR-WF-003 | Use Yjs as the workflow canvas graph single source of truth; REST workflow definitions are read models. | Accepted | Web, API, Workflows |
-| ADR-WF-004 | Collaboration checkpoints perform server-side Yjs compaction and read-model refresh only; clients do not upload full graph state. | Accepted | Web, API, Workflows |
+| ADR-WF-003 | Use Yjs update logs and snapshots as the editable workflow canvas graph single source of truth. | Accepted | Web, API, Workflows |
+| ADR-WF-004 | Remove frontend autosave/checkpoint and editable SQL read-model maintenance; server-side Yjs compaction owns graph durability. | Accepted | Web, API, Workflows |
 
 ## Runtime Flow
 ```mermaid
@@ -65,8 +65,8 @@ flowchart TD
   PROJ --> RS
   YJS <--> YWS[Authenticated y-websocket Room]
   YWS --> YPERSIST[Yjs Updates / Snapshots]
-  YWS --> READ[Workflow Definition Read Model]
-  READ --> RUN[Workflow Run Snapshot]
+  YPERSIST --> META[Workflow Metadata]
+  YPERSIST --> RUN[Workflow Run Snapshot]
 ```
 
 ## Workflow Collaboration Flow
@@ -89,6 +89,6 @@ sequenceDiagram
   Room-->>ClientB: broadcast Yjs update
   ClientA->>Room: awareness update
   Room-->>ClientB: broadcast awareness
-  ClientA->>API: POST /collab/checkpoint { name? }
-  API->>Room: validate graph, compact server ydoc, return state vector, refresh read model
+  API->>Room: compact current ydoc on threshold, idle cleanup, or run creation
+  Room->>Store: save snapshot and prune included updates
 ```

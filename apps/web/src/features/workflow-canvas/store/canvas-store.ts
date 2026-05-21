@@ -20,7 +20,6 @@ export const useCanvasStore = create<CanvasStore>((set, get, store) => ({
 export const getCanvasSnapshot = () => {
   const state = useCanvasStore.getState()
   return {
-    dirty: state.dirty,
     edges: state.edges,
     name: state.name,
     nodes: state.nodes,

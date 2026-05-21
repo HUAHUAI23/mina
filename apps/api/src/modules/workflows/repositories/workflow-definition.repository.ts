@@ -1,30 +1,19 @@
-import type { Workflow } from '@mina/contracts/modules/workflows'
+import type { WorkflowSummary } from '@mina/contracts/modules/workflows'
 
-export type WorkflowSummary = Omit<Workflow, 'edges' | 'nodes'>
+export type WorkflowMetadata = WorkflowSummary
 
 export interface WorkflowDefinitionCreate {
   accountId: string
-  edges: Workflow['edges']
   id: string
   name: string
-  nodes: Workflow['nodes']
-  timestamp: string
-  version: number
-}
-
-export interface ReplaceWorkflowDefinitionInput {
-  edges: Workflow['edges']
-  id: string
-  name: string
-  nodes: Workflow['nodes']
   timestamp: string
   version: number
 }
 
 export interface WorkflowDefinitionRepository {
-  create(input: WorkflowDefinitionCreate): Promise<Workflow>
+  create(input: WorkflowDefinitionCreate): Promise<WorkflowMetadata>
   delete(id: string): Promise<boolean>
-  findById(id: string): Promise<Workflow | undefined>
-  list(accountId?: string): Promise<Workflow[]>
-  replaceDefinition(input: ReplaceWorkflowDefinitionInput): Promise<Workflow>
+  findById(id: string): Promise<WorkflowMetadata | undefined>
+  list(accountId?: string): Promise<WorkflowMetadata[]>
+  touch(id: string, timestamp: string, version: number): Promise<WorkflowMetadata>
 }

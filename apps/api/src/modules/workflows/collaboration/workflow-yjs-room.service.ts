@@ -4,7 +4,7 @@ import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
 import * as Y from 'yjs'
 
-import type { Workflow } from '@mina/contracts/modules/workflows'
+import type { Workflow, WorkflowSummary } from '@mina/contracts/modules/workflows'
 
 import {
   createWorkflowYDoc,
@@ -15,6 +15,7 @@ import {
 import { appLogger, type AppLogger } from '../../../lib/logger/logger'
 import type { WorkflowYjsRepository } from './workflow-yjs-repository'
 import { validateCanvas } from '../validation'
+import { normalizeWorkflowEdge, normalizeWorkflowNode } from '../repositories/workflow-mappers'
 
 const messageSync = 0
 const messageAwareness = 1
@@ -39,6 +40,14 @@ interface WorkflowCollaborationRoom {
   snapshotVersion: number
   y: WorkflowYDocHandles
   workflowId: string
+}
+
+export interface WorkflowYjsSnapshot {
+  edges: Workflow['edges']
+  nodes: Workflow['nodes']
+  version: number
+  workflowId: string
+  yjsStateVector: Uint8Array
 }
 
 const createId = (prefix: string): string => `${prefix}_${crypto.randomUUID()}`
@@ -119,6 +128,23 @@ const broadcast = (
   }
 }
 
+const normalizeSnapshot = (snapshot: {
+  edges: unknown[]
+  nodes: unknown[]
+}): Pick<WorkflowYjsSnapshot, 'edges' | 'nodes'> => ({
+  edges: snapshot.edges.map((edge) => normalizeWorkflowEdge(edge as Workflow['edges'][number])),
+  nodes: snapshot.nodes.map((node) => normalizeWorkflowNode(node as Workflow['nodes'][number])),
+})
+
+interface WorkflowYjsRoomServiceOptions {
+  onSnapshotSaved?: (input: {
+    reason: string
+    timestamp: string
+    version: number
+    workflowId: string
+  }) => Promise<void> | void
+}
+
 export class WorkflowYjsRoomService {
   readonly #rooms = new Map<string, Promise<WorkflowCollaborationRoom>>()
   readonly #workflowLocks = new Map<string, Promise<void>>()
@@ -126,11 +152,12 @@ export class WorkflowYjsRoomService {
   constructor(
     private readonly repository: WorkflowYjsRepository,
     private readonly logger: Pick<AppLogger, 'error' | 'info'> = appLogger,
+    private readonly options: WorkflowYjsRoomServiceOptions = {},
   ) {}
 
   async connect(input: {
     connection: WorkflowRoomConnection
-    workflow: Workflow
+    workflow: WorkflowSummary
   }): Promise<() => void> {
     const room = await this.#getRoom(input.workflow)
     this.#clearRoomCleanup(room)
@@ -149,22 +176,10 @@ export class WorkflowYjsRoomService {
     }
   }
 
-  exportSnapshot(workflowId: string): { edges: unknown[]; nodes: unknown[] } | undefined {
-    const roomPromise = this.#rooms.get(workflowId)
-    if (!roomPromise) {
-      return undefined
-    }
-    let snapshot: { edges: unknown[]; nodes: unknown[] } | undefined
-    void roomPromise.then((room) => {
-      snapshot = exportWorkflowSnapshotFromYDoc(room.y)
-    })
-    return snapshot
-  }
-
   async handleMessage(input: {
     connection: WorkflowRoomConnection
     message: WorkflowYjsRoomMessage
-    workflow: Workflow
+    workflow: WorkflowSummary
   }): Promise<void> {
     const message = await toUint8Array(input.message)
     if (message.byteLength > maxMessageBytes) {
@@ -192,6 +207,9 @@ export class WorkflowYjsRoomService {
         await this.#withWorkflowLock(room.workflowId, async () => {
           await this.#persistUpdate(room, update)
           Y.applyUpdate(room.y.ydoc, update, input.connection)
+          if (room.persistedUpdatesSinceSnapshot >= snapshotCompactionThreshold) {
+            await this.#compactRoomWithoutLock(room, 'update_threshold')
+          }
         })
         broadcast(room, encodeSyncUpdate(update), input.connection)
       }
@@ -210,48 +228,114 @@ export class WorkflowYjsRoomService {
     }
   }
 
-  async snapshotForWorkflow(workflow: Workflow): Promise<{
-    edges: unknown[]
-    nodes: unknown[]
-    version: number
-    workflowId: string
-  }> {
+  async initializeWorkflow(
+    workflow: WorkflowSummary,
+    snapshot: Pick<WorkflowYjsSnapshot, 'edges' | 'nodes'>,
+  ): Promise<WorkflowYjsSnapshot> {
+    const existing = await this.repository.getSnapshot(workflow.id)
+    if (existing) {
+      throw new Error('Workflow Yjs snapshot already exists.')
+    }
+    const normalized = normalizeSnapshot(snapshot)
+    validateCanvas(normalized.nodes, normalized.edges)
+    const y = createWorkflowYDoc()
+    importWorkflowSnapshotToYDoc(y, normalized, 'mina-server-initialize')
+    const stateVector = Y.encodeStateVector(y.ydoc)
+    await this.repository.saveSnapshot({
+      snapshotBin: Y.encodeStateAsUpdate(y.ydoc),
+      stateVector,
+      version: workflow.version,
+      workflowId: workflow.id,
+    })
+    return {
+      ...normalized,
+      version: workflow.version,
+      workflowId: workflow.id,
+      yjsStateVector: stateVector,
+    }
+  }
+
+  async snapshotForWorkflow(workflow: WorkflowSummary): Promise<WorkflowYjsSnapshot> {
     const room = await this.#getRoom(workflow)
     this.#clearRoomCleanup(room)
-    const snapshot = exportWorkflowSnapshotFromYDoc(room.y)
+    const snapshot = normalizeSnapshot(exportWorkflowSnapshotFromYDoc(room.y))
     if (room.connections.size === 0) {
       this.#scheduleRoomCleanup(room)
     }
     return {
       ...snapshot,
-      version: workflow.version,
+      version: room.snapshotVersion,
       workflowId: workflow.id,
+      yjsStateVector: Y.encodeStateVector(room.y.ydoc),
     }
   }
 
-  async checkpointForWorkflow(
-    workflow: Workflow,
-  ): Promise<{
-    edges: Workflow['edges']
-    nodes: Workflow['nodes']
-    yjsStateVector: Uint8Array
-  }> {
-    return this.checkpointWorkflowReadModel(workflow, async (snapshot) => snapshot)
+  async getSnapshotVersion(workflowId: string): Promise<number | undefined> {
+    const existing = this.#rooms.get(workflowId)
+    if (existing) {
+      return (await existing).snapshotVersion
+    }
+    return (await this.repository.getSnapshot(workflowId))?.version
   }
 
-  async checkpointWorkflowReadModel<T>(
-    workflow: Workflow,
-    persistReadModel: (snapshot: {
-      edges: Workflow['edges']
-      nodes: Workflow['nodes']
-      yjsStateVector: Uint8Array
-    }) => Promise<T>,
-  ): Promise<T> {
+  async replaceSnapshotForWorkflow(
+    workflow: WorkflowSummary,
+    snapshot: Pick<WorkflowYjsSnapshot, 'edges' | 'nodes'>,
+    reason: string,
+  ): Promise<WorkflowYjsSnapshot> {
+    const normalized = normalizeSnapshot(snapshot)
+    validateCanvas(normalized.nodes, normalized.edges)
+    const room = await this.#getRoom(workflow)
+    this.#clearRoomCleanup(room)
+    const result = await this.#withWorkflowLock(workflow.id, async () => {
+      importWorkflowSnapshotToYDoc(room.y, normalized, 'mina-server-replace')
+      const stateVector = Y.encodeStateVector(room.y.ydoc)
+      const snapshotBin = Y.encodeStateAsUpdate(room.y.ydoc)
+      const nextSnapshotVersion = Math.max(room.snapshotVersion + 1, workflow.version + 1)
+      await this.repository.saveSnapshot({
+        snapshotBin,
+        stateVector,
+        version: nextSnapshotVersion,
+        workflowId: workflow.id,
+      })
+      await this.repository.deleteUpdates(workflow.id)
+      await this.#notifySnapshotSaved(workflow.id, nextSnapshotVersion, reason)
+      room.persistedUpdatesSinceSnapshot = 0
+      room.snapshotVersion = nextSnapshotVersion
+      this.logger.info(
+        {
+          edgeCount: normalized.edges.length,
+          nodeCount: normalized.nodes.length,
+          reason,
+          snapshotBytes: snapshotBin.byteLength,
+          stateVectorBytes: stateVector.byteLength,
+          workflowId: workflow.id,
+          workflowVersion: nextSnapshotVersion,
+        },
+        'Workflow Yjs snapshot replaced.',
+      )
+      return {
+        ...normalized,
+        version: nextSnapshotVersion,
+        workflowId: workflow.id,
+        yjsStateVector: stateVector,
+      }
+    })
+    if (room.connections.size === 0) {
+      this.#scheduleRoomCleanup(room)
+    }
+    return result
+  }
+
+  async compactWorkflow(
+    workflow: WorkflowSummary,
+    reason: string,
+  ): Promise<WorkflowYjsSnapshot> {
     const startedAt = Date.now()
     const timings: Record<string, number> = {}
     let lockWaitMs = 0
-    let nodeCount = workflow.nodes.length
-    let edgeCount = workflow.edges.length
+    let nodeCount = 0
+    let edgeCount = 0
     let snapshotBytes = 0
     let stateVectorBytes = 0
     const finishTiming = (name: string, phaseStartedAt: number): void => {
@@ -261,8 +345,9 @@ export class WorkflowYjsRoomService {
       {
         workflowId: workflow.id,
         workflowVersion: workflow.version,
+        reason,
       },
-      'Workflow checkpoint started.',
+      'Workflow Yjs compaction started.',
     )
     const roomStartedAt = Date.now()
     const room = await this.#getRoom(workflow)
@@ -273,7 +358,7 @@ export class WorkflowYjsRoomService {
         workflow.id,
         async () => {
           const exportStartedAt = Date.now()
-          const snapshot = exportWorkflowSnapshotFromYDoc(room.y)
+          const snapshot = normalizeSnapshot(exportWorkflowSnapshotFromYDoc(room.y))
           nodeCount = snapshot.nodes.length
           edgeCount = snapshot.edges.length
           finishTiming('exportSnapshotMs', exportStartedAt)
@@ -292,7 +377,9 @@ export class WorkflowYjsRoomService {
           snapshotBytes = snapshotBin.byteLength
           finishTiming('encodeSnapshotMs', encodeSnapshotStartedAt)
 
-          const nextSnapshotVersion = Math.max(room.snapshotVersion + 1, workflow.version + 1)
+          const nextSnapshotVersion = room.persistedUpdatesSinceSnapshot > 0
+            ? Math.max(room.snapshotVersion + 1, workflow.version)
+            : Math.max(room.snapshotVersion, workflow.version)
           const saveSnapshotStartedAt = Date.now()
           await this.repository.saveSnapshot({
             snapshotBin,
@@ -301,13 +388,20 @@ export class WorkflowYjsRoomService {
             workflowId: workflow.id,
           })
           finishTiming('saveYjsSnapshotMs', saveSnapshotStartedAt)
+          await this.#notifySnapshotSaved(workflow.id, nextSnapshotVersion, reason)
           room.persistedUpdatesSinceSnapshot = 0
           room.snapshotVersion = nextSnapshotVersion
 
-          const persistReadModelStartedAt = Date.now()
-          const persisted = await persistReadModel({ ...snapshot, yjsStateVector: stateVector })
-          finishTiming('persistReadModelMs', persistReadModelStartedAt)
-          return persisted
+          const pruneStartedAt = Date.now()
+          await this.repository.deleteUpdates(workflow.id)
+          finishTiming('pruneUpdatesMs', pruneStartedAt)
+
+          return {
+            ...snapshot,
+            version: nextSnapshotVersion,
+            workflowId: workflow.id,
+            yjsStateVector: stateVector,
+          }
         },
         (waitMs) => {
           lockWaitMs = waitMs
@@ -324,9 +418,10 @@ export class WorkflowYjsRoomService {
           timings,
           totalMs: Date.now() - startedAt,
           workflowId: workflow.id,
-          workflowVersion: workflow.version,
+          workflowVersion: result.version,
+          reason,
         },
-        'Workflow checkpoint completed.',
+        'Workflow Yjs compaction completed.',
       )
       if (room.connections.size === 0) {
         this.#scheduleRoomCleanup(room)
@@ -346,14 +441,15 @@ export class WorkflowYjsRoomService {
           totalMs: Date.now() - startedAt,
           workflowId: workflow.id,
           workflowVersion: workflow.version,
+          reason,
         },
-        'Workflow checkpoint failed.',
+        'Workflow Yjs compaction failed.',
       )
       throw error
     }
   }
 
-  async #getRoom(workflow: Workflow): Promise<WorkflowCollaborationRoom> {
+  async #getRoom(workflow: WorkflowSummary): Promise<WorkflowCollaborationRoom> {
     const existing = this.#rooms.get(workflow.id)
     if (existing) {
       return existing
@@ -363,30 +459,23 @@ export class WorkflowYjsRoomService {
     return created
   }
 
-  async #createRoom(workflow: Workflow): Promise<WorkflowCollaborationRoom> {
+  async #createRoom(workflow: WorkflowSummary): Promise<WorkflowCollaborationRoom> {
     const y = createWorkflowYDoc()
     const persistedSnapshot = await this.repository.getSnapshot(workflow.id)
-    if (persistedSnapshot) {
-      Y.applyUpdate(y.ydoc, persistedSnapshot.snapshotBin, 'mina-server-load')
-      const updates = await this.repository.listUpdates(workflow.id)
-      for (const update of updates) {
-        Y.applyUpdate(y.ydoc, update.updateBin, 'mina-server-load')
-      }
-    } else {
-      importWorkflowSnapshotToYDoc(y, { edges: workflow.edges, nodes: workflow.nodes })
-      await this.repository.saveSnapshot({
-        snapshotBin: Y.encodeStateAsUpdate(y.ydoc),
-        stateVector: Y.encodeStateVector(y.ydoc),
-        version: workflow.version,
-        workflowId: workflow.id,
-      })
+    if (!persistedSnapshot) {
+      throw new Error('Workflow Yjs snapshot not found.')
+    }
+    Y.applyUpdate(y.ydoc, persistedSnapshot.snapshotBin, 'mina-server-load')
+    const updates = await this.repository.listUpdates(workflow.id)
+    for (const update of updates) {
+      Y.applyUpdate(y.ydoc, update.updateBin, 'mina-server-load')
     }
 
     const room: WorkflowCollaborationRoom = {
       awareness: new awarenessProtocol.Awareness(y.ydoc),
       cleanupTimer: undefined,
       connections: new Set(),
-      persistedUpdatesSinceSnapshot: 0,
+      persistedUpdatesSinceSnapshot: updates.length,
       snapshotVersion: persistedSnapshot?.version ?? workflow.version,
       workflowId: workflow.id,
       y,
@@ -408,10 +497,11 @@ export class WorkflowYjsRoomService {
       return
     }
     room.cleanupTimer = setTimeout(() => {
-      void this.#rooms.get(room.workflowId)?.then((currentRoom) => {
+      void this.#rooms.get(room.workflowId)?.then(async (currentRoom) => {
         if (currentRoom !== room || room.connections.size > 0) {
           return
         }
+        await this.#compactRoom(room, 'idle_cleanup')
         room.awareness.destroy()
         room.y.ydoc.destroy()
         this.#rooms.delete(room.workflowId)
@@ -427,16 +517,43 @@ export class WorkflowYjsRoomService {
       workflowId: room.workflowId,
     })
     room.persistedUpdatesSinceSnapshot += 1
-    if (room.persistedUpdatesSinceSnapshot >= snapshotCompactionThreshold) {
-      await this.repository.saveSnapshot({
-        snapshotBin: Y.encodeStateAsUpdate(room.y.ydoc),
-        stateVector: Y.encodeStateVector(room.y.ydoc),
-        version: room.snapshotVersion + 1,
-        workflowId: room.workflowId,
-      })
-      room.persistedUpdatesSinceSnapshot = 0
-      room.snapshotVersion += 1
+  }
+
+  async #compactRoom(room: WorkflowCollaborationRoom, reason: string): Promise<void> {
+    await this.#withWorkflowLock(room.workflowId, async () => {
+      await this.#compactRoomWithoutLock(room, reason)
+    })
+  }
+
+  async #compactRoomWithoutLock(room: WorkflowCollaborationRoom, reason: string): Promise<void> {
+    if (room.persistedUpdatesSinceSnapshot === 0 && reason !== 'idle_cleanup') {
+      return
     }
+    const snapshotBin = Y.encodeStateAsUpdate(room.y.ydoc)
+    const stateVector = Y.encodeStateVector(room.y.ydoc)
+    const nextSnapshotVersion = room.persistedUpdatesSinceSnapshot > 0
+      ? room.snapshotVersion + 1
+      : room.snapshotVersion
+    await this.repository.saveSnapshot({
+      snapshotBin,
+      stateVector,
+      version: nextSnapshotVersion,
+      workflowId: room.workflowId,
+    })
+    await this.repository.deleteUpdates(room.workflowId)
+    await this.#notifySnapshotSaved(room.workflowId, nextSnapshotVersion, reason)
+    room.persistedUpdatesSinceSnapshot = 0
+    room.snapshotVersion = nextSnapshotVersion
+    this.logger.info(
+      {
+        reason,
+        snapshotBytes: snapshotBin.byteLength,
+        stateVectorBytes: stateVector.byteLength,
+        workflowId: room.workflowId,
+        workflowVersion: room.snapshotVersion,
+      },
+      'Workflow Yjs room compacted.',
+    )
   }
 
   async #withWorkflowLock<T>(
@@ -462,5 +579,14 @@ export class WorkflowYjsRoomService {
         this.#workflowLocks.delete(workflowId)
       }
     }
+  }
+
+  async #notifySnapshotSaved(workflowId: string, version: number, reason: string): Promise<void> {
+    await this.options.onSnapshotSaved?.({
+      reason,
+      timestamp: new Date().toISOString(),
+      version,
+      workflowId,
+    })
   }
 }

@@ -1,11 +1,8 @@
-import { Boxes, FileText, Image, Layers, Save, Video } from 'lucide-react'
+import { Boxes, FileText, Image, Layers, Video } from 'lucide-react'
 import type { WorkflowNodeType } from '@mina/contracts/modules/canvas'
 
 interface CanvasToolbarProps {
-  dirty: boolean
   onAddNode(type: WorkflowNodeType): void
-  onSave(): void
-  saving: boolean
 }
 
 const items: Array<{ icon: typeof Image; label: string; type: WorkflowNodeType }> = [
@@ -16,7 +13,7 @@ const items: Array<{ icon: typeof Image; label: string; type: WorkflowNodeType }
   { icon: Layers, label: 'Group', type: 'node_group' },
 ]
 
-export function CanvasToolbar({ dirty, onAddNode, onSave, saving }: CanvasToolbarProps) {
+export function CanvasToolbar({ onAddNode }: CanvasToolbarProps) {
   return (
     <div className="mina-wc-toolbar" aria-label="Canvas tools">
       {items.map(({ icon: Icon, label, type }) => (
@@ -24,10 +21,6 @@ export function CanvasToolbar({ dirty, onAddNode, onSave, saving }: CanvasToolba
           <Icon aria-hidden="true" size={17} />
         </button>
       ))}
-      <span aria-hidden="true" />
-      <button aria-label="Save workflow" data-dirty={dirty ? 'true' : undefined} disabled={saving} onClick={onSave} title="Save workflow" type="button">
-        <Save aria-hidden="true" size={17} />
-      </button>
     </div>
   )
 }

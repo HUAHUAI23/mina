@@ -66,7 +66,7 @@ Current facts to preserve:
 5. `WorkflowMediaResolver` already resolves ordinary canvas `current_media` and flow-group `run_output`.
 6. `WorkflowRunsService.preflightIsolatedNode` already blocks ordinary node execution when required upstream MediaView output is missing.
 7. `downgradeFlowGroupToNodeGroup` already downgrades `run_output` to `current_media`.
-8. Workflow definitions are stored in row-level `workflow_nodes` and `workflow_edges`, not one large JSONB field.
+8. Editable workflow graph data is stored in Yjs update logs and compacted snapshots; `workflows` stores metadata and run creation copies the current Yjs graph into immutable `workflow_run_nodes` / `workflow_run_edges`.
 9. The current web app is Vite + React + TanStack Router, not Next.js. Lumina's Next.js detail is not a Mina baseline.
 
 Current gaps to address:
@@ -76,7 +76,7 @@ Current gaps to address:
 3. `GET /api/workflows/:id/nodes/:nodeId/tasks` currently returns node-task links from the service but the typed client declares `TaskListResponse`. This must be fixed before building `TaskHistoryCard`.
 4. Public media object DTOs and media upload routes are not yet in `packages/contracts` and `apps/api`.
 5. Workflow event schemas and WebSocket routes are not yet implemented.
-6. `PATCH /api/workflows/:id/nodes/:nodeId/media-view` currently does not require an expected workflow version. It should be made version-aware to fit the concurrency model.
+6. MediaView selection is now a Yjs document mutation in the primary canvas flow; do not add a REST media-view patch for editable graph state.
 7. Flow group run target selection should be refined so running a `flow_group` node and running an inner executable node have clear, separate semantics.
 
 ## 4. Reference Basis
@@ -257,25 +257,17 @@ packages/contracts/src/modules/workflows/workflow.schemas.ts
 
 Do not introduce a second canvas node type system in `apps/web`.
 
-### 8.2 Tighten MediaView Update DTO
+### 8.2 MediaView Persistence
 
-Update `UpdateNodeMediaViewSchema` to include optimistic concurrency:
+This section is superseded by
+`docs/design/workflow-yjs-ssot-storage-refactor.md`.
 
-```ts
-export const UpdateNodeMediaViewSchema = z.object({
-  expectedWorkflowVersion: z.number().int().min(1),
-  mediaView: NodeMediaViewStateSchema.optional(),
-})
-```
-
-Rules:
-
-1. `PATCH /api/workflows/:id/nodes/:nodeId/media-view` must check `expectedWorkflowVersion`.
-2. A successful patch increments `workflow.version`.
-3. A stale version returns `409 WORKFLOW_VERSION_CONFLICT`.
-4. The client must update local `workflow.version` from the response after a successful patch.
-
-This prevents a full workflow save from overwriting another client's output selection.
+MediaView selection is now persisted by mutating the live Yjs workflow
+document. Do not reintroduce a version-sensitive REST
+`PATCH /api/workflows/:id/nodes/:nodeId/media-view` path for the primary
+canvas flow. If exact client-rendered-state execution becomes a product
+requirement later, add a Yjs state-vector-based contract instead of an
+editable SQL read-model version check.
 
 ### 8.3 Add Public Media Object Contracts
 
@@ -438,7 +430,7 @@ WS     /api/workflows/:id/events
 
 Required changes:
 
-1. `PATCH media-view` must be version-aware.
+1. MediaView writes must go through the live Yjs workflow document.
 2. `GET node tasks` must return task history items, not just node-task links.
 3. `POST runs` must support running a `flow_group` target and an executable target inside a flow group.
 4. Mutations must publish workflow events after commit.
@@ -684,9 +676,9 @@ On event:
 
 1. Ignore own event if `sourceClientId` matches the current client id.
 2. If event targets another workflow, ignore.
-3. If local canvas draft is clean, invalidate the exact TanStack Query key.
-4. If local canvas draft is dirty, show a remote update banner and do not overwrite the draft.
-5. For `workflow.node.mediaView.updated`, a clean canvas may patch the node's `mediaView` locally for immediate visual response, then invalidate the workflow detail.
+3. Invalidate the exact TanStack Query key for metadata, runs, tasks, or media payloads.
+4. Do not import REST workflow snapshots over an existing client ydoc.
+5. MediaView changes arrive through the Yjs document and are projected into the canvas stores.
 6. For `workflow.node.task.updated`, invalidate node task history only if the selected node matches.
 
 Query key examples:
@@ -812,21 +804,19 @@ TanStack Query owns fetched server state:
 6. Model catalog.
 7. Media object details.
 
-### 13.2 Local Draft State
+### 13.2 Canvas Projection State
 
-Zustand owns editable canvas draft state:
+Zustand owns the canvas projection and UI state. The editable graph
+source is the live Yjs document:
 
 ```ts
-interface CanvasDraftState {
+interface CanvasProjectionState {
   workflowId: string
   version: number
   nodes: WorkflowCanvasNode[]
   edges: WorkflowCanvasEdge[]
   selectedNodeIds: string[]
-  dirty: boolean
-  saving: boolean
-  remoteVersion?: number
-  remoteUpdatePending: boolean
+  yjsConnectionStatus: 'connecting' | 'connected' | 'synced' | 'disconnected'
 }
 ```
 
@@ -834,11 +824,11 @@ Rules:
 
 1. Initialize draft from `workflowKeys.detail(workflowId)`.
 2. Do not keep an unrelated copy of server task history in Zustand.
-3. Dirty state changes on node movement, node config change, slot edits, edge edits, group edits, and text edits.
-4. `mediaView` selection is a server mutation, not a local unsaved edit. It uses `PATCH media-view`.
-5. After a successful `PATCH media-view`, update local version and node `mediaView`.
-6. After a successful full save, update local version and clear dirty.
-7. On `409`, refetch workflow and show conflict UI.
+3. Node movement, node config changes, slot edits, edge edits, group edits, text edits, and MediaView selection mutate the live Yjs document.
+4. Remote Yjs updates project one-way into Zustand/render stores.
+5. Do not maintain frontend `dirty` / `saving` state for the editable graph.
+6. Do not call a REST full-save or media-view patch from primary canvas editing.
+7. Display Yjs sync state instead of save state.
 
 ### 13.3 Store Subscription Rules
 
@@ -1051,9 +1041,9 @@ Rules:
 1. Model switch changes provider/model-specific params only.
 2. Media inputs and prompt remain unchanged on model switch.
 3. Unsupported params from the previous model should be dropped or marked before save.
-4. Run always sends the current workflow version.
-5. If the workflow is dirty, run first saves the workflow, then creates the run.
-6. If save hits `409`, block run and show conflict UI.
+4. Run sends the selected node id only.
+5. The API compacts the current server Yjs document before creating the run snapshot.
+6. If Yjs is disconnected, show offline/sync state and let the server run use the latest persisted server document.
 
 ## 18. TaskHistoryCard
 
@@ -1071,7 +1061,7 @@ It displays:
 
 Clicking an output:
 
-1. Calls `PATCH /api/workflows/:id/nodes/:nodeId/media-view`.
+1. Mutates the node `mediaView` in the live Yjs document.
 2. Updates the node preview.
 3. Updates downstream ordinary current-media slot previews.
 4. Does not modify `mediaSlots`.
@@ -1111,10 +1101,10 @@ node.data.mediaView = {
 
 Required behavior:
 
-1. Node preview switches immediately after the patch succeeds or optimistic update is accepted.
+1. Node preview switches immediately after the Yjs command is accepted locally.
 2. Thumbnail strip active state follows `mediaView.outputResourceId` first, then `outputIndex`.
 3. Downstream ordinary media slots project from the selected output.
-4. Other clients receive `workflow.node.mediaView.updated`.
+4. Other clients receive the MediaView change through Yjs sync.
 5. If the selected output no longer exists, show missing output state and ask the user to choose another history output.
 
 Frontend helper:
@@ -1141,7 +1131,7 @@ onConnect
   -> create NodeMediaSlotItem on B
   -> source = { type: 'node_output', nodeId: A, resolve: 'current_media' }
   -> create media edge with targetSlotItemId
-  -> mark dirty
+  -> commit one Yjs graph transaction
 ```
 
 Default target slots:
@@ -1160,7 +1150,7 @@ onConnect
   -> create NodeMediaSlotItem on B
   -> source = { type: 'node_output', nodeId: A, resolve: 'run_output', selector }
   -> create media edge with targetSlotItemId
-  -> mark dirty
+  -> commit one Yjs graph transaction
 ```
 
 The slot UI must expose selector editing:
@@ -1176,14 +1166,14 @@ When deleting a media edge:
 1. Find `edge.data.connection.targetSlotItemId`.
 2. Remove the matching item from the target node `mediaSlots`.
 3. Re-normalize slot order.
-4. Mark dirty.
+4. Commit one Yjs graph transaction.
 
 When deleting a `node_output` slot item:
 
 1. Remove matching edge.
 2. Remove slot item.
 3. Re-normalize slot order.
-4. Mark dirty.
+4. Commit one Yjs graph transaction.
 
 When deleting a local media object slot item:
 
@@ -1378,7 +1368,7 @@ Required workflow cases:
 7. Running an inner flow node executes its upstream closure.
 8. Flow-group cycle is rejected.
 9. Converting flow group to node group downgrades `run_output` to `current_media`.
-10. `PATCH media-view` rejects stale version.
+10. MediaView selection converges across tabs through Yjs sync.
 11. `GET node tasks` returns hydrated task history.
 
 Required media cases:
@@ -1415,7 +1405,7 @@ Manual browser scenarios:
 7. Upload local image into a media slot.
 8. Run video node and verify only poster renders in canvas.
 9. Open same workflow in two tabs and verify mediaView change updates the other tab.
-10. Edit one tab dirty, update from another tab, verify conflict banner instead of overwrite.
+10. Edit in two tabs and verify Yjs converges without a save loop or overwrite banner.
 
 If Playwright is added later, cover desktop and mobile screenshots for:
 
@@ -1444,7 +1434,7 @@ Tasks:
 1. Add media object DTOs.
 2. Add model catalog DTOs.
 3. Add workflow event DTOs.
-4. Add `expectedWorkflowVersion` to mediaView patch input.
+4. Keep MediaView writes on the live Yjs document in the primary canvas flow.
 5. Fix typed client expectations for node task history.
 6. Typecheck contracts.
 
@@ -1484,7 +1474,7 @@ apps/api/src/modules/workflows/validation.ts
 
 Tasks:
 
-1. Make `PATCH media-view` version-aware.
+1. Keep MediaView writes on the live Yjs workflow document.
 2. Hydrate node task history response.
 3. Add flow group target resolver.
 4. Add upstream closure execution for selected inner flow node.
@@ -1511,7 +1501,7 @@ Tasks:
 3. Publish workflow definition, mediaView, run, task, and media events.
 4. Add frontend WS client.
 5. Invalidate exact Query keys.
-6. Add dirty-draft remote update banner.
+6. Keep REST events out of live ydoc replacement; Yjs remains the graph sync channel.
 
 ### Phase 5 - Canvas Navigation
 
@@ -1612,7 +1602,7 @@ Tasks:
 2. Poll active runs/tasks with Query only when needed.
 3. Auto-select first output after task success if safe.
 4. Refresh history and MediaView after task completion.
-5. Handle WS events and dirty conflicts.
+5. Handle WS events and Yjs sync/offline state.
 
 ### Phase 10 - Verification and Performance Pass
 
@@ -1657,7 +1647,6 @@ The implementation is acceptable when:
 5. Do not let frontend provider forms bypass `ModelSpec.prepareConfig`.
 6. Do not persist React Flow transient fields.
 7. Do not mount large videos in canvas nodes by default.
-8. Do not auto-overwrite dirty local drafts from WebSocket events.
+8. Do not import REST workflow snapshots over an active client ydoc.
 9. Do not make node panels into a permanent heavy sidebar.
 10. Do not implement collaboration semantics until the freshness base is stable.
-

@@ -1,8 +1,6 @@
 import { upgradeWebSocket } from 'hono/bun'
 import { Hono } from 'hono'
-import { sValidator } from '@hono/standard-validator'
-import { CheckpointWorkflowCollaborationSchema } from '@mina/contracts/modules/workflows'
-import type { Workflow } from '@mina/contracts/modules/workflows'
+import type { WorkflowSummary } from '@mina/contracts/modules/workflows'
 
 import { requireAuthActor } from '../accounts/auth-middleware'
 import type { AccountsService } from '../accounts/accounts.service'
@@ -21,36 +19,13 @@ export const createWorkflowCollaborationRoutes = (
       const workflow = await workflowsService.getWorkflow(workflowId, actor.accountId)
       return c.json({ item: await workflowYjsRoomService.snapshotForWorkflow(workflow) })
     })
-    .post(
-      '/:id/collab/checkpoint',
-      sValidator('json', CheckpointWorkflowCollaborationSchema),
-      async (c) => {
-        const actor = await requireAuthActor(c, accountsService)
-        const workflowId = c.req.param('id')
-        const payload = c.req.valid('json')
-        const workflow = await workflowsService.getWorkflow(workflowId, actor.accountId)
-        const result = await workflowYjsRoomService.checkpointWorkflowReadModel(workflow, async (snapshot) => ({
-          item: await workflowsService.checkpointWorkflow(
-            workflowId,
-            {
-              edges: snapshot.edges,
-              nodes: snapshot.nodes,
-              ...(payload.name ? { name: payload.name } : {}),
-            },
-            actor.accountId,
-          ),
-          yjsStateVector: Array.from(snapshot.yjsStateVector),
-        }))
-        return c.json(result)
-      },
-    )
     .get(
       '/:id/collab/:room',
       upgradeWebSocket((c) => {
         const workflowId = c.req.param('id') ?? ''
         const room = c.req.param('room') ?? ''
         let cleanup: (() => void) | undefined
-        let connectedWorkflow: Workflow | undefined
+        let connectedWorkflow: WorkflowSummary | undefined
 
         return {
           onMessage: async (event, ws) => {

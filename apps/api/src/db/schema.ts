@@ -406,56 +406,6 @@ export const workflows = pgTable(
   (table) => [index('workflows_account_updated_idx').on(table.accountId, table.updatedAt)],
 )
 
-export const workflowNodes = pgTable(
-  'workflow_nodes',
-  {
-    workflowId: text('workflow_id')
-      .notNull()
-      .references(() => workflows.id),
-    nodeId: text('node_id').notNull(),
-    type: text('type').$type<WorkflowNodeType>().notNull(),
-    positionX: numeric('position_x', { precision: 14, scale: 3 }).notNull(),
-    positionY: numeric('position_y', { precision: 14, scale: 3 }).notNull(),
-    parentId: text('parent_id'),
-    extent: text('extent').$type<'parent'>(),
-    width: numeric('width', { precision: 14, scale: 3 }),
-    height: numeric('height', { precision: 14, scale: 3 }),
-    data: jsonb('data').$type<WorkflowNodeData>().notNull(),
-    sortOrder: integer('sort_order').notNull(),
-    ...timestamps(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.workflowId, table.nodeId] }),
-    index('workflow_nodes_workflow_sort_idx').on(table.workflowId, table.sortOrder),
-    index('workflow_nodes_workflow_parent_idx').on(table.workflowId, table.parentId),
-    index('workflow_nodes_workflow_type_idx').on(table.workflowId, table.type),
-  ],
-)
-
-export const workflowEdges = pgTable(
-  'workflow_edges',
-  {
-    workflowId: text('workflow_id')
-      .notNull()
-      .references(() => workflows.id),
-    edgeId: text('edge_id').notNull(),
-    type: text('type').notNull().default('media'),
-    sourceNodeId: text('source_node_id').notNull(),
-    targetNodeId: text('target_node_id').notNull(),
-    sourceHandle: text('source_handle'),
-    targetHandle: text('target_handle'),
-    data: jsonb('data').$type<WorkflowEdgeData>().notNull(),
-    sortOrder: integer('sort_order').notNull(),
-    ...timestamps(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.workflowId, table.edgeId] }),
-    index('workflow_edges_workflow_sort_idx').on(table.workflowId, table.sortOrder),
-    index('workflow_edges_source_idx').on(table.workflowId, table.sourceNodeId),
-    index('workflow_edges_target_idx').on(table.workflowId, table.targetNodeId),
-  ],
-)
-
 export const workflowRuns = pgTable(
   'workflow_runs',
   {

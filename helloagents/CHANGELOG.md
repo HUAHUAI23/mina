@@ -30,6 +30,7 @@ This file records important project changes.
 - Added opt-in PostgreSQL-backed workflow repository concurrency tests for run claiming, leases, node state predicates, and duplicate node starts.
 
 ### Changed
+- Reworked workflow storage so Yjs update logs and snapshots are the editable graph source of truth, workflow list endpoints return metadata summaries, and run creation copies the current server Yjs snapshot into immutable run snapshot tables.
 - Optimized workflow-canvas media node task queries, Yjs node-frame commits, and Yjs projection comparison so off-screen media nodes and drag-frame updates do less work on the hot path.
 - Replaced workflow-canvas registry helper barrel imports with direct source imports while keeping registry initialization as explicit side effects.
 - Reworked workflow canvas collaboration so Yjs is the only graph source of truth. Autosave/manual save now posts `{ name? }` to the collaboration checkpoint, clients no longer send `stateUpdate` or reconcile checkpoint snapshots back into ydoc, and `workflows.nodes/edges` is maintained as a server read model for runs and non-collaboration reads.
@@ -75,6 +76,7 @@ This file records important project changes.
 - Fixed controlled React Flow node dragging by syncing in-flight position changes into the canvas node state without marking the draft dirty until drag stop.
 
 ### Removed
+- Removed frontend workflow autosave/manual-save checkpoint behavior and the editable `workflow_nodes` / `workflow_edges` read-model from active schema and services.
 - Removed the unused workflow-canvas `graph-actions` re-export helper.
 - Removed workflow canvas shadow/full-save rollback paths from production code, including document transaction replay state, Yjs transaction helpers, save-response ydoc re-import, remote update banner wiring, REST media-view patch persistence, and the web collaboration snapshot client.
 - Removed the public full-graph `PUT /api/workflows/:id` workflow update path so collaborative graph writes only enter through Yjs sync and server checkpoint read-model refresh.

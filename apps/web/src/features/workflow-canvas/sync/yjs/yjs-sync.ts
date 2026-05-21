@@ -29,7 +29,6 @@ import {
 export const useWorkflowYjsSync = (workflowId: string, enabled = true): void => {
   const hydratedWorkflowId = useCanvasStore((state) => state.hydratedWorkflowId)
   const applyRemoteSnapshot = useCanvasStore((state) => state.applyRemoteSnapshot)
-  const markDraftChanged = useCanvasStore((state) => state.markDraftChanged)
   const setYjsConnectionStatus = useCanvasStore((state) => state.setYjsConnectionStatus)
   const providerRef = useRef<ReturnType<typeof createWorkflowYjsProvider> | undefined>(undefined)
   const yRef = useRef<WorkflowYDocHandles | undefined>(undefined)
@@ -53,7 +52,7 @@ export const useWorkflowYjsSync = (workflowId: string, enabled = true): void => 
     const provider = createWorkflowYjsProvider(workflowId, y)
     providerRef.current = provider
 
-    const projectYjsToStore = (markDirty: boolean) => {
+    const projectYjsToStore = () => {
       const snapshot = exportWorkflowYjsSnapshot(y)
       const current = getCanvasSnapshot()
       if (
@@ -85,9 +84,6 @@ export const useWorkflowYjsSync = (workflowId: string, enabled = true): void => 
         source: 'yjs',
         workflowId,
       })
-      if (markDirty) {
-        markDraftChanged()
-      }
     }
 
     const onUpdate = (_update: Uint8Array, origin: unknown) => {
@@ -97,7 +93,7 @@ export const useWorkflowYjsSync = (workflowId: string, enabled = true): void => 
       } else {
         incrementCanvasPerfCounter('yjsUpdatesReceived')
       }
-      projectYjsToStore(origin === 'mina-local')
+      projectYjsToStore()
     }
     const onAwarenessUpdate = () => {
       useWorkflowPresenceStore.getState().setPeers(readRemoteWorkflowAwareness(provider.awareness))
@@ -106,7 +102,7 @@ export const useWorkflowYjsSync = (workflowId: string, enabled = true): void => 
       updateWorkflowYjsRuntimeConnection(workflowId, { synced })
       if (synced) {
         setYjsConnectionStatus('synced')
-        projectYjsToStore(false)
+        projectYjsToStore()
       }
     }
     const onStatus = (event: { status: 'connected' | 'connecting' | 'disconnected' }) => {
@@ -120,7 +116,7 @@ export const useWorkflowYjsSync = (workflowId: string, enabled = true): void => 
     provider.awareness.on('update', onAwarenessUpdate)
     provider.on('sync', onSync)
     provider.on('status', onStatus)
-    projectYjsToStore(false)
+    projectYjsToStore()
 
     return () => {
       provider.off('sync', onSync)
@@ -136,7 +132,7 @@ export const useWorkflowYjsSync = (workflowId: string, enabled = true): void => 
         yWorkflowIdRef.current = undefined
       }
     }
-  }, [applyRemoteSnapshot, enabled, hydratedWorkflowId, markDraftChanged, setYjsConnectionStatus, workflowId])
+  }, [applyRemoteSnapshot, enabled, hydratedWorkflowId, setYjsConnectionStatus, workflowId])
 
   useEffect(() => {
     if (!import.meta.env.DEV || !enabled) {

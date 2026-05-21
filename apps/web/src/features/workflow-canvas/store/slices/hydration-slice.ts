@@ -37,28 +37,22 @@ export const createHydrationSlice: CanvasSliceCreator<
     }),
   hydrateFromServer: (input) =>
     set((state) => {
-      if (state.hydratedWorkflowId === input.workflowId && state.dirty) {
-        return state
-      }
       if (state.hydratedWorkflowId === input.workflowId) {
         return {
           ...state,
           hydratedWorkflowId: input.workflowId,
           name: input.name,
-          saving: false,
           version: input.version,
           workflowId: input.workflowId,
         }
       }
       return {
         ...state,
-        dirty: false,
         edges: input.edges,
         hydratedWorkflowId: input.workflowId,
         name: input.name,
         nodeIndexById: indexNodes(input.nodes),
         nodes: input.nodes,
-        saving: false,
         version: input.version,
         workflowId: input.workflowId,
       }

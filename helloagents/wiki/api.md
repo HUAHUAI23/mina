@@ -25,9 +25,14 @@ The API currently exposes health, auth, tasks, workflow routes, and authenticate
 - Uploads with `purpose: "public_library"` are admin-only and return `403 ADMIN_REQUIRED` for ordinary users.
 
 ## Workflow APIs
-- Workflow CRUD persists React Flow-compatible nodes and edges.
-- `POST /api/workflows/:id/runs` creates an isolated-node or flow-group run.
-- Node media inputs are resolved from persisted node `mediaSlots` and MediaView state during run reconciliation.
+- `POST /api/workflows` creates workflow metadata and initializes the editable graph in a Yjs snapshot.
+- `GET /api/workflows` returns workflow summaries and does not decode every graph.
+- `GET /api/workflows/:id` composes workflow metadata with the current Yjs graph snapshot.
+- `DELETE /api/workflows/:id` soft-deletes workflow metadata.
+- `GET /api/workflows/:id/collab/snapshot` returns the current server-side Yjs graph snapshot for diagnostics/initialization.
+- `WS /api/workflows/:id/collab/:id` is the authenticated live Yjs sync and awareness channel.
+- `POST /api/workflows/:id/runs` compacts the current server Yjs document and creates an isolated-node or flow-group run from that immutable snapshot.
+- Node media inputs are resolved from Yjs-backed node `mediaSlots` and MediaView state during run reconciliation.
 
 ## Deferred APIs
 - User upload form API.

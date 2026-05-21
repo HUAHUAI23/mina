@@ -50,20 +50,20 @@ Task-scoped resource index. It now includes:
 | `metadata` | Provider or resolver-specific details |
 
 ## Workflow Storage
-Workflow definitions are normalized for large canvas writes:
+Editable workflow graph data uses Yjs as the single source of truth.
+`workflows` stores only workflow metadata. The current editable nodes,
+edges, node config, media slots, and MediaView choices live in the Yjs
+document persisted through binary update logs and compacted snapshots.
 
 | Table | Purpose |
 | --- | --- |
 | `workflows` | Workflow-level metadata: account, name, version, deletion, timestamps |
-| `workflow_nodes` | One persisted canvas node per row, including stable React Flow fields and node `data` |
-| `workflow_edges` | One persisted canvas edge per row, including source/target handles and edge `data` |
+| `workflow_yjs_updates` | Append-only Yjs update log for live collaborative graph edits |
+| `workflow_yjs_snapshots` | Compacted Yjs document snapshots with state vectors and graph version |
 
 Important indexes:
-- `workflow_nodes_workflow_sort_idx`
-- `workflow_nodes_workflow_parent_idx`
-- `workflow_nodes_workflow_type_idx`
-- `workflow_edges_source_idx`
-- `workflow_edges_target_idx`
+- `workflows_account_updated_idx`
+- `workflow_yjs_updates_workflow_created_idx`
 
 Workflow runs are normalized for concurrent schedulers:
 

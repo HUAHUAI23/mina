@@ -4,8 +4,8 @@ import type {
   Workflow,
   WorkflowNodeTaskHistoryItem,
   WorkflowRun,
+  WorkflowSummary,
 } from '@mina/contracts/modules/workflows'
-import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import type { WorkflowEvent } from '@mina/contracts/modules/workflows/events'
 
 import { HttpError } from '../../lib/http/http-error'
@@ -20,13 +20,14 @@ import { validateCanvas } from './validation'
 import { createWorkflowEventId, type WorkflowEventBus } from './workflow-event-bus'
 import { NoopWorkflowRunEventLog, type WorkflowRunEventLog } from './workflow-events'
 import { WorkflowRunsService } from './workflow-runs.service'
+import type { WorkflowYjsRoomService, WorkflowYjsSnapshot } from './collaboration/workflow-yjs-room.service'
 
 const nowIso = (): string => new Date().toISOString()
 
 const createId = (prefix: string): string => `${prefix}_${crypto.randomUUID()}`
 
-const cloneNodes = (nodes: WorkflowCanvasNode[]): WorkflowCanvasNode[] => structuredClone(nodes)
-const cloneEdges = (edges: WorkflowCanvasEdge[]): WorkflowCanvasEdge[] => structuredClone(edges)
+const cloneNodes = (nodes: Workflow['nodes']): Workflow['nodes'] => structuredClone(nodes)
+const cloneEdges = (edges: Workflow['edges']): Workflow['edges'] => structuredClone(edges)
 
 interface WorkflowsServiceRepositories {
   definitions: WorkflowDefinitionRepository
@@ -43,6 +44,7 @@ export class WorkflowsService {
     tasksService: TasksService,
     taskConfigAssembler: TaskConfigAssembler,
     workflowMediaResolver: WorkflowMediaResolver,
+    private readonly workflowYjsRoomService: WorkflowYjsRoomService,
     workflowRunEventLog: WorkflowRunEventLog = new NoopWorkflowRunEventLog(),
     private readonly workflowEventBus?: WorkflowEventBus,
   ) {
@@ -60,15 +62,15 @@ export class WorkflowsService {
     const nodes = cloneNodes(input.nodes)
     const edges = cloneEdges(input.edges)
     validateCanvas(nodes, edges)
-    const workflow = await this.repositories.definitions.create({
+    const metadata = await this.repositories.definitions.create({
       id: createId('workflow'),
       accountId,
       name: input.name,
       version: 1,
-      nodes,
-      edges,
       timestamp,
     })
+    const yjsSnapshot = await this.workflowYjsRoomService.initializeWorkflow(metadata, { edges, nodes })
+    const workflow = this.workflowFromSnapshot(metadata, yjsSnapshot)
     this.publishWorkflowEvent({
       id: createWorkflowEventId(),
       accountId: workflow.accountId,
@@ -112,12 +114,12 @@ export class WorkflowsService {
   }
 
   async getWorkflow(id: string, accountId: string): Promise<Workflow> {
-    const workflow = await this.repositories.definitions.findById(id)
-    if (!workflow) {
+    const metadata = await this.repositories.definitions.findById(id)
+    if (!metadata) {
       throw new HttpError(404, 'WORKFLOW_NOT_FOUND', 'Workflow not found.')
     }
-    this.assertAccountAccess(workflow.accountId, accountId)
-    return workflow
+    this.assertAccountAccess(metadata.accountId, accountId)
+    return this.workflowFromSnapshot(metadata, await this.workflowYjsRoomService.snapshotForWorkflow(metadata))
   }
 
   async listRuns(workflowId: string, accountId: string): Promise<WorkflowRun[]> {
@@ -125,50 +127,20 @@ export class WorkflowsService {
     return this.workflowRunsService.listRuns(workflowId)
   }
 
-  async listWorkflows(accountId: string): Promise<Workflow[]> {
+  async listWorkflows(accountId: string): Promise<WorkflowSummary[]> {
     return this.repositories.definitions.list(accountId)
   }
 
-  async checkpointWorkflow(
-    id: string,
-    input: {
-      edges: WorkflowCanvasEdge[]
-      name?: string | undefined
-      nodes: WorkflowCanvasNode[]
-    },
-    accountId: string,
-  ): Promise<Workflow> {
-    const current = await this.getWorkflow(id, accountId)
-    const nodes = cloneNodes(input.nodes)
-    const edges = cloneEdges(input.edges)
-    validateCanvas(nodes, edges)
-    const timestamp = nowIso()
-    const workflow = await this.repositories.definitions.replaceDefinition({
-      id,
-      name: input.name ?? current.name,
-      nodes,
-      edges,
-      version: current.version + 1,
-      timestamp,
-    })
-    this.publishWorkflowEvent({
-      id: createWorkflowEventId(),
-      accountId: workflow.accountId,
-      createdAt: timestamp,
-      payload: {
-        changedEdgeIds: edges.map((edge) => edge.id),
-        changedNodeIds: nodes.map((node) => node.id),
-      },
-      type: 'workflow.definition.updated',
-      version: workflow.version,
-      workflowId: workflow.id,
-    })
-    return workflow
-  }
-
   async createRun(workflowId: string, input: CreateWorkflowRunInput, accountId: string): Promise<WorkflowRun> {
-    await this.getWorkflow(workflowId, accountId)
-    const run = await this.workflowRunsService.createRun(workflowId, input, accountId)
+    const metadata = await this.getWorkflowMetadata(workflowId, accountId)
+    const snapshot = await this.workflowYjsRoomService.compactWorkflow(metadata, 'create_run')
+    if (snapshot.version !== metadata.version) {
+      await this.repositories.definitions.touch(metadata.id, nowIso(), snapshot.version)
+    }
+    const run = await this.workflowRunsService.createRunFromSnapshot(
+      this.workflowFromSnapshot({ ...metadata, version: snapshot.version }, snapshot),
+      input,
+    )
     this.publishWorkflowEvent({
       id: createWorkflowEventId(),
       accountId: run.accountId,
@@ -209,6 +181,28 @@ export class WorkflowsService {
 
   private publishWorkflowEvent(event: WorkflowEvent): void {
     this.workflowEventBus?.publish(event)
+  }
+
+  private async getWorkflowMetadata(id: string, accountId: string): Promise<WorkflowSummary> {
+    const metadata = await this.repositories.definitions.findById(id)
+    if (!metadata) {
+      throw new HttpError(404, 'WORKFLOW_NOT_FOUND', 'Workflow not found.')
+    }
+    this.assertAccountAccess(metadata.accountId, accountId)
+    return metadata
+  }
+
+  private workflowFromSnapshot(metadata: WorkflowSummary, snapshot: WorkflowYjsSnapshot): Workflow {
+    return {
+      id: metadata.id,
+      accountId: metadata.accountId,
+      name: metadata.name,
+      version: snapshot.version,
+      nodes: snapshot.nodes,
+      edges: snapshot.edges,
+      createdAt: metadata.createdAt,
+      updatedAt: metadata.updatedAt,
+    }
   }
 
   private assertAccountAccess(resourceAccountId: string, expectedAccountId: string): void {

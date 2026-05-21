@@ -10,13 +10,11 @@ import { Hono } from 'hono'
 
 import { requireAuthActor } from '../accounts/auth-middleware'
 import type { AccountsService } from '../accounts/accounts.service'
-import type { WorkflowYjsRoomService } from './collaboration/workflow-yjs-room.service'
 import type { WorkflowsService } from './workflows.service'
 
 export const createWorkflowsRoutes = (
   workflowsService: WorkflowsService,
   accountsService: AccountsService,
-  workflowYjsRoomService: WorkflowYjsRoomService,
 ): Hono =>
   new Hono()
     .get('/', async (c) => {
@@ -53,19 +51,7 @@ export const createWorkflowsRoutes = (
         const actor = await requireAuthActor(c, accountsService)
         const { id } = c.req.valid('param')
         const payload = c.req.valid('json')
-        const workflow = await workflowsService.getWorkflow(id, actor.accountId)
-        const run = await workflowYjsRoomService.checkpointWorkflowReadModel(workflow, async (snapshot) => {
-          const refreshedWorkflow = await workflowsService.checkpointWorkflow(
-            id,
-            snapshot,
-            actor.accountId,
-          )
-          return workflowsService.createRun(
-            id,
-            { ...payload, expectedWorkflowVersion: refreshedWorkflow.version },
-            actor.accountId,
-          )
-        })
+        const run = await workflowsService.createRun(id, payload, actor.accountId)
         return c.json({ item: run }, 201)
       },
     )

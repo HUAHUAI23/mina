@@ -3,6 +3,7 @@ import type { Task } from '@mina/contracts/modules/tasks'
 import type {
   CreateWorkflowRunInput,
   Workflow,
+  WorkflowSummary,
   WorkflowRun,
 } from '@mina/contracts/modules/workflows'
 
@@ -20,7 +21,6 @@ import {
 import { findOutputByMediaView, slotToResourceKind } from './media/media-input-builder'
 import { mediaSlotItemsForNode, nodeOutputDependenciesForNode } from './media/node-media-slots'
 import type { WorkflowMediaResolver } from './media/workflow-media-resolver'
-import type { WorkflowDefinitionRepository } from './repositories/workflow-definition.repository'
 import type { WorkflowNodeTaskRepository } from './repositories/workflow-node-task.repository'
 import type { WorkflowRunRepository } from './repositories/workflow-run.repository'
 import type { WorkflowRunNodeStateRepository } from './repositories/workflow-run-node-state.repository'
@@ -35,6 +35,7 @@ const createId = (prefix: string): string => `${prefix}_${crypto.randomUUID()}`
 
 const cloneNodes = (nodes: Workflow['nodes']): Workflow['nodes'] => structuredClone(nodes)
 const cloneEdges = (edges: Workflow['edges']): Workflow['edges'] => structuredClone(edges)
+type WorkflowSnapshotInput = WorkflowSummary & Pick<Workflow, 'edges' | 'nodes'>
 
 const runRecordFromRun = (run: WorkflowRun): WorkflowRunRecord => ({
   id: run.id,
@@ -53,7 +54,6 @@ const runRecordFromRun = (run: WorkflowRun): WorkflowRunRecord => ({
 })
 
 interface WorkflowRunsServiceRepositories {
-  definitions: WorkflowDefinitionRepository
   nodeStates: WorkflowRunNodeStateRepository
   nodeTasks: WorkflowNodeTaskRepository
   runs: WorkflowRunRepository
@@ -78,12 +78,10 @@ export class WorkflowRunsService {
     )
   }
 
-  async createRun(workflowId: string, input: CreateWorkflowRunInput, accountId: string): Promise<WorkflowRun> {
-    const workflow = await this.getWorkflow(workflowId, accountId)
-    if (workflow.version !== input.expectedWorkflowVersion) {
-      throw new HttpError(409, 'WORKFLOW_VERSION_CONFLICT', 'Workflow version is stale.')
-    }
-
+  async createRunFromSnapshot(
+    workflow: WorkflowSnapshotInput,
+    input: CreateWorkflowRunInput,
+  ): Promise<WorkflowRun> {
     const nodeMap = getNodeMap(workflow.nodes)
     const selectedNode = nodeMap.get(input.selectedNodeId)
     if (!selectedNode) {
@@ -180,7 +178,7 @@ export class WorkflowRunsService {
   }
 
   private deriveDependencies(
-    workflow: Workflow,
+    workflow: WorkflowSnapshotInput,
     scopeGroupNodeId: string,
     executableNodeIds: string[],
   ): Omit<WorkflowRunNodeDependency, 'workflowRunId'>[] {
@@ -200,7 +198,7 @@ export class WorkflowRunsService {
     )
   }
 
-  private flowGroupExecutableNodeIds(workflow: Workflow, scopeGroupNodeId: string): string[] {
+  private flowGroupExecutableNodeIds(workflow: WorkflowSnapshotInput, scopeGroupNodeId: string): string[] {
     const nodeMap = getNodeMap(workflow.nodes)
     return sortNodesForExecution(
       workflow.nodes.filter(
@@ -210,7 +208,7 @@ export class WorkflowRunsService {
   }
 
   private resolveRunTarget(
-    workflow: Workflow,
+    workflow: WorkflowSnapshotInput,
     selectedNode: WorkflowCanvasNode,
   ): { executableNodeIds: string[]; scopeGroupNodeId?: string } {
     const nodeMap = getNodeMap(workflow.nodes)
@@ -232,7 +230,7 @@ export class WorkflowRunsService {
     }
   }
 
-  private upstreamClosureNodeIds(workflow: Workflow, scopeGroupNodeId: string, targetNodeId: string): string[] {
+  private upstreamClosureNodeIds(workflow: WorkflowSnapshotInput, scopeGroupNodeId: string, targetNodeId: string): string[] {
     const nodeMap = getNodeMap(workflow.nodes)
     const scopedExecutableIds = new Set(
       workflow.nodes
@@ -257,15 +255,7 @@ export class WorkflowRunsService {
     return sortNodesForExecution(workflow.nodes.filter((node) => closure.has(node.id))).map((node) => node.id)
   }
 
-  private async getWorkflow(id: string, accountId: string): Promise<Workflow> {
-    const workflow = await this.repositories.definitions.findById(id)
-    if (!workflow || workflow.accountId !== accountId) {
-      throw new HttpError(404, 'WORKFLOW_NOT_FOUND', 'Workflow not found.')
-    }
-    return workflow
-  }
-
-  private async preflightIsolatedNode(workflow: Workflow, node: WorkflowCanvasNode): Promise<void> {
+  private async preflightIsolatedNode(workflow: WorkflowSnapshotInput, node: WorkflowCanvasNode): Promise<void> {
     const nodeMap = getNodeMap(workflow.nodes)
     for (const item of mediaSlotItemsForNode(node, workflow.edges)) {
       if (!item.required) {

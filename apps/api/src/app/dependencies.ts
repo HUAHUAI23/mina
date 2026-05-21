@@ -85,12 +85,21 @@ export const createAppDependencies = (): AppDependencies => {
   )
   const workflowMediaResolver = new WorkflowMediaResolver(mediaObjectService, tasksService)
   const workflowEventBus = new InMemoryWorkflowEventBus()
-  const workflowYjsRoomService = new WorkflowYjsRoomService(new DrizzleWorkflowYjsRepository(db))
+  const workflowYjsRoomService = new WorkflowYjsRoomService(
+    new DrizzleWorkflowYjsRepository(db),
+    undefined,
+    {
+      onSnapshotSaved: async ({ timestamp, version, workflowId }) => {
+        await repositories.workflowRepositories.definitions.touch(workflowId, timestamp, version)
+      },
+    },
+  )
   const workflowsService = new WorkflowsService(
     repositories.workflowRepositories,
     tasksService,
     taskConfigAssembler,
     workflowMediaResolver,
+    workflowYjsRoomService,
     repositories.workflowRunEventLog,
     workflowEventBus,
   )

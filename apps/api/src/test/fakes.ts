@@ -2,7 +2,7 @@ import type { Account, AuthSession, User } from '@mina/contracts/modules/account
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import type { PricingRule } from '@mina/contracts/modules/pricing'
 import type { Task, TaskResource } from '@mina/contracts/modules/tasks'
-import type { Workflow, WorkflowRun, WorkflowRunNodeState } from '@mina/contracts/modules/workflows'
+import type { WorkflowRun, WorkflowRunNodeState, WorkflowSummary } from '@mina/contracts/modules/workflows'
 
 import type {
   CreatePresignedGetUrlInput,
@@ -35,7 +35,6 @@ import type {
   WorkflowYjsUpdateRecord,
 } from '../modules/workflows/collaboration/workflow-yjs-repository'
 import type {
-  ReplaceWorkflowDefinitionInput,
   WorkflowDefinitionCreate,
   WorkflowDefinitionRepository,
 } from '../modules/workflows/repositories/workflow-definition.repository'
@@ -61,10 +60,10 @@ import type {
 import type { WorkflowNodeTaskLink, WorkflowNodeTaskRepository } from '../modules/workflows/repositories/workflow-node-task.repository'
 import {
   cloneRun,
-  cloneWorkflow,
+  cloneWorkflowSummary,
   normalizeWorkflowEdge,
   normalizeWorkflowNode,
-  workflowDto,
+  workflowSummaryDto,
   workflowRunDto,
 } from '../modules/workflows/repositories/workflow-mappers'
 import type {
@@ -465,6 +464,17 @@ export class FakeWorkflowYjsRepository implements WorkflowYjsRepository {
     this.#updates.set(input.workflowId, updates)
   }
 
+  async deleteUpdates(workflowId: string, through?: Date): Promise<void> {
+    if (!through) {
+      this.#updates.delete(workflowId)
+      return
+    }
+    this.#updates.set(
+      workflowId,
+      (this.#updates.get(workflowId) ?? []).filter((update) => new Date(update.createdAt) > through),
+    )
+  }
+
   async getSnapshot(workflowId: string): Promise<WorkflowYjsSnapshotRecord | undefined> {
     const snapshot = this.#snapshots.get(workflowId)
     return snapshot
@@ -499,57 +509,53 @@ export class FakeWorkflowYjsRepository implements WorkflowYjsRepository {
 }
 
 export class FakeWorkflowDefinitionRepository implements WorkflowDefinitionRepository {
-  readonly #workflows = new Map<string, Workflow>()
+  readonly #workflows = new Map<string, WorkflowSummary>()
 
-  async create(input: WorkflowDefinitionCreate): Promise<Workflow> {
-    const workflow = workflowDto({
+  async create(input: WorkflowDefinitionCreate): Promise<WorkflowSummary> {
+    const workflow = workflowSummaryDto({
       accountId: input.accountId,
       createdAt: input.timestamp,
-      edges: input.edges,
       id: input.id,
       name: input.name,
-      nodes: input.nodes,
       updatedAt: input.timestamp,
       version: input.version,
     })
-    this.#workflows.set(workflow.id, cloneWorkflow(workflow))
-    return cloneWorkflow(workflow)
+    this.#workflows.set(workflow.id, cloneWorkflowSummary(workflow))
+    return cloneWorkflowSummary(workflow)
   }
 
   async delete(id: string): Promise<boolean> {
     return this.#workflows.delete(id)
   }
 
-  async findById(id: string): Promise<Workflow | undefined> {
+  async findById(id: string): Promise<WorkflowSummary | undefined> {
     const workflow = this.#workflows.get(id)
-    return workflow ? cloneWorkflow(workflow) : undefined
+    return workflow ? cloneWorkflowSummary(workflow) : undefined
   }
 
-  async list(accountId?: string): Promise<Workflow[]> {
+  async list(accountId?: string): Promise<WorkflowSummary[]> {
     return [...this.#workflows.values()]
       .filter((workflow) => !accountId || workflow.accountId === accountId)
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-      .map(cloneWorkflow)
+      .map(cloneWorkflowSummary)
   }
 
-  async replaceDefinition(input: ReplaceWorkflowDefinitionInput): Promise<Workflow> {
-    const existing = this.#workflows.get(input.id)
+  async touch(id: string, timestamp: string, version: number): Promise<WorkflowSummary> {
+    const existing = this.#workflows.get(id)
     if (!existing) {
       throw new Error('Workflow not found.')
     }
 
-    const workflow = workflowDto({
+    const workflow = workflowSummaryDto({
       accountId: existing.accountId,
       createdAt: existing.createdAt,
-      edges: input.edges,
       id: existing.id,
-      name: input.name,
-      nodes: input.nodes,
-      updatedAt: input.timestamp,
-      version: input.version,
+      name: existing.name,
+      updatedAt: timestamp,
+      version,
     })
-    this.#workflows.set(workflow.id, cloneWorkflow(workflow))
-    return cloneWorkflow(workflow)
+    this.#workflows.set(workflow.id, cloneWorkflowSummary(workflow))
+    return cloneWorkflowSummary(workflow)
   }
 
 }

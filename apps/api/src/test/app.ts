@@ -55,10 +55,19 @@ export const createTestApp = () => {
   )
   const runs = new FakeWorkflowRunRepository()
   const workflowEventBus = new InMemoryWorkflowEventBus()
-  const workflowYjsRoomService = new WorkflowYjsRoomService(new FakeWorkflowYjsRepository())
+  const workflowDefinitions = new FakeWorkflowDefinitionRepository()
+  const workflowYjsRoomService = new WorkflowYjsRoomService(
+    new FakeWorkflowYjsRepository(),
+    undefined,
+    {
+      onSnapshotSaved: async ({ timestamp, version, workflowId }) => {
+        await workflowDefinitions.touch(workflowId, timestamp, version)
+      },
+    },
+  )
   const workflowsService = new WorkflowsService(
     {
-      definitions: new FakeWorkflowDefinitionRepository(),
+      definitions: workflowDefinitions,
       nodeStates: runs,
       nodeTasks: new FakeWorkflowNodeTaskRepository(runs),
       runs,
@@ -66,6 +75,7 @@ export const createTestApp = () => {
     tasksService,
     new TaskConfigAssembler(modelRegistry),
     new WorkflowMediaResolver(mediaObjectService, tasksService),
+    workflowYjsRoomService,
     new FakeWorkflowRunEventLog(),
     workflowEventBus,
   )

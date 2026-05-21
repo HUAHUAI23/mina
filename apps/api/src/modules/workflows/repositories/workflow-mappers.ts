@@ -1,7 +1,12 @@
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
-import type { Workflow, WorkflowRun, WorkflowRunNodeState } from '@mina/contracts/modules/workflows'
+import type { Workflow, WorkflowRun, WorkflowRunNodeState, WorkflowSummary } from '@mina/contracts/modules/workflows'
 import { WorkflowCanvasEdgeSchema, WorkflowCanvasNodeSchema } from '@mina/contracts/modules/canvas'
-import { WorkflowRunNodeStateSchema, WorkflowRunSchema, WorkflowSchema } from '@mina/contracts/modules/workflows'
+import {
+  WorkflowRunNodeStateSchema,
+  WorkflowRunSchema,
+  WorkflowSchema,
+  WorkflowSummarySchema,
+} from '@mina/contracts/modules/workflows'
 
 import type { WorkflowRunRecord } from './workflow-types'
 
@@ -10,6 +15,8 @@ export const toIso = (value: Date): string => value.toISOString()
 export const toDate = (value: string | undefined): Date | null => (value ? new Date(value) : null)
 
 export const cloneWorkflow = (workflow: Workflow): Workflow => structuredClone(workflow)
+
+export const cloneWorkflowSummary = (workflow: WorkflowSummary): WorkflowSummary => structuredClone(workflow)
 
 export const cloneRun = (run: WorkflowRun): WorkflowRun => structuredClone(run)
 
@@ -56,6 +63,23 @@ export const workflowDto = (input: {
     version: input.version,
     nodes: input.nodes.map(normalizeWorkflowNode),
     edges: input.edges.map(normalizeWorkflowEdge),
+    createdAt: input.createdAt,
+    updatedAt: input.updatedAt,
+  })
+
+export const workflowSummaryDto = (input: {
+  accountId: string
+  createdAt: string
+  id: string
+  name: string
+  updatedAt: string
+  version: number
+}): WorkflowSummary =>
+  WorkflowSummarySchema.parse({
+    id: input.id,
+    accountId: input.accountId,
+    name: input.name,
+    version: input.version,
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
   })
