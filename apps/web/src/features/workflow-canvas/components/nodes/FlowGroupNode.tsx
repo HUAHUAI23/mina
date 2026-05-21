@@ -3,6 +3,7 @@ import type { NodeProps } from '@xyflow/react'
 
 import { markCanvasNodeRender } from '../../diagnostics/canvas-render-counts'
 import type { FlowGroupFlowNode, WorkflowFlowNodeData } from '../../domain/flow-types'
+import { WorkflowNodeHandles } from './WorkflowNodeHandles'
 
 type FlowGroupNodeProps = NodeProps<FlowGroupFlowNode>
 
@@ -28,6 +29,7 @@ const FlowGroupNodeView = memo(function FlowGroupNodeView({ data, id }: FlowGrou
   markCanvasNodeRender(id, groupNodeRenderSignature(data))
   return (
     <section className="mina-wc-group-node mina-wc-flow-group">
+      <WorkflowNodeHandles />
       <strong>{data.title}</strong>
       <span>Flow scope</span>
     </section>

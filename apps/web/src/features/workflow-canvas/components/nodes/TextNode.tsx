@@ -1,8 +1,9 @@
 import { memo } from 'react'
-import { Handle, Position, type NodeProps } from '@xyflow/react'
+import type { NodeProps } from '@xyflow/react'
 
 import { markCanvasNodeRender } from '../../diagnostics/canvas-render-counts'
 import type { TextFlowNode, WorkflowFlowNodeData } from '../../domain/flow-types'
+import { WorkflowNodeHandles } from './WorkflowNodeHandles'
 
 type TextNodeProps = NodeProps<TextFlowNode>
 
@@ -31,7 +32,7 @@ const TextNodeView = memo(function TextNodeView({ data, id }: TextNodeViewProps)
   const text = data.textPreview ?? ''
   return (
     <article className="mina-wc-node mina-wc-text-node">
-      <Handle className="mina-wc-handle" position={Position.Right} type="source" />
+      <WorkflowNodeHandles />
       <div className="mina-wc-node-header">
         <strong>{data.title}</strong>
         <span>Text</span>

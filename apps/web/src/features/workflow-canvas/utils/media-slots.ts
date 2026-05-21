@@ -26,6 +26,9 @@ export const removeEdgeSlotItem = (
   if (node.data.nodeType !== 'image_generation' && node.data.nodeType !== 'video_generation') {
     return node
   }
+  if (!edge.data.connection) {
+    return node
+  }
   const slot = edge.data.connection.targetSlot
   const targetSlotItemId = edge.data.connection.targetSlotItemId
   const current = node.data.mediaSlots?.[slot] ?? []

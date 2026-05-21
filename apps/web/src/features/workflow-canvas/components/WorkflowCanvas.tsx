@@ -1,8 +1,9 @@
-import { Profiler, memo, useCallback, useEffect, useMemo } from 'react'
-import { Background, Controls, ReactFlow, ReactFlowProvider } from '@xyflow/react'
+import { Profiler, memo, useCallback, useEffect, useMemo, useRef } from 'react'
+import { Background, ConnectionMode, Controls, ReactFlow, ReactFlowProvider } from '@xyflow/react'
 import type { NodeMouseHandler } from '@xyflow/react'
 
 import { MediaEdge } from './edges/MediaEdge'
+import { WorkflowConnectionLine } from './edges/WorkflowConnectionLine'
 import { FlowGroupNode } from './nodes/FlowGroupNode'
 import { MediaGenerationNode } from './nodes/MediaGenerationNode/MediaGenerationNode'
 import { NodeGroupNode } from './nodes/NodeGroupNode'
@@ -16,6 +17,10 @@ import { publishLocalSelection } from '../sync/workflow-presence'
 import { recordCanvasProfilerCommit } from '../diagnostics/canvas-profiler-marks'
 import { useFlowRenderStore } from '../render/flow-render-store'
 import { useWorkflowRuntimeStore } from '../store/workflow-runtime-store'
+import {
+  WORKFLOW_CANVAS_GEOMETRY_CSS_VARS,
+  WORKFLOW_CONNECTION_GEOMETRY,
+} from '../workflow-canvas-geometry'
 import type {
   WorkflowFlowEdge,
   WorkflowFlowNode,
@@ -55,6 +60,7 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
   const {
     onConnect,
     onEdgesChange,
+    isValidConnection,
     onMove,
     onMoveEnd,
     onMoveStart,
@@ -62,6 +68,7 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
     onNodeDragStop,
     onNodesChange,
   } = useWorkflowFlowHandlers()
+  const stageRef = useRef<HTMLDivElement | null>(null)
   const runtimeActions = useMemo(
     () => ({ onRunNode, onSelectOutput }),
     [onRunNode, onSelectOutput],
@@ -114,33 +121,47 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
     },
     [selectNodeIds],
   )
+  const handleConnectStart = useCallback(() => {
+    stageRef.current?.setAttribute('data-connecting', '')
+  }, [])
+  const handleConnectEnd = useCallback(() => {
+    stageRef.current?.removeAttribute('data-connecting')
+  }, [])
 
   return (
     <ReactFlowProvider>
       <Profiler id="WorkflowCanvas" onRender={recordCanvasProfilerCommit}>
-        <ReactFlow<WorkflowFlowNode, WorkflowFlowEdge>
-          edgeTypes={edgeTypes}
-          edges={flowEdges}
-          fitView
-          nodes={flowNodes}
-          nodeTypes={nodeTypes}
-          onConnect={onConnect}
-          onEdgesChange={onEdgesChange}
-          onMove={onMove}
-          onMoveEnd={onMoveEnd}
-          onMoveStart={onMoveStart}
-          onNodeClick={handleNodeClick}
-          onNodeDragStart={onNodeDragStart}
-          onNodeDragStop={onNodeDragStop}
-          onNodesChange={onNodesChange}
-          onPaneClick={handlePaneClick}
-          onSelectionChange={handleSelectionChange}
-          onlyRenderVisibleElements={nodes.length >= 500}
-        >
-          <Background gap={24} size={1} />
-          <Controls showInteractive={false} />
-          <NodePanelLayer onRunNode={onRunNode} runError={runError} runningNodeId={runningNodeId} />
-        </ReactFlow>
+        <div className="mina-wc-flow-shell" ref={stageRef} style={WORKFLOW_CANVAS_GEOMETRY_CSS_VARS}>
+          <ReactFlow<WorkflowFlowNode, WorkflowFlowEdge>
+            connectionLineComponent={WorkflowConnectionLine}
+            connectionMode={ConnectionMode.Loose}
+            connectionRadius={WORKFLOW_CONNECTION_GEOMETRY.radius}
+            edgeTypes={edgeTypes}
+            edges={flowEdges}
+            fitView
+            isValidConnection={isValidConnection}
+            nodes={flowNodes}
+            nodeTypes={nodeTypes}
+            onConnect={onConnect}
+            onConnectEnd={handleConnectEnd}
+            onConnectStart={handleConnectStart}
+            onEdgesChange={onEdgesChange}
+            onMove={onMove}
+            onMoveEnd={onMoveEnd}
+            onMoveStart={onMoveStart}
+            onNodeClick={handleNodeClick}
+            onNodeDragStart={onNodeDragStart}
+            onNodeDragStop={onNodeDragStop}
+            onNodesChange={onNodesChange}
+            onPaneClick={handlePaneClick}
+            onSelectionChange={handleSelectionChange}
+            onlyRenderVisibleElements={nodes.length >= 500}
+          >
+            <Background gap={24} size={1} />
+            <Controls showInteractive={false} />
+            <NodePanelLayer onRunNode={onRunNode} runError={runError} runningNodeId={runningNodeId} />
+          </ReactFlow>
+        </div>
       </Profiler>
     </ReactFlowProvider>
   )

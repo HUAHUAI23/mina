@@ -8,7 +8,7 @@ import type {
 
 interface WorkflowFlowEdgeData {
   [key: string]: WorkflowCanvasEdge['data']['connection'] | undefined
-  connection: WorkflowCanvasEdge['data']['connection']
+  connection?: WorkflowCanvasEdge['data']['connection'] | undefined
 }
 
 export interface WorkflowFlowNodeData {

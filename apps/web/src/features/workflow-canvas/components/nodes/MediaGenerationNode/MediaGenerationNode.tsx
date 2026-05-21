@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Handle, Position, type NodeProps } from '@xyflow/react'
+import type { NodeProps } from '@xyflow/react'
 
 import { getTask } from '../../../api/workflow-queries'
 import { taskKeys } from '../../../api/workflow-keys'
@@ -15,6 +15,7 @@ import type {
 import { ImagePreview } from './ImagePreview'
 import { MediaOutputStrip } from './MediaOutputStrip'
 import { VideoPosterPreview } from './VideoPosterPreview'
+import { WorkflowNodeHandles } from '../WorkflowNodeHandles'
 
 type MediaGenerationNodeProps = NodeProps<ImageGenerationFlowNode | VideoGenerationFlowNode>
 
@@ -74,7 +75,7 @@ const MediaGenerationNodeView = memo(function MediaGenerationNodeView({
 
   return (
     <article className="mina-wc-node mina-wc-media-node">
-      <Handle className="mina-wc-handle" position={Position.Left} type="target" />
+      <WorkflowNodeHandles />
       <div className="mina-wc-node-header">
         <strong>{data.title}</strong>
         <span>{isVideo ? 'Video' : 'Image'}</span>
@@ -95,7 +96,6 @@ const MediaGenerationNodeView = memo(function MediaGenerationNodeView({
           }
         }}
       />
-      <Handle className="mina-wc-handle" position={Position.Right} type="source" />
     </article>
   )
 }, mediaGenerationNodeViewPropsEqual)

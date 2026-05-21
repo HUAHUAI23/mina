@@ -42,7 +42,7 @@ export const validateWorkflowCanvasGraph = (
         if (edge.source !== sourceNodeId || edge.target !== node.id) {
           return false
         }
-        return edge.data.connection.targetSlotItemId === item.id
+        return edge.data.connection?.targetSlotItemId === item.id
       })
       if (!matchingEdge) {
         throw new Error('Node output media slot must have a matching edge.')
@@ -54,13 +54,17 @@ export const validateWorkflowCanvasGraph = (
   }
 
   for (const edge of edges) {
+    const connection = edge.data.connection
+    if (!connection) {
+      continue
+    }
     const target = nodeMap.get(edge.target)
     if (!target) {
       continue
     }
     const matchingItem = mediaSlotItems(target).find(
       (item) =>
-        item.id === edge.data.connection.targetSlotItemId &&
+        item.id === connection.targetSlotItemId &&
         item.source.type === 'node_output' &&
         item.source.nodeId === edge.source,
     )

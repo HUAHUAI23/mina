@@ -144,7 +144,21 @@ export const workflowYjsCommands = {
     const { nodes } = context
     const source = nodes.find((node) => node.id === input.sourceId)
     const target = nodes.find((node) => node.id === input.targetId)
-    if (!source || !target || !isMediaGenerationNode(target)) {
+    if (!source || !target || source.id === target.id) {
+      return
+    }
+
+    if (!isMediaGenerationNode(target)) {
+      const edge: WorkflowCanvasEdge = {
+        id: createStoreId('edge'),
+        type: 'media',
+        source: input.sourceId,
+        target: input.targetId,
+        ...(input.sourceHandle ? { sourceHandle: input.sourceHandle } : {}),
+        ...(input.targetHandle ? { targetHandle: input.targetHandle } : {}),
+        data: {},
+      }
+      withYDoc(context, (y) => upsertEdge(y, edge))
       return
     }
 
@@ -300,7 +314,7 @@ export const workflowYjsCommands = {
   removeSlotItem(context: WorkflowYjsCommandContext, nodeId: string, slot: MediaSlotName, slotItemId: string): void {
     const { edges } = context
     const removedEdgeIds = edges
-      .filter((edge) => edge.data.connection.targetSlotItemId === slotItemId)
+      .filter((edge) => edge.data.connection?.targetSlotItemId === slotItemId)
       .map((edge) => edge.id)
     const currentNode = context.nodes.find((node) => node.id === nodeId)
     if (!currentNode) {
@@ -378,7 +392,7 @@ export const workflowYjsCommands = {
       return
     }
     const removedEdgeIds = context.edges
-      .filter((edge) => edge.data.connection.targetSlotItemId === slotItemId)
+      .filter((edge) => edge.data.connection?.targetSlotItemId === slotItemId)
       .map((edge) => edge.id)
     const items = nextNode.data.mediaSlots?.[slot] ?? []
     nextNode.data.mediaSlots = {

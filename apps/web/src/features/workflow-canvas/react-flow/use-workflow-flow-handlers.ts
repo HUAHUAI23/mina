@@ -2,6 +2,7 @@ import { useCallback, useRef } from 'react'
 import type {
   Connection,
   EdgeChange,
+  IsValidConnection,
   NodeChange,
   NodeMouseHandler,
   OnEdgesChange,
@@ -47,9 +48,16 @@ export const useWorkflowFlowHandlers = () => {
   const removeGraphNodes = useCanvasStore((state) => state.removeGraphNodes)
   const setNodeFrame = useCanvasStore((state) => state.setNodeFrame)
 
+  const isValidConnection = useCallback<IsValidConnection<WorkflowFlowEdge>>((connection) => {
+    if (!connection.source || !connection.target || connection.source === connection.target) {
+      return false
+    }
+    return true
+  }, [])
+
   const onConnect = useCallback(
     (connection: Connection) => {
-      if (!connection.source || !connection.target) {
+      if (!connection.source || !connection.target || connection.source === connection.target) {
         return
       }
       incrementCanvasPerfCounter('documentCommits')
@@ -195,6 +203,7 @@ export const useWorkflowFlowHandlers = () => {
 
   return {
     changedNodeIds,
+    isValidConnection,
     onConnect,
     onEdgesChange,
     onMove,
