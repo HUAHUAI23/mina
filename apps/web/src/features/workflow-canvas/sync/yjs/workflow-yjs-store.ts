@@ -2,6 +2,12 @@ import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/mod
 import * as Y from 'yjs'
 
 import type { WorkflowYDocHandles } from './yjs-document'
+import { workflowYjsSnapshotSignature } from './yjs-document'
+
+interface WorkflowYjsSnapshotRefs {
+  edges: WorkflowCanvasEdge[]
+  nodes: WorkflowCanvasNode[]
+}
 
 interface WorkflowYjsRuntimeState {
   edges: WorkflowCanvasEdge[]
@@ -10,6 +16,7 @@ interface WorkflowYjsRuntimeState {
   synced: boolean
   workflowId: string
   y: WorkflowYDocHandles
+  snapshotSignature: string
 }
 
 const runtimes = new Map<string, WorkflowYjsRuntimeState>()
@@ -17,12 +24,13 @@ const runtimes = new Map<string, WorkflowYjsRuntimeState>()
 export const registerWorkflowYjsRuntime = (
   workflowId: string,
   y: WorkflowYDocHandles,
-  snapshot: { edges: WorkflowCanvasEdge[]; nodes: WorkflowCanvasNode[] },
+  snapshot: WorkflowYjsSnapshotRefs,
 ): void => {
   runtimes.set(workflowId, {
     edges: snapshot.edges,
     nodes: snapshot.nodes,
     providerStatus: 'connecting',
+    snapshotSignature: workflowYjsSnapshotSignature(snapshot),
     synced: false,
     workflowId,
     y,
@@ -42,7 +50,8 @@ export const unregisterWorkflowYjsRuntime = (
 
 export const updateWorkflowYjsRuntimeSnapshot = (
   workflowId: string,
-  snapshot: { edges: WorkflowCanvasEdge[]; nodes: WorkflowCanvasNode[] },
+  snapshot: WorkflowYjsSnapshotRefs,
+  snapshotSignature = workflowYjsSnapshotSignature(snapshot),
 ): void => {
   const runtime = runtimes.get(workflowId)
   if (!runtime) {
@@ -50,6 +59,7 @@ export const updateWorkflowYjsRuntimeSnapshot = (
   }
   runtime.edges = snapshot.edges
   runtime.nodes = snapshot.nodes
+  runtime.snapshotSignature = snapshotSignature
 }
 
 export const updateWorkflowYjsRuntimeConnection = (
@@ -66,6 +76,20 @@ export const updateWorkflowYjsRuntimeConnection = (
 export const getWorkflowYjsRuntimeForWorkflow = (
   workflowId: string,
 ): WorkflowYjsRuntimeState | undefined => runtimes.get(workflowId)
+
+export const getWorkflowYjsRuntimeSnapshotSignature = (
+  workflowId: string,
+  snapshot?: WorkflowYjsSnapshotRefs,
+): string | undefined => {
+  const runtime = runtimes.get(workflowId)
+  if (!runtime) {
+    return undefined
+  }
+  if (snapshot && (runtime.edges !== snapshot.edges || runtime.nodes !== snapshot.nodes)) {
+    return undefined
+  }
+  return runtime.snapshotSignature
+}
 
 export const getWorkflowYjsStateVector = (workflowId: string): Uint8Array | undefined => {
   const runtime = runtimes.get(workflowId)

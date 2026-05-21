@@ -80,7 +80,6 @@ export function MediaSlotItem({ item, onChange, onRemove, onReplace }: MediaSlot
   const style: CSSProperties = {
     cursor: sortable.isDragging ? 'grabbing' : 'grab',
     transform: CSS.Transform.toString(sortable.transform),
-    transition: sortable.transition,
     touchAction: 'none',
   }
 

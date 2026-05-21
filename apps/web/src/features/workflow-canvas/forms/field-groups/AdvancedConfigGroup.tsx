@@ -1,4 +1,4 @@
-import type { ClientModelSpec } from '../registry'
+import type { ClientModelSpec } from '../registry/client-model-registry'
 import type { NodeTaskFormApi } from '../form-context'
 
 interface AdvancedConfigGroupProps {

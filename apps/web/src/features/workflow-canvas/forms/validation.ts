@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
-import { resolveClientModel } from './registry'
+import { resolveClientModel } from './registry/client-model-registry'
+import './registry'
 import type { NodeTaskFormValue } from './model-form-utils'
 
 const NodeTaskFormValueSchema = z.object({

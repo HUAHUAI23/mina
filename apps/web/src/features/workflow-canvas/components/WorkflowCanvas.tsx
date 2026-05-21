@@ -17,6 +17,7 @@ import { useWorkflowFlowHandlers } from '../react-flow/use-workflow-flow-handler
 import { publishLocalSelection } from '../sync/workflow-presence'
 import { recordCanvasProfilerCommit } from '../diagnostics/canvas-profiler-marks'
 import { useFlowRenderStore } from '../render/flow-render-store'
+import { getFlowPerformancePolicy } from '../render/flow-performance-policy'
 import { useWorkflowRuntimeStore } from '../store/workflow-runtime-store'
 import {
   WORKFLOW_CANVAS_GEOMETRY_CSS_VARS,
@@ -73,6 +74,10 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
   const runtimeActions = useMemo(
     () => ({ onRunNode, onSelectOutput }),
     [onRunNode, onSelectOutput],
+  )
+  const performancePolicy = useMemo(
+    () => getFlowPerformancePolicy({ edges, nodes }),
+    [edges, nodes],
   )
 
   useEffect(() => {
@@ -156,7 +161,7 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
             onNodesChange={onNodesChange}
             onPaneClick={handlePaneClick}
             onSelectionChange={handleSelectionChange}
-            onlyRenderVisibleElements={nodes.length >= 500}
+            onlyRenderVisibleElements={performancePolicy.onlyRenderVisibleElements}
           >
             <Background gap={24} size={1} />
             <Controls showInteractive={false} />

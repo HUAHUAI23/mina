@@ -4,7 +4,7 @@ import { ResourceKindSchema } from '../tasks/task.schemas'
 
 export const MediaObjectStatusSchema = z.enum(['uploading', 'ready', 'failed', 'deleted'])
 export const MediaObjectOriginSchema = z.enum(['user_upload', 'task_output', 'external_import', 'system_generated'])
-export const MediaObjectPurposeSchema = z.enum(['workflow_slot', 'task_input', 'temporary', 'task_output', 'preview'])
+export const MediaObjectPurposeSchema = z.enum(['workflow_slot', 'task_input', 'temporary', 'task_output', 'preview', 'public_library'])
 export const MediaObjectRetentionSchema = z.enum(['temporary', 'task_scoped', 'project_scoped', 'library'])
 
 export const MediaObjectSchema = z.object({
@@ -36,7 +36,7 @@ export const MediaObjectSchema = z.object({
 
 export const CreateMediaObjectSchema = z.object({
   kind: ResourceKindSchema.optional(),
-  purpose: z.enum(['workflow_slot', 'task_input', 'temporary']).default('workflow_slot'),
+  purpose: z.enum(['workflow_slot', 'task_input', 'temporary', 'public_library']).default('workflow_slot'),
   retention: MediaObjectRetentionSchema.default('project_scoped'),
 })
 
@@ -51,7 +51,7 @@ export const CreatePresignedMediaUploadSchema = z.object({
   kind: ResourceKindSchema,
   mimeType: z.string().min(1),
   byteSize: z.number().int().nonnegative().optional(),
-  purpose: z.enum(['workflow_slot', 'task_input', 'temporary']).default('workflow_slot'),
+  purpose: z.enum(['workflow_slot', 'task_input', 'temporary', 'public_library']).default('workflow_slot'),
   retention: MediaObjectRetentionSchema.default('project_scoped'),
 })
 

@@ -10,6 +10,7 @@ import { useWorkflowRuntimeStore } from '../../../store/workflow-runtime-store'
 import type { NodeMediaPreview } from '../../../media/media-preview-store'
 import { MediaOutputStrip } from './MediaOutputStrip'
 import { WorkflowNodeHandles } from '../WorkflowNodeHandles'
+import { useCurrentNodeVisible } from '../use-node-visibility'
 
 export interface MediaNodeShellRenderInput {
   preview: NodeMediaPreview
@@ -41,8 +42,9 @@ export const MediaNodeShell = memo(function MediaNodeShell({
   markCanvasNodeRender(id, mediaNodeRenderSignature({ id, mediaView, nodeType, title }))
   const onSelectOutput = useWorkflowRuntimeStore((state) => state.actions.onSelectOutput)
   const taskId = mediaView?.taskId
+  const nodeVisible = useCurrentNodeVisible()
   const taskQuery = useQuery({
-    enabled: Boolean(taskId),
+    enabled: Boolean(taskId && nodeVisible),
     queryFn: () => getTask(taskId ?? ''),
     queryKey: taskId ? taskKeys.detail(taskId) : taskKeys.detail('pending'),
     staleTime: 10_000,

@@ -20,6 +20,13 @@ describe('authorization policies', () => {
   test('allows only admins to manage public resources', () => {
     expect(() => assertCanManagePublicResource(adminActor)).not.toThrow()
     expect(() => assertCanManagePublicResource(userActor)).toThrow(HttpError)
+    try {
+      assertCanManagePublicResource(userActor)
+    } catch (error) {
+      expect(error).toBeInstanceOf(HttpError)
+      expect((error as HttpError).status).toBe(403)
+      expect((error as HttpError).code).toBe('ADMIN_REQUIRED')
+    }
   })
 
   test('denies cross-account access', () => {

@@ -14,6 +14,7 @@ import { Hono } from 'hono'
 import { apiEnv } from '../../config/env'
 import { HttpError } from '../../lib/http/http-error'
 import { requireAuthActor } from '../accounts/auth-middleware'
+import { assertCanManagePublicResource } from '../accounts/authorization'
 import type { AccountsService } from '../accounts/accounts.service'
 import { resourceKindFromMimeType } from './media-type'
 import type { MediaObjectService } from './media-object.service'
@@ -56,7 +57,13 @@ export const createMediaRoutes = (mediaObjectService: MediaObjectService, accoun
         kind,
         ...(file.type ? { mimeType: file.type } : {}),
         origin: 'user_upload',
-        purpose: parsePurpose(formValue(form.get('purpose'))),
+        purpose: (() => {
+          const purpose = parsePurpose(formValue(form.get('purpose')))
+          if (purpose === 'public_library') {
+            assertCanManagePublicResource(actor)
+          }
+          return purpose
+        })(),
         retention: parseRetention(formValue(form.get('retention'))),
       })
       return c.json(MediaObjectResponseSchema.parse({ item: mediaObject }), 201)
@@ -77,6 +84,9 @@ export const createMediaRoutes = (mediaObjectService: MediaObjectService, accoun
       async (c) => {
         const actor = await requireAuthActor(c, accountsService)
         const payload = c.req.valid('json')
+        if (payload.purpose === 'public_library') {
+          assertCanManagePublicResource(actor)
+        }
         const result = await mediaObjectService.createPresignedUpload({
           accountId: actor.accountId,
           kind: payload.kind,

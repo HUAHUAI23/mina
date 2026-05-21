@@ -12,6 +12,7 @@ import {
   importWorkflowSnapshotToYDoc,
   type WorkflowYDocHandles,
 } from './workflow-yjs-document'
+import { appLogger, type AppLogger } from '../../../lib/logger/logger'
 import type { WorkflowYjsRepository } from './workflow-yjs-repository'
 import { validateCanvas } from '../validation'
 
@@ -122,7 +123,10 @@ export class WorkflowYjsRoomService {
   readonly #rooms = new Map<string, Promise<WorkflowCollaborationRoom>>()
   readonly #workflowLocks = new Map<string, Promise<void>>()
 
-  constructor(private readonly repository: WorkflowYjsRepository) {}
+  constructor(
+    private readonly repository: WorkflowYjsRepository,
+    private readonly logger: Pick<AppLogger, 'error' | 'info'> = appLogger,
+  ) {}
 
   async connect(input: {
     connection: WorkflowRoomConnection
@@ -243,27 +247,110 @@ export class WorkflowYjsRoomService {
       yjsStateVector: Uint8Array
     }) => Promise<T>,
   ): Promise<T> {
-    const room = await this.#getRoom(workflow)
-    this.#clearRoomCleanup(room)
-    const result = await this.#withWorkflowLock(workflow.id, async () => {
-      const snapshot = exportWorkflowSnapshotFromYDoc(room.y)
-      validateCanvas(snapshot.nodes, snapshot.edges)
-      const stateVector = Y.encodeStateVector(room.y.ydoc)
-      const nextSnapshotVersion = Math.max(room.snapshotVersion + 1, workflow.version + 1)
-      await this.repository.saveSnapshot({
-        snapshotBin: Y.encodeStateAsUpdate(room.y.ydoc),
-        stateVector,
-        version: nextSnapshotVersion,
-        workflowId: workflow.id,
-      })
-      room.persistedUpdatesSinceSnapshot = 0
-      room.snapshotVersion = nextSnapshotVersion
-      return persistReadModel({ ...snapshot, yjsStateVector: stateVector })
-    })
-    if (room.connections.size === 0) {
-      this.#scheduleRoomCleanup(room)
+    const startedAt = Date.now()
+    const timings: Record<string, number> = {}
+    let lockWaitMs = 0
+    let nodeCount = workflow.nodes.length
+    let edgeCount = workflow.edges.length
+    let snapshotBytes = 0
+    let stateVectorBytes = 0
+    const finishTiming = (name: string, phaseStartedAt: number): void => {
+      timings[name] = Date.now() - phaseStartedAt
     }
-    return result
+    this.logger.info(
+      {
+        workflowId: workflow.id,
+        workflowVersion: workflow.version,
+      },
+      'Workflow checkpoint started.',
+    )
+    const roomStartedAt = Date.now()
+    const room = await this.#getRoom(workflow)
+    finishTiming('getRoomMs', roomStartedAt)
+    this.#clearRoomCleanup(room)
+    try {
+      const result = await this.#withWorkflowLock(
+        workflow.id,
+        async () => {
+          const exportStartedAt = Date.now()
+          const snapshot = exportWorkflowSnapshotFromYDoc(room.y)
+          nodeCount = snapshot.nodes.length
+          edgeCount = snapshot.edges.length
+          finishTiming('exportSnapshotMs', exportStartedAt)
+
+          const validateStartedAt = Date.now()
+          validateCanvas(snapshot.nodes, snapshot.edges)
+          finishTiming('validateCanvasMs', validateStartedAt)
+
+          const encodeStateVectorStartedAt = Date.now()
+          const stateVector = Y.encodeStateVector(room.y.ydoc)
+          stateVectorBytes = stateVector.byteLength
+          finishTiming('encodeStateVectorMs', encodeStateVectorStartedAt)
+
+          const encodeSnapshotStartedAt = Date.now()
+          const snapshotBin = Y.encodeStateAsUpdate(room.y.ydoc)
+          snapshotBytes = snapshotBin.byteLength
+          finishTiming('encodeSnapshotMs', encodeSnapshotStartedAt)
+
+          const nextSnapshotVersion = Math.max(room.snapshotVersion + 1, workflow.version + 1)
+          const saveSnapshotStartedAt = Date.now()
+          await this.repository.saveSnapshot({
+            snapshotBin,
+            stateVector,
+            version: nextSnapshotVersion,
+            workflowId: workflow.id,
+          })
+          finishTiming('saveYjsSnapshotMs', saveSnapshotStartedAt)
+          room.persistedUpdatesSinceSnapshot = 0
+          room.snapshotVersion = nextSnapshotVersion
+
+          const persistReadModelStartedAt = Date.now()
+          const persisted = await persistReadModel({ ...snapshot, yjsStateVector: stateVector })
+          finishTiming('persistReadModelMs', persistReadModelStartedAt)
+          return persisted
+        },
+        (waitMs) => {
+          lockWaitMs = waitMs
+        },
+      )
+      this.logger.info(
+        {
+          edgeCount,
+          lockWaitMs,
+          nodeCount,
+          roomConnections: room.connections.size,
+          snapshotBytes,
+          stateVectorBytes,
+          timings,
+          totalMs: Date.now() - startedAt,
+          workflowId: workflow.id,
+          workflowVersion: workflow.version,
+        },
+        'Workflow checkpoint completed.',
+      )
+      if (room.connections.size === 0) {
+        this.#scheduleRoomCleanup(room)
+      }
+      return result
+    } catch (error) {
+      this.logger.error(
+        {
+          edgeCount,
+          error,
+          lockWaitMs,
+          nodeCount,
+          roomConnections: room.connections.size,
+          snapshotBytes,
+          stateVectorBytes,
+          timings,
+          totalMs: Date.now() - startedAt,
+          workflowId: workflow.id,
+          workflowVersion: workflow.version,
+        },
+        'Workflow checkpoint failed.',
+      )
+      throw error
+    }
   }
 
   async #getRoom(workflow: Workflow): Promise<WorkflowCollaborationRoom> {
@@ -352,7 +439,12 @@ export class WorkflowYjsRoomService {
     }
   }
 
-  async #withWorkflowLock<T>(workflowId: string, task: () => Promise<T>): Promise<T> {
+  async #withWorkflowLock<T>(
+    workflowId: string,
+    task: () => Promise<T>,
+    onAcquired?: (waitMs: number) => void,
+  ): Promise<T> {
+    const waitStartedAt = Date.now()
     const previous = this.#workflowLocks.get(workflowId) ?? Promise.resolve()
     let release!: () => void
     const current = new Promise<void>((resolve) => {
@@ -361,6 +453,7 @@ export class WorkflowYjsRoomService {
     const chained = previous.then(() => current)
     this.#workflowLocks.set(workflowId, chained)
     await previous
+    onAcquired?.(Date.now() - waitStartedAt)
     try {
       return await task()
     } finally {

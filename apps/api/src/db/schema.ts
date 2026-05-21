@@ -37,7 +37,7 @@ import {
 
 export type MediaObjectStatus = 'uploading' | 'ready' | 'failed' | 'deleted'
 export type MediaObjectOrigin = 'user_upload' | 'task_output' | 'external_import' | 'system_generated'
-export type MediaObjectPurpose = 'task_input' | 'task_output' | 'workflow_slot' | 'temporary' | 'preview'
+export type MediaObjectPurpose = 'task_input' | 'task_output' | 'workflow_slot' | 'temporary' | 'preview' | 'public_library'
 export type MediaObjectRetention = 'temporary' | 'task_scoped' | 'project_scoped' | 'library'
 export type OAuthClientType = 'public' | 'confidential'
 export type OAuthConsentStatus = 'granted' | 'revoked'

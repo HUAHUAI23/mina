@@ -6,6 +6,7 @@ import {
 } from '../../diagnostics/canvas-performance-marks'
 import {
   createWorkflowYDoc,
+  workflowYjsSnapshotSignature,
   workflowYjsSnapshotMatches,
   type WorkflowYDocHandles,
 } from './yjs-document'
@@ -18,6 +19,7 @@ import { exportWorkflowYjsSnapshot } from './yjs-snapshot'
 import { getCanvasSnapshot, useCanvasStore } from '../../store/canvas-store'
 import { useWorkflowPresenceStore } from '../workflow-presence'
 import {
+  getWorkflowYjsRuntimeSnapshotSignature,
   registerWorkflowYjsRuntime,
   unregisterWorkflowYjsRuntime,
   updateWorkflowYjsRuntimeConnection,
@@ -63,13 +65,16 @@ export const useWorkflowYjsSync = (workflowId: string, enabled = true): void => 
       ) {
         return
       }
-      updateWorkflowYjsRuntimeSnapshot(workflowId, snapshot)
+      const snapshotSignature = workflowYjsSnapshotSignature(snapshot)
+      const currentSignature =
+        current.workflowId === workflowId
+          ? getWorkflowYjsRuntimeSnapshotSignature(workflowId, { edges: current.edges, nodes: current.nodes }) ??
+            workflowYjsSnapshotSignature({ edges: current.edges, nodes: current.nodes })
+          : ''
+      updateWorkflowYjsRuntimeSnapshot(workflowId, snapshot, snapshotSignature)
       if (
         current.workflowId === workflowId &&
-        workflowYjsSnapshotMatches(snapshot, {
-          edges: current.edges,
-          nodes: current.nodes,
-        })
+        snapshotSignature === currentSignature
       ) {
         return
       }

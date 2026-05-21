@@ -50,6 +50,17 @@ const withYDoc = (
   }
 }
 
+const withNodeFrameYDoc = (
+  context: WorkflowYjsCommandContext,
+  mutate: (y: WorkflowYDocHandles, workflowId: string) => void,
+): void => {
+  const runtime = getWorkflowYjsRuntimeForWorkflow(context.workflowId)
+  if (!runtime) {
+    return
+  }
+  runtime.y.ydoc.transact(() => mutate(runtime.y, runtime.workflowId), 'mina-local')
+}
+
 const cloneYDoc = (source: WorkflowYDocHandles): WorkflowYDocHandles => {
   const clone = createWorkflowYDoc()
   for (const [id, node] of source.nodes.entries()) {
@@ -115,6 +126,15 @@ const deleteNode = (y: WorkflowYDocHandles, nodeId: string): void => {
     y.nodeOrder.delete(index, 1)
   }
 }
+
+const isFinitePosition = (position: { x: number; y: number } | undefined): boolean =>
+  position === undefined || (Number.isFinite(position.x) && Number.isFinite(position.y))
+
+const isPositiveFiniteDimension = (value: number | undefined): boolean =>
+  value === undefined || (Number.isFinite(value) && value > 0)
+
+const isValidParentId = (parentId: string | undefined): boolean =>
+  parentId === undefined || parentId.length > 0
 
 const createMediaEdge = (
   input: {
@@ -218,8 +238,23 @@ export const workflowYjsCommands = {
     if (frames.length === 0) {
       return
     }
-    withYDoc(context, (y) => {
-      for (const frame of frames) {
+    const nodeIds = new Set(context.nodes.map((node) => node.id))
+    const validFrames = frames.filter((frame) => {
+      if (!nodeIds.has(frame.nodeId)) {
+        return false
+      }
+      return (
+        isFinitePosition(frame.position) &&
+        isPositiveFiniteDimension(frame.width) &&
+        isPositiveFiniteDimension(frame.height) &&
+        isValidParentId(frame.parentId)
+      )
+    })
+    if (validFrames.length === 0) {
+      return
+    }
+    withNodeFrameYDoc(context, (y) => {
+      for (const frame of validFrames) {
         const current = y.nodes.get(frame.nodeId) as WorkflowCanvasNode | undefined
         if (!current) {
           continue

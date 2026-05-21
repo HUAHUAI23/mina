@@ -16,7 +16,8 @@ import {
   paramsForSpec,
   resolveClientModel,
   type ClientModelSpec,
-} from './registry'
+} from './registry/client-model-registry'
+import './registry'
 
 interface NodeTaskFormRenderProps {
   mediaActions?: {

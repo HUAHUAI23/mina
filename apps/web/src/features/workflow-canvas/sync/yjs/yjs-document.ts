@@ -1,10 +1,5 @@
 import * as Y from 'yjs'
-import {
-  WorkflowCanvasEdgeSchema,
-  WorkflowCanvasNodeSchema,
-  type WorkflowCanvasEdge,
-  type WorkflowCanvasNode,
-} from '@mina/contracts/modules/canvas'
+import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 
 export interface WorkflowYDocHandles {
   edgeOrder: Y.Array<string>
@@ -20,6 +15,29 @@ export interface WorkflowYSnapshot {
   edges: WorkflowCanvasEdge[]
   nodes: WorkflowCanvasNode[]
 }
+
+export const workflowYjsSnapshotSignature = (snapshot: WorkflowYSnapshot): string =>
+  JSON.stringify({
+    edges: snapshot.edges.map((edge) => ({
+      data: edge.data,
+      id: edge.id,
+      source: edge.source,
+      sourceHandle: edge.sourceHandle,
+      target: edge.target,
+      targetHandle: edge.targetHandle,
+      type: edge.type ?? 'media',
+    })),
+    nodes: snapshot.nodes.map((node) => ({
+      data: node.data,
+      extent: node.extent,
+      height: node.height,
+      id: node.id,
+      parentId: node.parentId,
+      position: node.position,
+      type: node.type,
+      width: node.width,
+    })),
+  })
 
 export const createWorkflowYDoc = (): WorkflowYDocHandles => {
   const ydoc = new Y.Doc()
@@ -124,11 +142,4 @@ export const workflowYjsSnapshotMatches = (
   left: WorkflowYSnapshot,
   right: WorkflowYSnapshot,
 ): boolean =>
-  JSON.stringify({
-    edges: left.edges.map((edge) => WorkflowCanvasEdgeSchema.parse(edge)),
-    nodes: left.nodes.map((node) => WorkflowCanvasNodeSchema.parse(node)),
-  }) ===
-  JSON.stringify({
-    edges: right.edges.map((edge) => WorkflowCanvasEdgeSchema.parse(edge)),
-    nodes: right.nodes.map((node) => WorkflowCanvasNodeSchema.parse(node)),
-  })
+  workflowYjsSnapshotSignature(left) === workflowYjsSnapshotSignature(right)

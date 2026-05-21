@@ -326,6 +326,38 @@ describe('mina api', () => {
     expect(completed.item.status).toBe('ready')
   })
 
+  test('media object routes require admin role for public library uploads', async () => {
+    const { auth } = await registerAndAuthHeaders('public_library_user')
+    const authHeaders = { Authorization: `Bearer ${auth.session.token}` }
+    const formData = new FormData()
+    formData.set('file', new File([new TextEncoder().encode('image-bytes')], 'public.png', { type: 'image/png' }))
+    formData.set('purpose', 'public_library')
+    formData.set('retention', 'library')
+
+    const createResponse = await app.request('/api/media-objects', {
+      method: 'POST',
+      headers: authHeaders,
+      body: formData,
+    })
+    const createPayload = (await createResponse.json()) as ApiError
+    expect(createResponse.status).toBe(403)
+    expect(createPayload.error.code).toBe('ADMIN_REQUIRED')
+
+    const presignedResponse = await app.request('/api/media-objects/presigned-upload', {
+      method: 'POST',
+      headers: { ...authHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'image',
+        mimeType: 'image/png',
+        purpose: 'public_library',
+        retention: 'library',
+      }),
+    })
+    const presignedPayload = (await presignedResponse.json()) as ApiError
+    expect(presignedResponse.status).toBe(403)
+    expect(presignedPayload.error.code).toBe('ADMIN_REQUIRED')
+  })
+
   test('Hono RPC client uploads media objects with object form fields', async () => {
     const { headers } = await registerAndAuthHeaders('rpc_upload_user')
     const client = hc<AppType>('http://localhost', {

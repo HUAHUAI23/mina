@@ -7,7 +7,7 @@ import {
   type ClientModelSpec,
   type GenerationMode,
   type ModelCompatibilityMode,
-} from '../registry'
+} from '../registry/client-model-registry'
 import type { NodeTaskFormApi } from '../form-context'
 
 interface ModelConfigToolbarProps {

@@ -7,7 +7,8 @@ import {
   paramsForSpec,
   resolveClientModel,
   type ClientModelSpec,
-} from './registry'
+} from './registry/client-model-registry'
+import './registry'
 import { formValueToTask, taskToFormValue, type NodeTaskFormValue } from './model-form-utils'
 
 export const defaultPromptForKind = (kind: TaskDraftConfig['kind']): string =>
