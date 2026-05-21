@@ -5,7 +5,8 @@ import type { NodeMouseHandler } from '@xyflow/react'
 import { MediaEdge } from './edges/MediaEdge'
 import { WorkflowConnectionLine } from './edges/WorkflowConnectionLine'
 import { FlowGroupNode } from './nodes/FlowGroupNode'
-import { MediaGenerationNode } from './nodes/MediaGenerationNode/MediaGenerationNode'
+import { ImageGenerationNode } from './nodes/MediaGenerationNode/ImageGenerationNode'
+import { VideoGenerationNode } from './nodes/MediaGenerationNode/VideoGenerationNode'
 import { NodeGroupNode } from './nodes/NodeGroupNode'
 import { TextNode } from './nodes/TextNode'
 import { NodePanelLayer } from './panels/NodePanelLayer'
@@ -40,8 +41,8 @@ const edgeTypes = {
 } satisfies WorkflowFlowEdgeTypes
 
 const nodeTypes = {
-  image_generation: MediaGenerationNode,
-  video_generation: MediaGenerationNode,
+  image_generation: ImageGenerationNode,
+  video_generation: VideoGenerationNode,
   text: TextNode,
   flow_group: FlowGroupNode,
   node_group: NodeGroupNode,

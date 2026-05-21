@@ -50,19 +50,27 @@ export const defaultTaskForNodeType = (
   type === 'image_generation'
     ? {
         kind: 'image_generation',
-        provider: 'dev',
-        model: 'dev-image',
+        provider: 'google',
+        model: 'gemini-3.1-flash-image-preview',
         prompt: 'Describe the image',
-        params: { count: 1, size: '1024x1024' },
+        params: {
+          aspectRatio: '1:1',
+          count: 1,
+          imageSearch: false,
+          imageSize: '1K',
+          includeThoughts: false,
+          webSearch: false,
+        },
       }
     : {
         kind: 'video_generation',
-        provider: 'dev',
-        model: 'dev-video',
+        provider: 'google',
+        model: 'veo-3.1-generate-preview',
         prompt: 'Describe the motion',
         params: {
-          durationSeconds: 5,
-          outputLastFrame: false,
+          aspectRatio: '16:9',
+          durationSeconds: 8,
+          personGeneration: 'allow_all',
           resolution: '720p',
         },
       }

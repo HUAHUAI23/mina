@@ -1,16 +1,20 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { formOptions } from '@tanstack/react-form'
+import type { FormApi } from '@tanstack/react-form'
 import { FileText } from 'lucide-react'
 import type { MediaSlotName, NodeMediaSlotItem } from '@mina/contracts/modules/media'
 import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 
 import { uploadMediaObject } from '../../api/media-mutations'
-import { taskKeys } from '../../api/workflow-keys'
-import { listTaskModels } from '../../api/model-catalog-queries'
 import { useCanvasStore } from '../../store/canvas-store'
 import { PromptField } from '../../forms/shared/PromptField'
 import { RunControls } from './RunControls'
 import { NodeTaskForm } from '../../forms/NodeTaskForm'
+import { useNodeTaskAppForm } from '../../forms/form-context'
+import { formValueToTask, taskToFormValue, type NodeTaskFormValue } from '../../forms/model-form-utils'
+import { validateNodeTaskFormValue } from '../../forms/validation'
+import { defaultFormValueForKind, formValuesEqual, formValueWithCompatibleModel, tasksEqual } from '../../forms/model-compatibility'
+import { isMediaGenerationNode, type MediaGenerationCanvasNode } from '../../domain/canvas-node-types'
 
 interface NodeConfigCardProps {
   node: WorkflowCanvasNode
@@ -27,32 +31,33 @@ const createSlotItem = (slot: MediaSlotName, mediaObjectId: string, order: numbe
   source: { type: 'media_object', mediaObjectId },
 })
 
-export function NodeConfigCard({ node, onRun, runError, running }: NodeConfigCardProps) {
-  const [uploading, setUploading] = useState(false)
-  const setNodeTaskConfig = useCanvasStore((state) => state.setNodeTaskConfig)
-  const setNodeText = useCanvasStore((state) => state.setNodeText)
-  const removeSlotItem = useCanvasStore((state) => state.removeSlotItem)
-  const reorderSlotItems = useCanvasStore((state) => state.reorderSlotItems)
-  const updateSlotItem = useCanvasStore((state) => state.updateSlotItem)
-  const modelsQuery = useQuery({ queryFn: listTaskModels, queryKey: taskKeys.models() })
+const emptyMediaSlots = {}
 
-  const uploadAndAttach = async (
-    input:
-      | { file: File; kind: 'add'; nodeId: string; order: number; slot: MediaSlotName }
-      | { file: File; kind: 'replace'; nodeId: string; slot: MediaSlotName; slotItemId: string },
-  ) => {
-    setUploading(true)
-    try {
-      const response = await uploadMediaObject(input.file)
-      if (input.kind === 'add') {
-        useCanvasStore.getState().addSlotItem(input.nodeId, createSlotItem(input.slot, response.item.id, input.order))
-        return
-      }
-      useCanvasStore.getState().replaceSlotItemMediaObject(input.nodeId, input.slot, input.slotItemId, response.item.id)
-    } finally {
-      setUploading(false)
-    }
-  }
+type NodeTaskFormBaseApi = FormApi<
+  NodeTaskFormValue,
+  typeof validateNodeTaskFormValue,
+  typeof validateNodeTaskFormValue,
+  undefined,
+  undefined,
+  undefined,
+  typeof validateNodeTaskFormValue,
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+  never
+>
+
+const nodeTaskFormOptions = formOptions({
+  defaultValues: defaultFormValueForKind('image_generation', {}),
+  validators: {
+    onChange: validateNodeTaskFormValue,
+    onSubmit: validateNodeTaskFormValue,
+  },
+})
+
+export function NodeConfigCard({ node, onRun, runError, running }: NodeConfigCardProps) {
+  const setNodeText = useCanvasStore((state) => state.setNodeText)
 
   if (node.data.nodeType === 'text') {
     return (
@@ -66,7 +71,7 @@ export function NodeConfigCard({ node, onRun, runError, running }: NodeConfigCar
     )
   }
 
-  if (node.data.nodeType !== 'image_generation' && node.data.nodeType !== 'video_generation') {
+  if (!isMediaGenerationNode(node)) {
     return (
       <section className="mina-wc-config-card nodrag nowheel nopan" data-mina-canvas-ignore="true" data-mina-canvas-panel-root="true">
         <div className="mina-wc-panel-heading">
@@ -78,12 +83,98 @@ export function NodeConfigCard({ node, onRun, runError, running }: NodeConfigCar
     )
   }
 
+  return <MediaTaskConfigCard node={node} onRun={onRun} runError={runError} running={running} />
+}
+
+function MediaTaskConfigCard({ node, onRun, runError, running }: NodeConfigCardProps & { node: MediaGenerationCanvasNode }) {
+  const [uploading, setUploading] = useState(false)
+  const setNodeTaskConfig = useCanvasStore((state) => state.setNodeTaskConfig)
+  const removeSlotItem = useCanvasStore((state) => state.removeSlotItem)
+  const reorderSlotItems = useCanvasStore((state) => state.reorderSlotItems)
+  const updateSlotItem = useCanvasStore((state) => state.updateSlotItem)
+
+  const uploadAndAttach = async (
+    input:
+      | { file: File; kind: 'add'; nodeId: string; order: number; slot: MediaSlotName }
+      | { file: File; kind: 'replace'; nodeId: string; slot: MediaSlotName; slotItemId: string },
+  ) => {
+    setUploading(true)
+    try {
+      const response = await uploadMediaObject(input.file)
+      const state = useCanvasStore.getState()
+      if (input.kind === 'add') {
+        state.addSlotItem(input.nodeId, createSlotItem(input.slot, response.item.id, input.order))
+        return
+      }
+      state.replaceSlotItemMediaObject(input.nodeId, input.slot, input.slotItemId, response.item.id)
+    } finally {
+      setUploading(false)
+    }
+  }
+
   const task = node.data.config.task
-  const models = modelsQuery.data?.items ?? []
+  const mediaSlots = node.data.mediaSlots ?? emptyMediaSlots
+  const defaultValues = useMemo(
+    () => (task ? formValueWithCompatibleModel(taskToFormValue(task), mediaSlots) : defaultFormValueForKind(node.data.nodeType, mediaSlots)),
+    [mediaSlots, node.data.nodeType, task],
+  )
+  const lastLocalTaskRef = useRef(task)
+  const transform = useCallback((formApi: unknown) => {
+    const nodeTaskFormApi = formApi as NodeTaskFormBaseApi
+    const currentValue = nodeTaskFormApi.state.values
+    const nextValue = formValueWithCompatibleModel(currentValue, mediaSlots)
+    if (
+      nextValue.kind === currentValue.kind &&
+      nextValue.provider === currentValue.provider &&
+      nextValue.model === currentValue.model
+    ) {
+      return nodeTaskFormApi
+    }
+    nodeTaskFormApi.state.values = nextValue
+    return nodeTaskFormApi
+  }, [mediaSlots])
+  const form = useNodeTaskAppForm({
+    ...nodeTaskFormOptions,
+    defaultValues,
+    formId: `node-task:${node.id}`,
+    listeners: {
+      onChangeDebounceMs: 200,
+      onChange: ({ formApi }) => {
+        const nextTask = formValueToTask(formApi.state.values as NodeTaskFormValue)
+        if (task && tasksEqual(task, nextTask)) {
+          return
+        }
+        lastLocalTaskRef.current = nextTask
+        setNodeTaskConfig(node.id, nextTask)
+      },
+    },
+    transform,
+    onSubmit: ({ value }) => {
+      const nextTask = formValueToTask(value as NodeTaskFormValue)
+      if (!task || !tasksEqual(task, nextTask)) {
+        lastLocalTaskRef.current = nextTask
+        setNodeTaskConfig(node.id, nextTask)
+      }
+      onRun()
+    },
+  })
+
+  useEffect(() => {
+    if (!task) {
+      return
+    }
+    const lastLocalTask = lastLocalTaskRef.current
+    if (lastLocalTask && tasksEqual(lastLocalTask, task)) {
+      return
+    }
+    const nextValue = formValueWithCompatibleModel(taskToFormValue(task), mediaSlots)
+    if (!formValuesEqual(form.state.values as NodeTaskFormValue, nextValue)) {
+      form.reset(nextValue)
+    }
+  }, [form, mediaSlots, task])
+
   const slotItemCount = (slot: MediaSlotName) =>
-    node.data.nodeType === 'image_generation' || node.data.nodeType === 'video_generation'
-      ? node.data.mediaSlots?.[slot]?.length ?? 0
-      : 0
+    node.data.mediaSlots?.[slot]?.length ?? 0
   return (
     <section className="mina-wc-config-card nodrag nowheel nopan" data-mina-canvas-ignore="true" data-mina-canvas-panel-root="true">
       <div className="mina-wc-panel-heading sr-only">
@@ -93,23 +184,23 @@ export function NodeConfigCard({ node, onRun, runError, running }: NodeConfigCar
       {task ? (
         <NodeTaskForm
           key={node.id}
+          form={form}
           mediaActions={{
             uploading,
             onAddUpload: (slot, file) => {
               void uploadAndAttach({ file, kind: 'add', nodeId: node.id, order: slotItemCount(slot), slot })
             },
             onChange: (item) => updateSlotItem(node.id, item),
-            onRemove: (slot, slotItemId) => removeSlotItem(node.id, slot, slotItemId),
+            onRemove: (slot, slotItemId) => {
+              removeSlotItem(node.id, slot, slotItemId)
+            },
             onReorder: (slot, orderedIds) => reorderSlotItems(node.id, slot, orderedIds),
             onReplaceUpload: (slot, slotItemId, file) => {
               void uploadAndAttach({ file, kind: 'replace', nodeId: node.id, slot, slotItemId })
             },
           }}
-          models={models}
+          mediaSlots={mediaSlots}
           node={node}
-          task={task}
-          onChange={(nextTask) => setNodeTaskConfig(node.id, nextTask)}
-          onRun={onRun}
           running={running}
           runError={runError}
         />

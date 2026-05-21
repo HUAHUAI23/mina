@@ -1,43 +1,81 @@
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 
 import type {
+  FlowGroupFlowNode,
+  ImageGenerationFlowNode,
+  NodeGroupFlowNode,
+  TextFlowNode,
+  VideoGenerationFlowNode,
   WorkflowFlowEdge,
   WorkflowFlowNode,
 } from '../domain/flow-types'
 
-export const toFlowNode = (node: WorkflowCanvasNode): WorkflowFlowNode => {
-  const flowNode = {
-    id: node.id,
-    type: node.type,
-    position: node.position,
-    data: {
-      ...(node.data.nodeType === 'image_generation' || node.data.nodeType === 'video_generation'
-        ? { mediaView: node.data.mediaView }
-        : {}),
-      nodeId: node.id,
-      nodeType: node.data.nodeType,
-      ...(node.data.nodeType === 'text' ? { textPreview: node.data.config.text } : {}),
-      title: node.data.title,
-    },
-    ...(node.parentId ? { parentId: node.parentId } : {}),
-    ...(node.extent ? { extent: node.extent } : {}),
-    ...(node.width !== undefined ? { width: node.width } : {}),
-    ...(node.height !== undefined ? { height: node.height } : {}),
-  }
+const flowNodeFrame = (node: WorkflowCanvasNode) => ({
+  id: node.id,
+  position: node.position,
+  ...(node.parentId ? { parentId: node.parentId } : {}),
+  ...(node.extent ? { extent: node.extent } : {}),
+  ...(node.width !== undefined ? { width: node.width } : {}),
+  ...(node.height !== undefined ? { height: node.height } : {}),
+})
 
+export const toFlowNode = (node: WorkflowCanvasNode): WorkflowFlowNode => {
   if (node.data.nodeType === 'image_generation') {
-    return { ...flowNode, type: 'image_generation', data: { ...flowNode.data, nodeType: 'image_generation' } }
+    return {
+      ...flowNodeFrame(node),
+      type: 'image_generation',
+      data: {
+        mediaView: node.data.mediaView,
+        nodeId: node.id,
+        nodeType: 'image_generation',
+        title: node.data.title,
+      },
+    } satisfies ImageGenerationFlowNode
   }
   if (node.data.nodeType === 'video_generation') {
-    return { ...flowNode, type: 'video_generation', data: { ...flowNode.data, nodeType: 'video_generation' } }
+    return {
+      ...flowNodeFrame(node),
+      type: 'video_generation',
+      data: {
+        mediaView: node.data.mediaView,
+        nodeId: node.id,
+        nodeType: 'video_generation',
+        title: node.data.title,
+      },
+    } satisfies VideoGenerationFlowNode
   }
   if (node.data.nodeType === 'flow_group') {
-    return { ...flowNode, type: 'flow_group', data: { ...flowNode.data, nodeType: 'flow_group' } }
+    return {
+      ...flowNodeFrame(node),
+      type: 'flow_group',
+      data: {
+        nodeId: node.id,
+        nodeType: 'flow_group',
+        title: node.data.title,
+      },
+    } satisfies FlowGroupFlowNode
   }
   if (node.data.nodeType === 'node_group') {
-    return { ...flowNode, type: 'node_group', data: { ...flowNode.data, nodeType: 'node_group' } }
+    return {
+      ...flowNodeFrame(node),
+      type: 'node_group',
+      data: {
+        nodeId: node.id,
+        nodeType: 'node_group',
+        title: node.data.title,
+      },
+    } satisfies NodeGroupFlowNode
   }
-  return { ...flowNode, type: 'text', data: { ...flowNode.data, nodeType: 'text' } }
+  return {
+    ...flowNodeFrame(node),
+    type: 'text',
+    data: {
+      nodeId: node.id,
+      nodeType: 'text',
+      textPreview: node.data.config.text,
+      title: node.data.title,
+    },
+  } satisfies TextFlowNode
 }
 
 export const toFlowEdge = (edge: WorkflowCanvasEdge): WorkflowFlowEdge => ({

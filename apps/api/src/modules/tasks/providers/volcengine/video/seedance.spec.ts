@@ -1,5 +1,8 @@
-import { z } from 'zod'
 import type { MediaInput, TaskConfig } from '@mina/contracts/modules/tasks'
+import {
+  VolcengineSeedanceParamsSchema,
+  type VolcengineSeedanceParams,
+} from '@mina/contracts/modules/tasks/video-model-params'
 
 import { apiEnv } from '../../../../../config/env'
 import {
@@ -17,19 +20,6 @@ import type { ProviderPollResult, ProviderStartResult } from '../../provider'
 import { VolcengineProviderClient } from '../common/client'
 import { parseJsonStringMap, resolveAlias } from '../common/model-aliases'
 import { buildVolcengineSeedanceRequest, volcengineSeedanceOutputFromTask } from './seedance.mapper'
-
-export const VolcengineSeedanceParamsSchema = z.object({
-  cameraFixed: z.boolean().optional(),
-  durationSeconds: z.number().int().min(1).default(5),
-  generateAudio: z.boolean().optional(),
-  ratio: z.enum(['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', 'adaptive']).default('16:9'),
-  resolution: z.enum(['480p', '720p', '1080p']).default('720p'),
-  returnLastFrame: z.boolean().default(false),
-  serviceTier: z.enum(['default', 'flex']).optional(),
-  webSearch: z.boolean().default(false),
-})
-
-export type VolcengineSeedanceParams = z.infer<typeof VolcengineSeedanceParamsSchema>
 
 const modelCapabilities = new Map<string, {
   audios: number

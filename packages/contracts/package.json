@@ -36,6 +36,14 @@
       "types": "./src/modules/tasks/model-catalog.schemas.ts",
       "default": "./src/modules/tasks/model-catalog.schemas.ts"
     },
+    "./modules/tasks/image-model-params": {
+      "types": "./src/modules/tasks/image-model-params.schemas.ts",
+      "default": "./src/modules/tasks/image-model-params.schemas.ts"
+    },
+    "./modules/tasks/video-model-params": {
+      "types": "./src/modules/tasks/video-model-params.schemas.ts",
+      "default": "./src/modules/tasks/video-model-params.schemas.ts"
+    },
     "./modules/workflows": {
       "types": "./src/modules/workflows/workflow.schemas.ts",
       "default": "./src/modules/workflows/workflow.schemas.ts"

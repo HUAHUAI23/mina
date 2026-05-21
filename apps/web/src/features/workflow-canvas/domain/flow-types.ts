@@ -3,7 +3,6 @@ import type { Edge, EdgeProps, Node, NodeProps } from '@xyflow/react'
 import type {
   NodeMediaViewState,
   WorkflowCanvasEdge,
-  WorkflowNodeType,
 } from '@mina/contracts/modules/canvas'
 
 interface WorkflowFlowEdgeData {
@@ -11,39 +10,50 @@ interface WorkflowFlowEdgeData {
   connection?: WorkflowCanvasEdge['data']['connection'] | undefined
 }
 
-export interface WorkflowFlowNodeData {
-  [key: string]: NodeMediaViewState | WorkflowNodeType | string | undefined
-  mediaView?: NodeMediaViewState | undefined
+type WorkflowFlowNodeDataBase = {
   nodeId: string
-  nodeType: WorkflowNodeType
-  textPreview?: string | undefined
   title: string
 }
 
-export type ImageGenerationFlowNode = Node<
-  WorkflowFlowNodeData & { nodeType: 'image_generation' },
-  'image_generation'
->
+export type ImageGenerationFlowNodeData = WorkflowFlowNodeDataBase & {
+  mediaView?: NodeMediaViewState | undefined
+  nodeType: 'image_generation'
+}
 
-export type VideoGenerationFlowNode = Node<
-  WorkflowFlowNodeData & { nodeType: 'video_generation' },
-  'video_generation'
->
+export type VideoGenerationFlowNodeData = WorkflowFlowNodeDataBase & {
+  mediaView?: NodeMediaViewState | undefined
+  nodeType: 'video_generation'
+}
 
-export type TextFlowNode = Node<
-  WorkflowFlowNodeData & { nodeType: 'text' },
-  'text'
->
+export type TextFlowNodeData = WorkflowFlowNodeDataBase & {
+  nodeType: 'text'
+  textPreview: string
+}
 
-export type FlowGroupFlowNode = Node<
-  WorkflowFlowNodeData & { nodeType: 'flow_group' },
-  'flow_group'
->
+export type FlowGroupFlowNodeData = WorkflowFlowNodeDataBase & {
+  nodeType: 'flow_group'
+}
 
-export type NodeGroupFlowNode = Node<
-  WorkflowFlowNodeData & { nodeType: 'node_group' },
-  'node_group'
->
+export type NodeGroupFlowNodeData = WorkflowFlowNodeDataBase & {
+  nodeType: 'node_group'
+}
+
+export type WorkflowFlowNodeData =
+  | ImageGenerationFlowNodeData
+  | VideoGenerationFlowNodeData
+  | TextFlowNodeData
+  | FlowGroupFlowNodeData
+  | NodeGroupFlowNodeData
+
+export type ImageGenerationFlowNode = Node<ImageGenerationFlowNodeData, 'image_generation'>
+
+export type VideoGenerationFlowNode = Node<VideoGenerationFlowNodeData, 'video_generation'>
+
+export type TextFlowNode = Node<TextFlowNodeData, 'text'>
+
+export type FlowGroupFlowNode = Node<FlowGroupFlowNodeData, 'flow_group'>
+
+export type NodeGroupFlowNode = Node<NodeGroupFlowNodeData, 'node_group'>
 
 export type WorkflowFlowNode =
   | ImageGenerationFlowNode
@@ -58,10 +68,10 @@ export type WorkflowFlowNodeComponent<TNode extends WorkflowFlowNode> = Componen
 
 export type WorkflowFlowNodeTypes = {
   flow_group: WorkflowFlowNodeComponent<FlowGroupFlowNode>
-  image_generation: WorkflowFlowNodeComponent<ImageGenerationFlowNode | VideoGenerationFlowNode>
+  image_generation: WorkflowFlowNodeComponent<ImageGenerationFlowNode>
   node_group: WorkflowFlowNodeComponent<NodeGroupFlowNode>
   text: WorkflowFlowNodeComponent<TextFlowNode>
-  video_generation: WorkflowFlowNodeComponent<ImageGenerationFlowNode | VideoGenerationFlowNode>
+  video_generation: WorkflowFlowNodeComponent<VideoGenerationFlowNode>
 }
 
 export type WorkflowFlowEdgeTypes = {

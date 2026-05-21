@@ -16,10 +16,10 @@ const transientNode = {
     config: {
       task: {
         kind: 'image_generation',
-        provider: 'dev',
-        model: 'dev-image',
+        provider: 'google',
+        model: 'gemini-3.1-flash-image-preview',
         prompt: 'Prompt',
-        params: { count: 1, size: '1024x1024' },
+        params: { aspectRatio: '1:1', count: 1, imageSize: '1K' },
       },
     },
     mediaSlots: {

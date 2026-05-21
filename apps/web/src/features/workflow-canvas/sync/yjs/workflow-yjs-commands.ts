@@ -16,6 +16,8 @@ import {
   normalizeSlotOrder,
   removeEdgeSlotItem,
 } from '../../utils/media-slots'
+import { updateNodesWithCompatibleMediaModels } from '../../store/model-compatibility-actions'
+import { taskWithCompatibleModel } from '../../forms/model-compatibility'
 import { createStoreId } from '../../store/store-helpers'
 import type { CanvasNodeFramePatch, MediaConnectionInput } from '../../store/store-types'
 import { createWorkflowYDoc, type WorkflowYDocHandles } from './yjs-document'
@@ -197,6 +199,9 @@ export const workflowYjsCommands = {
       ...(node.data.mediaSlots ?? {}),
       [slot]: normalizeSlotOrder([...existingItems, item]),
     }
+    if (node.data.config.task) {
+      node.data.config.task = taskWithCompatibleModel(node.data.config.task, node.data.mediaSlots)
+    }
     const edge = createMediaEdge(input, targetSlotItemId, slot)
     withYDoc(context, (y) => {
       updateNode(y, node)
@@ -241,10 +246,10 @@ export const workflowYjsCommands = {
     if (removedEdges.length === 0) {
       return
     }
-    const nextNodes = removedEdges.reduce(
+    const nextNodes = updateNodesWithCompatibleMediaModels(removedEdges.reduce(
       (items, edge) => items.map((node) => (node.id === edge.target ? removeEdgeSlotItem(node, edge) : node)),
       nodes,
-    )
+    ))
     const touchedNodes = new Set(removedEdges.map((edge) => edge.target))
     withYDoc(context, (y) => {
       for (const edgeId of removedIds) {
@@ -263,10 +268,10 @@ export const workflowYjsCommands = {
     }
     const { edges, nodes } = context
     const removedEdges = edges.filter((edge) => removedIds.has(edge.source) || removedIds.has(edge.target))
-    const nextNodes = removedEdges.reduce(
+    const nextNodes = updateNodesWithCompatibleMediaModels(removedEdges.reduce(
       (items, edge) => items.map((node) => (node.id === edge.target ? removeEdgeSlotItem(node, edge) : node)),
       nodes.filter((node) => !removedIds.has(node.id)),
-    )
+    ))
     const touchedNodes = new Set(removedEdges.map((edge) => edge.target).filter((nodeId) => !removedIds.has(nodeId)))
     withYDoc(context, (y) => {
       for (const nodeId of removedIds) {
@@ -307,6 +312,9 @@ export const workflowYjsCommands = {
         ...(node.data.mediaSlots ?? {}),
         [item.slot]: normalizeSlotOrder([...items, item]),
       }
+      if (node.data.config.task) {
+        node.data.config.task = taskWithCompatibleModel(node.data.config.task, node.data.mediaSlots)
+      }
       return node
     })
   },
@@ -327,6 +335,9 @@ export const workflowYjsCommands = {
     nextNode.data.mediaSlots = {
       ...(nextNode.data.mediaSlots ?? {}),
       [slot]: normalizeSlotOrder((nextNode.data.mediaSlots?.[slot] ?? []).filter((item) => item.id !== slotItemId)),
+    }
+    if (nextNode.data.config.task) {
+      nextNode.data.config.task = taskWithCompatibleModel(nextNode.data.config.task, nextNode.data.mediaSlots)
     }
     withYDoc(context, (y) => {
       updateNode(y, nextNode)
@@ -407,6 +418,9 @@ export const workflowYjsCommands = {
             : item,
         ),
       ),
+    }
+    if (nextNode.data.config.task) {
+      nextNode.data.config.task = taskWithCompatibleModel(nextNode.data.config.task, nextNode.data.mediaSlots)
     }
     withYDoc(context, (y) => {
       updateNode(y, nextNode)

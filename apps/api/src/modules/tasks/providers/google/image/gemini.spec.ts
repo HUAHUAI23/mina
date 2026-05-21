@@ -1,5 +1,12 @@
-import { z } from 'zod'
 import type { MediaInput, TaskConfig } from '@mina/contracts/modules/tasks'
+import {
+  GOOGLE_IMAGE_ASPECT_RATIOS,
+  GOOGLE_IMAGE_PRO_ASPECT_RATIOS,
+  GOOGLE_IMAGE_PRO_SIZES,
+  GOOGLE_IMAGE_SIZES,
+  GoogleGeminiImageParamsSchema,
+  type GoogleGeminiImageParams,
+} from '@mina/contracts/modules/tasks/image-model-params'
 
 import { imageMediaEnvelope } from '../../../config/media-envelope'
 import {
@@ -15,11 +22,6 @@ import type { ModelSpec, ParsedTask, ParsedTaskConfig, PrepareConfigInput } from
 import type { ProviderPollResult, ProviderStartResult } from '../../provider'
 import { GoogleProviderClient } from '../common/client'
 import { buildGoogleGeminiImageRequest, googleGeminiImageOutputFromResponse } from './gemini.mapper'
-
-const GOOGLE_IMAGE_ASPECT_RATIOS = ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'] as const
-const GOOGLE_IMAGE_SIZES = ['512', '1K', '2K', '4K'] as const
-const GOOGLE_IMAGE_PRO_ASPECT_RATIOS = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'] as const
-const GOOGLE_IMAGE_PRO_SIZES = ['1K', '2K', '4K'] as const
 
 const modelCapabilities = new Map<string, {
   aspectRatios: readonly string[]
@@ -40,18 +42,6 @@ const modelCapabilities = new Map<string, {
     thinking: false,
   }],
 ])
-
-export const GoogleGeminiImageParamsSchema = z.object({
-  aspectRatio: z.enum(GOOGLE_IMAGE_ASPECT_RATIOS).default('1:1'),
-  count: z.number().int().min(1).max(16).default(1),
-  imageSearch: z.boolean().default(false),
-  imageSize: z.enum(GOOGLE_IMAGE_SIZES).default('1K'),
-  includeThoughts: z.boolean().default(false),
-  thinkingLevel: z.enum(['minimal', 'high']).optional(),
-  webSearch: z.boolean().default(false),
-})
-
-export type GoogleGeminiImageParams = z.infer<typeof GoogleGeminiImageParamsSchema>
 
 const imageDataFromMedia = (media: MediaInput): { data: string; mimeType: string } => {
   if (!media.url.startsWith('data:')) {
@@ -96,10 +86,12 @@ export class GoogleGeminiImageSpec implements ModelSpec<GoogleGeminiImageParams>
     const params = parseParams(this.paramsSchema, input.draft.params)
     const media = imageMediaEnvelope(input.media)
     const capability = modelCapabilities.get(this.key.model) ?? modelCapabilities.get('gemini-3.1-flash-image-preview')
-    if (!capability?.aspectRatios.includes(params.aspectRatio)) {
+    const aspectRatio = params.aspectRatio
+    const imageSize = params.imageSize
+    if (!capability?.aspectRatios.includes(aspectRatio)) {
       throw new Error(`Google Gemini model ${this.key.model} does not support aspect ratio ${params.aspectRatio}.`)
     }
-    if (!capability.sizes.includes(params.imageSize)) {
+    if (!capability.sizes.includes(imageSize)) {
       throw new Error(`Google Gemini model ${this.key.model} does not support image size ${params.imageSize}.`)
     }
     if (params.imageSearch && !capability.imageSearch) {

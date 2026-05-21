@@ -1,5 +1,8 @@
-import { z } from 'zod'
 import type { MediaInput, TaskConfig } from '@mina/contracts/modules/tasks'
+import {
+  GoogleVeoParamsSchema,
+  type GoogleVeoParams,
+} from '@mina/contracts/modules/tasks/video-model-params'
 
 import {
   assertMediaLimit,
@@ -13,15 +16,6 @@ import type { ModelSpec, ParsedTask, ParsedTaskConfig, PrepareConfigInput } from
 import type { ProviderPollResult, ProviderStartResult } from '../../provider'
 import { GoogleProviderClient } from '../common/client'
 import { buildGoogleVeoRequest, googleVeoOutputFromOperation } from './veo.mapper'
-
-export const GoogleVeoParamsSchema = z.object({
-  aspectRatio: z.enum(['16:9', '9:16']).default('16:9'),
-  durationSeconds: z.union([z.literal(4), z.literal(6), z.literal(8)]).default(8),
-  personGeneration: z.enum(['allow_all', 'allow_adult']).default('allow_all'),
-  resolution: z.enum(['720p', '1080p', '4k']).default('720p'),
-})
-
-export type GoogleVeoParams = z.infer<typeof GoogleVeoParamsSchema>
 
 const imageDataFromMedia = (media: MediaInput): { data: string; mimeType: string } => {
   if (!media.url.startsWith('data:')) {

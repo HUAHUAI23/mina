@@ -1,24 +1,24 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Maximize2, Zap } from 'lucide-react'
+import { useStore } from '@tanstack/react-form'
 import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import type { MediaSlotName, NodeMediaSlotItem, NodeMediaSlots } from '@mina/contracts/modules/media'
-import type { TaskDraftConfig } from '@mina/contracts/modules/tasks'
-import type { TaskModelDescriptor } from '@mina/contracts/modules/tasks/model-catalog'
 
-import {
-  activeModelForTask,
-  formValueToTask,
-  taskToFormValue,
-  type NodeTaskFormValue,
-  type TaskParams,
-} from './model-form-utils'
-import { useNodeTaskAppForm } from './form-context'
 import { AdvancedConfigGroup } from './field-groups/AdvancedConfigGroup'
 import { MediaInputsFieldGroup } from './field-groups/MediaInputsFieldGroup'
 import { ModelConfigToolbar } from './field-groups/ModelConfigToolbar'
-import { PromptFieldGroup } from './field-groups/PromptFieldGroup'
+import { withNodeTaskForm } from './form-context'
+import type { NodeTaskFormValue } from './model-form-utils'
+import {
+  deriveModelCompatibilityMode,
+  deriveGenerationMode,
+  listClientModels,
+  paramsForSpec,
+  resolveClientModel,
+  type ClientModelSpec,
+} from './registry'
 
-interface NodeTaskFormProps {
+interface NodeTaskFormRenderProps {
   mediaActions?: {
     onAddUpload(slot: MediaSlotName, file: File): void
     onChange(item: NodeMediaSlotItem): void
@@ -27,159 +27,138 @@ interface NodeTaskFormProps {
     onReorder(slot: MediaSlotName, orderedIds: string[]): void
     uploading?: boolean | undefined
   } | undefined
-  models: TaskModelDescriptor[]
+  mediaSlots: NodeMediaSlots
   node: WorkflowCanvasNode
-  onChange(task: TaskDraftConfig): void
-  onRun(): void
   runError?: string | undefined
   running?: boolean | undefined
-  task: TaskDraftConfig
 }
 
-const syncTask = (onChange: NodeTaskFormProps['onChange'], value: NodeTaskFormValue) => {
-  onChange(formValueToTask(value))
+const nodeTaskFormDefaults: NodeTaskFormValue = {
+  kind: 'image_generation',
+  model: '',
+  params: {},
+  prompt: '',
+  provider: '',
 }
 
-const EMPTY_MEDIA_SLOTS: NodeMediaSlots = {}
+export const NodeTaskForm = withNodeTaskForm({
+  defaultValues: nodeTaskFormDefaults,
+  props: {
+    mediaActions: undefined as NodeTaskFormRenderProps['mediaActions'],
+    mediaSlots: {} as NodeMediaSlots,
+    node: undefined as WorkflowCanvasNode | undefined,
+    runError: undefined as string | undefined,
+    running: undefined as boolean | undefined,
+  },
+  render: function NodeTaskFormRender({ form, mediaActions, mediaSlots, node, runError, running }) {
+    const [advancedOpen, setAdvancedOpen] = useState(false)
+    const currentValue = useStore(form.store, (state) => {
+      const values = state.values as NodeTaskFormValue
+      return {
+        kind: values.kind,
+        model: values.model,
+        params: values.params,
+        prompt: values.prompt,
+        provider: values.provider,
+      }
+    })
 
-export function NodeTaskForm({ mediaActions, models, node, onChange, onRun, runError, running, task }: NodeTaskFormProps) {
-  const [advancedOpen, setAdvancedOpen] = useState(false)
-  const activeModel = useMemo(() => activeModelForTask(models, task), [models, task])
-  const advancedFields = (activeModel?.fields ?? []).filter((field) => field.section !== 'basic')
-  const mediaSlots =
-    node.data.nodeType === 'image_generation' || node.data.nodeType === 'video_generation'
-      ? node.data.mediaSlots ?? EMPTY_MEDIA_SLOTS
-      : EMPTY_MEDIA_SLOTS
-  const form = useNodeTaskAppForm({
-    defaultValues: taskToFormValue(task, mediaSlots),
-    validators: {
-      onChange: ({ value }) => {
-        if (!value.prompt.trim()) {
-          return { fields: { prompt: 'Prompt is required.' } }
-        }
-        return undefined
-      },
-    },
-    onSubmit: ({ value }) => syncTask(onChange, value),
-  })
-  useEffect(() => {
-    form.setFieldValue('mediaSlots', mediaSlots)
-  }, [form, mediaSlots])
-  const syncCurrentForm = useCallback(() => {
-    syncTask(onChange, form.state.values)
-  }, [form, onChange])
+    if (!node) {
+      return null
+    }
 
-  return (
-    <form
-      className="mina-wc-task-form"
-      onSubmit={(event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        void form.handleSubmit()
-      }}
-    >
-      {mediaActions ? (
-        <form.Field name="mediaSlots">
-          {(field) => (
-            <MediaInputsFieldGroup
-              mediaSlots={field.state.value}
-              node={node}
-              uploading={mediaActions.uploading}
-              onAddUpload={mediaActions.onAddUpload}
-              onChange={mediaActions.onChange}
-              onMediaSlotsChange={field.handleChange}
-              onRemove={mediaActions.onRemove}
-              onReplaceUpload={mediaActions.onReplaceUpload}
-              onReorder={mediaActions.onReorder}
-            />
-          )}
-        </form.Field>
-      ) : null}
+    const compatibilityMode = deriveModelCompatibilityMode(mediaSlots)
+    const generationMode = deriveGenerationMode(currentValue.kind, mediaSlots)
+    const compatible = listClientModels(currentValue.kind, compatibilityMode)
+    const resolvedSpec = resolveClientModel({
+      kind: currentValue.kind,
+      provider: currentValue.provider,
+      model: currentValue.model,
+    })
+    const spec =
+      resolvedSpec && (compatibilityMode === 'media' ? resolvedSpec.supportsMedia : resolvedSpec.supportsText)
+        ? resolvedSpec
+        : compatible[0]
+    const paramError = useStore(form.store, (state) => {
+      const paramsMeta = state.fieldMeta.params
+      return paramsMeta?.errors[0] ? String(paramsMeta.errors[0]) : undefined
+    })
 
-      <div className="mina-wc-prompt-shell">
-        <button className="mina-wc-expand-button" type="button" title="Expand composer" aria-label="Expand composer">
-          <Maximize2 aria-hidden="true" size={18} />
-        </button>
-        <form.Field
-          name="prompt"
-          validators={{
-            onChange: ({ value }: { value: string }) => (value.trim() ? undefined : 'Prompt is required.'),
-          }}
-        >
-          {(field) => (
-            <PromptFieldGroup
-              value={field.state.value}
-              error={field.state.meta.errors[0] ? String(field.state.meta.errors[0]) : undefined}
-              onBlur={field.handleBlur}
-              onChange={(value) => {
-                field.handleChange(value)
-                syncCurrentForm()
-              }}
-            />
-          )}
-        </form.Field>
-      </div>
-
-      <section className="mina-wc-config-section" aria-label="Model configuration">
-        <form.Subscribe selector={(state) => state.values}>
-          {(currentValue) => {
-            const canSubmit = Boolean(currentValue.prompt.trim())
-            return (
-              <>
-                <form.Field name="provider">
-                  {(providerField) => (
-                    <form.Field name="model">
-                      {(modelField) => (
-                        <form.Field name="params">
-                          {(paramsField) => {
-                            const changeParams = (params: TaskParams) => {
-                              paramsField.handleChange(params)
-                              syncCurrentForm()
-                            }
-                            return (
-                              <>
-                                <ModelConfigToolbar
-                                  advancedOpen={advancedOpen}
-                                  canSubmit={canSubmit}
-                                  models={models}
-                                  onModelChange={(provider, model, params) => {
-                                    providerField.handleChange(provider)
-                                    modelField.handleChange(model)
-                                    paramsField.handleChange(params)
-                                    syncCurrentForm()
-                                  }}
-                                  onParamsChange={changeParams}
-                                  onRun={onRun}
-                                  value={currentValue}
-                                  runError={runError}
-                                  running={running}
-                                  setAdvancedOpen={setAdvancedOpen}
-                                />
-
-                                {advancedOpen ? (
-                                  <AdvancedConfigGroup
-                                    fields={advancedFields}
-                                    onParamsChange={changeParams}
-                                    params={paramsField.state.value}
-                                  />
-                                ) : null}
-                              </>
-                            )
-                          }}
-                        </form.Field>
-                      )}
-                    </form.Field>
-                  )}
-                </form.Field>
-              </>
-            )
-          }}
-        </form.Subscribe>
-        <div className="mina-wc-credit-line">
-          <Zap aria-hidden="true" size={13} />
-          <span>14</span>
+    if (!spec) {
+      return (
+        <div className="mina-wc-panel-empty">
+          No registered {currentValue.kind} models are available for {generationMode}.
         </div>
-      </section>
-    </form>
-  )
-}
+      )
+    }
+
+    const canSubmit = Boolean(currentValue.prompt.trim())
+
+    const changeModel = (nextSpec: ClientModelSpec) => {
+      form.setFieldValue('provider', nextSpec.key.provider, { dontRunListeners: true })
+      form.setFieldValue('model', nextSpec.key.model, { dontRunListeners: true })
+      form.setFieldValue('params', paramsForSpec(currentValue.params, nextSpec))
+      form.validate('change')
+    }
+
+    return (
+      <form
+        className="mina-wc-task-form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          void form.handleSubmit()
+        }}
+      >
+        {mediaActions ? (
+          <MediaInputsFieldGroup
+            node={node}
+            uploading={mediaActions.uploading}
+            onAddUpload={mediaActions.onAddUpload}
+            onChange={mediaActions.onChange}
+            onRemove={mediaActions.onRemove}
+            onReplaceUpload={mediaActions.onReplaceUpload}
+            onReorder={mediaActions.onReorder}
+          />
+        ) : null}
+
+        <div className="mina-wc-prompt-shell">
+          <button className="mina-wc-expand-button" type="button" title="Expand composer" aria-label="Expand composer">
+            <Maximize2 aria-hidden="true" size={18} />
+          </button>
+          <section className="mina-wc-prompt-section" aria-label="Prompt">
+            <form.AppField name="prompt">
+              {(field) => <field.TextField multiline />}
+            </form.AppField>
+          </section>
+        </div>
+
+        <section className="mina-wc-config-section" aria-label="Model configuration">
+          <ModelConfigToolbar
+            advancedOpen={advancedOpen}
+            canSubmit={canSubmit}
+            compatibilityMode={compatibilityMode}
+            form={form}
+            generationMode={generationMode}
+            onModelChange={changeModel}
+            onRun={() => {
+              void form.handleSubmit()
+            }}
+            runError={runError}
+            running={running}
+            setAdvancedOpen={setAdvancedOpen}
+            spec={spec}
+          />
+
+          {advancedOpen ? <AdvancedConfigGroup form={form} spec={spec} /> : null}
+          {paramError ? <em className="mina-wc-field-error">{paramError}</em> : null}
+
+          <div className="mina-wc-credit-line">
+            <Zap aria-hidden="true" size={13} />
+            <span>14</span>
+          </div>
+        </section>
+      </form>
+    )
+  },
+})

@@ -1,130 +1,88 @@
-import { Camera, ChevronDown, Image as ImageIcon, Languages, SlidersHorizontal, Sparkles } from 'lucide-react'
-import type { TaskModelDescriptor, TaskModelField } from '@mina/contracts/modules/tasks/model-catalog'
+import { ChevronDown, Languages, SlidersHorizontal, Sparkles } from 'lucide-react'
 
-import {
-  compatibleModels,
-  modelKey,
-  paramsForModel,
-} from '../model-form-utils'
 import { RunControls } from '../../components/panels/RunControls'
-import type { NodeTaskFormValue, TaskParamValue, TaskParams } from '../model-form-utils'
+import {
+  listClientModels,
+  modelSelectValue,
+  type ClientModelSpec,
+  type GenerationMode,
+  type ModelCompatibilityMode,
+} from '../registry'
+import type { NodeTaskFormApi } from '../form-context'
 
 interface ModelConfigToolbarProps {
   advancedOpen: boolean
   canSubmit: boolean
-  models: TaskModelDescriptor[]
-  value: NodeTaskFormValue
-  onModelChange(provider: string, model: string, params: TaskParams): void
-  onParamsChange(params: TaskParams): void
+  compatibilityMode: ModelCompatibilityMode
+  form: NodeTaskFormApi
+  generationMode: GenerationMode
+  onModelChange(spec: ClientModelSpec): void
   onRun(): void
   runError?: string | undefined
   running?: boolean | undefined
   setAdvancedOpen(open: boolean): void
+  spec: ClientModelSpec
 }
 
-const isNumericField = (field: TaskModelField): boolean =>
-  field.kind === 'integer' || field.kind === 'number' || field.kind === 'slider'
-
-const fieldIcon = (field: TaskModelField) => {
-  if (field.key === 'aspectRatio' || field.key === 'ratio' || field.key === 'size' || field.key === 'imageSize') {
-    return ImageIcon
+const modeLabel = (mode: GenerationMode): string => {
+  if (mode === 'i2i') {
+    return 'Image + Text to Image'
   }
-  if (field.key === 'count' || field.key === 'durationSeconds') {
-    return field.key === 'count' ? Sparkles : Camera
+  if (mode === 't2v') {
+    return 'Text to Video'
   }
-  return SlidersHorizontal
-}
-
-const stringValue = (value: TaskParamValue | undefined): string =>
-  value === undefined || value === null ? '' : String(value)
-
-const parseFieldValue = (field: TaskModelField, value: string): TaskParamValue => {
-  if (isNumericField(field)) {
-    return Number(value)
+  if (mode === 'i2v') {
+    return 'Image + Text to Video'
   }
-  return value
+  return 'Text to Image'
 }
 
 export function ModelConfigToolbar({
   advancedOpen,
   canSubmit,
-  models,
+  compatibilityMode,
+  form,
+  generationMode,
   onModelChange,
-  onParamsChange,
   onRun,
   runError,
   running,
   setAdvancedOpen,
-  value,
+  spec,
 }: ModelConfigToolbarProps) {
-  const compatible = compatibleModels(models, value.kind)
-  const activeModel = compatible.find(
-    (model) => model.provider === value.provider && model.model === value.model,
-  )
-  const basicFields = (activeModel?.fields ?? []).filter((field) => field.section === 'basic')
+  const compatible = listClientModels(spec.key.kind, compatibilityMode)
+  const value = modelSelectValue(spec.key)
 
   return (
     <div className="mina-wc-config-toolbar">
       <label className="mina-wc-toolbar-select mina-wc-model-select">
         <Sparkles aria-hidden="true" size={16} />
         <select
-          value={modelKey({ provider: value.provider, model: value.model })}
+          aria-label="Model"
+          value={value}
           onChange={(event) => {
-            const selected = compatible.find((model) => modelKey(model) === event.target.value)
-            if (!selected) {
-              return
+            const selected = compatible.find((candidate) => modelSelectValue(candidate.key) === event.target.value)
+            if (selected) {
+              onModelChange(selected)
             }
-            onModelChange(selected.provider, selected.model, paramsForModel(value.params, selected))
           }}
         >
-          {compatible.map((model) => (
-            <option key={modelKey(model)} value={modelKey(model)}>
-              {model.displayName}
-            </option>
-          ))}
+          {compatible.length ? (
+            compatible.map((modelSpec) => (
+              <option key={modelSelectValue(modelSpec.key)} value={modelSelectValue(modelSpec.key)}>
+                {modelSpec.displayName}
+              </option>
+            ))
+          ) : (
+            <option disabled>No compatible models</option>
+          )}
         </select>
         <ChevronDown aria-hidden="true" size={14} />
       </label>
 
-      {basicFields.map((modelField) => {
-        const Icon = fieldIcon(modelField)
-        return (
-          <label className="mina-wc-toolbar-select" key={modelField.key}>
-            <Icon aria-hidden="true" size={16} />
-            {modelField.kind === 'select' && modelField.options?.length ? (
-              <select
-                aria-label={modelField.label}
-                value={stringValue(value.params[modelField.key] ?? modelField.defaultValue)}
-                onChange={(event) => {
-                  onParamsChange({ ...value.params, [modelField.key]: event.target.value })
-                }}
-              >
-                {modelField.options.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                aria-label={modelField.label}
-                min={modelField.min}
-                max={modelField.max}
-                step={modelField.step}
-                type={isNumericField(modelField) ? 'number' : 'text'}
-                value={stringValue(value.params[modelField.key] ?? modelField.defaultValue)}
-                onChange={(event) => {
-                  onParamsChange({
-                    ...value.params,
-                    [modelField.key]: parseFieldValue(modelField, event.target.value),
-                  })
-                }}
-              />
-            )}
-            {modelField.kind === 'select' ? <ChevronDown aria-hidden="true" size={14} /> : null}
-          </label>
-        )
-      })}
+      <span className="mina-wc-mode-chip">{modeLabel(generationMode)}</span>
+
+      {spec.BasicFields ? <spec.BasicFields form={form} /> : null}
 
       <button className="mina-wc-icon-toggle mina-wc-language-toggle" type="button" title="Language tools" aria-label="Language tools">
         <Languages aria-hidden="true" size={17} />
@@ -143,5 +101,3 @@ export function ModelConfigToolbar({
     </div>
   )
 }
-
-export { isNumericField, parseFieldValue, stringValue }

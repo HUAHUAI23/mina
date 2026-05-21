@@ -21,10 +21,10 @@ const imageNode = (index: number): WorkflowCanvasNode => ({
     config: {
       task: {
         kind: 'image_generation',
-        provider: 'dev',
-        model: 'dev-image',
+        provider: 'google',
+        model: 'gemini-3.1-flash-image-preview',
         prompt: `Prompt ${index}`,
-        params: { count: 1, size: '1024x1024' },
+        params: { aspectRatio: '1:1', count: 1, imageSize: '1K' },
       },
     },
     mediaSlots:
@@ -58,10 +58,10 @@ const videoNode = (index: number): WorkflowCanvasNode => ({
     config: {
       task: {
         kind: 'video_generation',
-        provider: 'dev',
-        model: 'dev-video',
+        provider: 'google',
+        model: 'veo-3.1-generate-preview',
         prompt: `Motion ${index}`,
-        params: { durationSeconds: 5, outputLastFrame: false, resolution: '720p' },
+        params: { aspectRatio: '16:9', durationSeconds: 8, personGeneration: 'allow_all', resolution: '720p' },
       },
     },
     mediaSlots:

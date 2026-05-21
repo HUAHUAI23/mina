@@ -9,8 +9,8 @@ if (canvas.nodes.length !== 1_000) {
   throw new Error(`Expected 1000 nodes, received ${canvas.nodes.length}.`)
 }
 
-if (canvas.edges.length !== 999) {
-  throw new Error(`Expected 999 edges, received ${canvas.edges.length}.`)
+if (canvas.edges.length !== 899) {
+  throw new Error(`Expected 899 edges, received ${canvas.edges.length}.`)
 }
 
 if (elapsedMs > 250) {
