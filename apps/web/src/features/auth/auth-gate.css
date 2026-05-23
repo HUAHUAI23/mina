@@ -1,0 +1,40 @@
+.mina-auth-underlay::after {
+  background: oklch(0.12 0.003 247 / 58%);
+  content: "";
+  inset: 0;
+  position: fixed;
+  z-index: 10;
+}
+
+.mina-auth-visual {
+  background:
+    radial-gradient(circle at 28% 24%, oklch(0.96 0.006 84), transparent 34%),
+    radial-gradient(circle at 78% 68%, oklch(0.75 0.013 286), transparent 36%),
+    linear-gradient(145deg, oklch(0.92 0.004 247), oklch(0.62 0.006 247));
+}
+
+.mina-auth-artboard-grid [data-tone="ink"] {
+  background: linear-gradient(135deg, var(--foreground), oklch(0.42 0.006 247));
+  grid-row: span 2;
+}
+
+.mina-auth-artboard-grid [data-tone="mist"] {
+  background: linear-gradient(135deg, oklch(0.96 0.003 247), oklch(0.75 0.009 247));
+}
+
+.mina-auth-artboard-grid [data-tone="paper"] {
+  background:
+    repeating-linear-gradient(
+      105deg,
+      oklch(0.86 0.004 84),
+      oklch(0.86 0.004 84) 2px,
+      transparent 2px,
+      transparent 12px
+    ),
+    linear-gradient(135deg, oklch(0.99 0.002 84), oklch(0.82 0.006 84));
+}
+
+.mina-auth-artboard-grid [data-tone="slate"] {
+  background: linear-gradient(135deg, oklch(0.76 0.006 286), oklch(0.51 0.008 247));
+  grid-column: span 2;
+}

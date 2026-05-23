@@ -35,6 +35,7 @@ interface FlowRenderActions {
   }): void
   releaseLocalFrameNodeIds(nodeIds: readonly string[]): void
   setDraggingNodeIds(nodeIds: readonly string[]): void
+  setSelectionDragActive(active: boolean): void
   setLocalFrameNodeIds(nodeIds: readonly string[]): void
   setLastViewport(viewport: Viewport): void
   setViewportMoving(moving: boolean): void
@@ -172,6 +173,18 @@ export const useFlowRenderStore = create<FlowRenderStore>((set, get) => ({
         draggingNodeIds: Array.from(new Set(nodeIds)),
       },
     })),
+  setSelectionDragActive: (active) =>
+    set((state) => {
+      if (state.interaction.selectionDragActive === active) {
+        return state
+      }
+      return {
+        interaction: {
+          ...state.interaction,
+          selectionDragActive: active,
+        },
+      }
+    }),
   setLocalFrameNodeIds: (nodeIds) =>
     set((state) => {
       const localFrameNodeIds = Array.from(new Set(nodeIds))

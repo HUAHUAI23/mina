@@ -22,6 +22,18 @@ interface WorkflowCanvasPageProps {
   workflowId: string
 }
 
+const pageShellClassName = 'grid h-dvh w-screen min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-surface text-foreground'
+const loadingShellClassName = `${pageShellClassName} place-items-center`
+const loadingClassName = 'p-2.5 text-[0.74rem] font-bold text-foreground-quaternary'
+const headerClassName = 'relative z-8 flex min-h-[66px] min-w-0 items-center justify-between gap-[18px] bg-surface-container-lowest/80 px-[clamp(18px,3dvw,34px)] py-2.5'
+const titleGroupClassName = 'flex min-w-0 items-center gap-3'
+const headerActionsClassName = 'flex min-w-0 flex-none items-center justify-end gap-3'
+const backLinkClassName = 'flex size-10.5 flex-none items-center justify-center rounded-full bg-surface-container-lowest text-foreground-tertiary shadow-[inset_0_0_0_1px_var(--outline-ghost)] hover:bg-foreground hover:text-primary-foreground'
+const titleCopyClassName = 'grid min-w-0 gap-0.5'
+const titleEyebrowClassName = 'text-[0.62rem] leading-none font-black tracking-[0.24em] text-foreground-quaternary uppercase'
+const titleClassName = 'm-0 truncate font-display text-base leading-[1.15] font-black tracking-normal'
+const stageClassName = 'relative min-h-0 min-w-0 overflow-hidden bg-surface-container-low [background-image:radial-gradient(circle,var(--canvas-dot)_1px,transparent_1.2px)] bg-[length:30px_30px]'
+
 export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
   const queryClient = useQueryClient()
   const [runError, setRunError] = useState<string>()
@@ -129,33 +141,33 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
   )
 
   if (workflowQuery.isLoading) {
-    return <div className="mina-wc-page"><div className="mina-wc-loading">Loading workflow</div></div>
+    return <div className={loadingShellClassName}><div className={loadingClassName}>Loading workflow</div></div>
   }
 
   if (workflowQuery.isError || !workflowQuery.data) {
-    return <div className="mina-wc-page"><div className="mina-wc-loading">Workflow unavailable</div></div>
+    return <div className={loadingShellClassName}><div className={loadingClassName}>Workflow unavailable</div></div>
   }
 
   const workflow = workflowQuery.data.item
 
   return (
-    <div className="mina-wc-page">
-      <header className="mina-wc-header">
-        <div className="mina-wc-title-group">
-          <Link aria-label="Back to canvas list" className="mina-wc-back" to="/canvas">
+    <div className={pageShellClassName}>
+      <header className={headerClassName}>
+        <div className={titleGroupClassName}>
+          <Link aria-label="Back to canvas list" className={backLinkClassName} to="/canvas">
             <ArrowLeft aria-hidden="true" size={17} />
           </Link>
-          <div className="mina-wc-title-copy">
-            <span>Canvas</span>
-            <h1>{workflow.name}</h1>
+          <div className={titleCopyClassName}>
+            <span className={titleEyebrowClassName}>Canvas</span>
+            <h1 className={titleClassName}>{workflow.name}</h1>
           </div>
         </div>
-        <div className="mina-wc-header-actions">
+        <div className={headerActionsClassName}>
           <SaveStatusPill yjsConnectionStatus={yjsConnectionStatus} />
         </div>
       </header>
 
-      <section className="mina-wc-stage" aria-label="Workflow canvas">
+      <section className={stageClassName} aria-label="Workflow canvas">
         <WorkflowCanvas
           onRunNode={runNode}
           onSelectOutput={selectOutput}

@@ -229,9 +229,10 @@ export const workflowYjsCommands = {
     })
   },
 
-  addNode(context: WorkflowYjsCommandContext, type: WorkflowNodeType): void {
-    const node = createWorkflowCanvasNode(type, context.nodes.length)
+  addNode(context: WorkflowYjsCommandContext, type: WorkflowNodeType, task?: TaskDraftConfig | undefined): string {
+    const node = createWorkflowCanvasNode(type, context.nodes.length, task)
     withYDoc(context, (y) => upsertNode(y, node))
+    return node.id
   },
 
   commitNodeFrames(context: WorkflowYjsCommandContext, frames: readonly CanvasNodeFramePatch[]): void {
@@ -342,10 +343,11 @@ export const workflowYjsCommands = {
       if (!isMediaGenerationNode(node) || !isMediaSlotAllowedForNodeType(node.data.nodeType, item.slot)) {
         return undefined
       }
-      const items = node.data.mediaSlots?.[item.slot] ?? []
+      const items = normalizeSlotOrder(node.data.mediaSlots?.[item.slot] ?? [])
+      const insertIndex = Math.min(Math.max(item.order, 0), items.length)
       node.data.mediaSlots = {
         ...(node.data.mediaSlots ?? {}),
-        [item.slot]: normalizeSlotOrder([...items, item]),
+        [item.slot]: assignSlotOrder([...items.slice(0, insertIndex), item, ...items.slice(insertIndex)]),
       }
       if (node.data.config.task) {
         node.data.config.task = taskWithCompatibleModel(node.data.config.task, node.data.mediaSlots)

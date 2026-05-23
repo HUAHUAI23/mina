@@ -12,6 +12,8 @@ interface NodeGroupNodeViewProps {
   id: string
 }
 
+const groupNodeClassName = 'mina-wc-group-node mina-wc-node-group flex h-full gap-2.5 rounded-2xl bg-[color-mix(in_oklch,var(--surface-container-lowest)_72%,transparent)] p-4 text-foreground-tertiary shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--foreground-quaternary)_9%,transparent)]'
+
 const nodeGroupNodeViewPropsEqual = (previous: NodeGroupNodeViewProps, next: NodeGroupNodeViewProps): boolean =>
   previous.id === next.id &&
   previous.data.nodeId === next.data.nodeId &&
@@ -28,7 +30,7 @@ const groupNodeRenderSignature = (data: NodeGroupNodeViewProps['data']): string 
 const NodeGroupNodeView = memo(function NodeGroupNodeView({ data, id }: NodeGroupNodeViewProps) {
   markCanvasNodeRender(id, groupNodeRenderSignature(data))
   return (
-    <section className="mina-wc-group-node mina-wc-node-group">
+    <section className={groupNodeClassName}>
       <WorkflowNodeHandles />
       <strong>{data.title}</strong>
       <span>Group</span>

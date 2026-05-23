@@ -22,27 +22,28 @@ export function TaskHistoryCard({ node, open, workflowId }: TaskHistoryCardProps
   })
 
   return (
-    <section className="mina-wc-history-card">
-      <div className="mina-wc-panel-heading">
-        <strong>Task History</strong>
-        <span>{query.data?.items.length ?? 0}</span>
+    <section className="grid min-h-0 gap-3 overflow-auto rounded-2xl bg-surface-container-lowest/90 p-4 shadow-floating">
+      <div className="flex items-center justify-between">
+        <strong className="text-[0.84rem] text-foreground">Task History</strong>
+        <span className="text-[0.66rem] font-extrabold text-foreground-tertiary">{query.data?.items.length ?? 0}</span>
       </div>
-      <div className="mina-wc-history-list">
+      <div className="grid gap-2.5">
         {query.data?.items.map((item) => {
           const resources = selectableResources(item.task.output)
           return (
-            <article className="mina-wc-history-item" key={`${item.workflowRunId}:${item.task.id}`}>
-              <div>
-                <strong>{item.task.status}</strong>
-                <span>{new Date(item.task.createdAt).toLocaleString()}</span>
+            <article className="grid gap-2 rounded-xl bg-surface-container-low p-2.5" key={`${item.workflowRunId}:${item.task.id}`}>
+              <div className="flex items-center justify-between">
+                <strong className="text-[0.84rem] text-foreground">{item.task.status}</strong>
+                <span className="text-[0.66rem] font-extrabold text-foreground-tertiary">{new Date(item.task.createdAt).toLocaleString()}</span>
               </div>
-              {item.task.error ? <p>{item.task.error.message}</p> : null}
-              <div className="mina-wc-history-resources">
+              {item.task.error ? <p className="m-0 text-[0.74rem] text-destructive">{item.task.error.message}</p> : null}
+              <div className="flex min-w-0 gap-1.5 overflow-x-auto">
                 {resources.map((resource) => {
                   const previewUrl = previewUrlForMedia(resource)
                   return (
                     <button
                       aria-label={`Select ${resource.role ?? resource.kind} ${resource.index + 1}`}
+                      className="flex h-10 w-11 flex-none items-center justify-center overflow-hidden rounded-md border-0 bg-surface-container-lowest p-0 text-foreground-tertiary"
                       key={resource.id}
                       onClick={() =>
                         setNodeMediaView(node.id, {
@@ -54,7 +55,7 @@ export function TaskHistoryCard({ node, open, workflowId }: TaskHistoryCardProps
                       type="button"
                     >
                       {resource.kind === 'image' && previewUrl ? (
-                        <img alt="" loading="lazy" src={previewUrl} />
+                        <img alt="" className="size-full object-cover" loading="lazy" src={previewUrl} />
                       ) : (
                         <span>{resource.index + 1}</span>
                       )}
@@ -65,7 +66,7 @@ export function TaskHistoryCard({ node, open, workflowId }: TaskHistoryCardProps
             </article>
           )
         })}
-        {query.data?.items.length === 0 ? <div className="mina-wc-panel-empty">No tasks yet</div> : null}
+        {query.data?.items.length === 0 ? <div className="p-2.5 text-[0.74rem] font-bold text-foreground-quaternary">No tasks yet</div> : null}
       </div>
     </section>
   )

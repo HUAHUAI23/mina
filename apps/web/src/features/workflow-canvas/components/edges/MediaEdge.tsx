@@ -9,6 +9,9 @@ import { WORKFLOW_EDGE_GEOMETRY } from '../../workflow-canvas-geometry'
 
 import { getWorkflowEdgeRoute } from './workflow-edge-routing'
 
+const edgeActionClassName = 'mina-wc-edge-action pointer-events-none absolute z-20'
+const edgeActionButtonClassName = 'flex size-[30px] items-center justify-center rounded-full border border-[color:color-mix(in_oklch,var(--destructive)_38%,var(--outline-ghost))] bg-[color-mix(in_oklch,var(--surface-container-lowest)_94%,transparent)] text-[color:color-mix(in_oklch,var(--destructive)_80%,var(--foreground-secondary))] shadow-[0_18px_30px_-20px_color-mix(in_oklch,var(--destructive)_38%,transparent)] pointer-events-auto hover:bg-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))] hover:text-destructive-foreground'
+
 export const MediaEdge = memo(function MediaEdge({
   id,
   sourceX,
@@ -123,13 +126,14 @@ export const MediaEdge = memo(function MediaEdge({
       {active ? (
         <EdgeLabelRenderer>
           <div
-            className="mina-wc-edge-action"
+            className={edgeActionClassName}
             style={{
               transform: `translate(-50%, -50%) translate(${route.labelX}px, ${route.labelY}px)`,
             }}
           >
             <button
               aria-label="Cut connection"
+              className={edgeActionButtonClassName}
               onClick={handleDelete}
               onMouseEnter={handleButtonMouseEnter}
               onMouseLeave={handleButtonMouseLeave}

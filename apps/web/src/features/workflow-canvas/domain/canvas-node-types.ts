@@ -80,6 +80,7 @@ const createId = (prefix: string): string => `${prefix}_${crypto.randomUUID()}`
 export const createWorkflowCanvasNode = (
   type: WorkflowNodeType,
   index: number,
+  taskOverride?: TaskDraftConfig | undefined,
 ): WorkflowCanvasNode => {
   const position = {
     x: 120 + (index % 4) * 280,
@@ -95,7 +96,7 @@ export const createWorkflowCanvasNode = (
       data: {
         nodeType: type,
         title: 'Image Node',
-        config: { task: defaultTaskForNodeType(type) },
+        config: { task: taskOverride ?? defaultTaskForNodeType(type) },
         mediaSlots: {},
       },
     }
@@ -110,7 +111,7 @@ export const createWorkflowCanvasNode = (
       data: {
         nodeType: type,
         title: 'Video Node',
-        config: { task: defaultTaskForNodeType(type) },
+        config: { task: taskOverride ?? defaultTaskForNodeType(type) },
         mediaSlots: {},
       },
     }

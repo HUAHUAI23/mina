@@ -1,11 +1,8 @@
-import { FileAudio, GripVertical, ImageOff, Link2, RefreshCcw, Trash2, Video } from 'lucide-react'
-import type { CSSProperties } from 'react'
+import { FileAudio, ImageOff, Link2, Video, X } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { CSS } from '@dnd-kit/utilities'
-import { useSortable } from '@dnd-kit/sortable'
 import type { NodeMediaSlotItem as NodeMediaSlotItemType } from '@mina/contracts/modules/media'
+import { cn } from '@mina/ui/lib/utils'
 
-import { SlotOutputSelector } from './SlotOutputSelector'
 import { getMediaObject } from '../../api/media-queries'
 import { getTask } from '../../api/workflow-queries'
 import { mediaKeys, taskKeys } from '../../api/workflow-keys'
@@ -14,31 +11,39 @@ import { resolveMediaViewResource } from '../../utils/media-view'
 import { previewUrlForMedia } from '../../utils/media-url'
 
 interface MediaSlotItemProps {
+  dragHandleProps?: Record<string, unknown> | undefined
+  isFirst?: boolean
   item: NodeMediaSlotItemType
-  onChange(item: NodeMediaSlotItemType): void
   onRemove(): void
-  onReplace?(file: File): void
+  showIndex?: boolean | undefined
+  showRemove?: boolean | undefined
 }
 
 const isNodeOutput = (
   source: NodeMediaSlotItemType['source'],
 ): source is Extract<NodeMediaSlotItemType['source'], { type: 'node_output' }> => source.type === 'node_output'
 
-const slotTypeLabel = (item: NodeMediaSlotItemType): string => {
-  if (item.source.type === 'media_object') return 'Local upload'
-  if (item.source.type === 'external_url') return 'External media'
-  if (item.source.resolve === 'run_output') return 'Run output'
-  return 'Current MediaView'
-}
-
 const mediaFallback = (kind: 'audio' | 'image' | 'video' | undefined) => {
-  if (kind === 'video') return <Video size={18} />
-  if (kind === 'audio') return <FileAudio size={18} />
-  return <Link2 size={18} />
+  if (kind === 'video') return <Video size={14} />
+  if (kind === 'audio') return <FileAudio size={14} />
+  return <Link2 size={14} />
 }
 
-export function MediaSlotItem({ item, onChange, onRemove, onReplace }: MediaSlotItemProps) {
-  const sortable = useSortable({ id: item.id })
+const slotItemClassName = 'mina-wc-slot-item group relative block w-(--composer-media-width) select-none rounded-[12px] bg-transparent touch-none hover:z-30 active:cursor-grabbing cursor-grab nodrag nowheel nopan'
+const slotThumbClassName = 'mina-wc-slot-thumb relative flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-[12px] bg-surface-container-high text-foreground-quaternary shadow-[0_0_0_1.5px_#ffffff,0_8px_16px_-8px_rgba(0,0,0,0.25),0_3px_6px_-3px_rgba(0,0,0,0.15)]'
+const missingSlotThumbClassName = 'shadow-[inset_0_0_0_1.5px_color-mix(in_oklch,var(--destructive)_42%,transparent)]'
+const slotIndexClassName = 'mina-wc-slot-index absolute top-1 left-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--foreground)_72%,transparent)] px-[3px] text-[0.52rem] font-[850] text-primary-foreground'
+const slotCloseClassName = 'mina-wc-slot-close pointer-events-none absolute -top-1.5 -right-1.5 z-40 flex size-4.5 cursor-pointer items-center justify-center rounded-full bg-zinc-900 p-0 text-white opacity-0 hover:bg-black group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 [&_svg]:size-2.5 [&_svg]:stroke-[2.5px]'
+const slotImageClassName = 'size-full object-cover'
+
+export function MediaSlotItem({
+  dragHandleProps,
+  isFirst,
+  item,
+  onRemove,
+  showIndex = true,
+  showRemove = true,
+}: MediaSlotItemProps) {
   const nodeOutputSource = isNodeOutput(item.source) ? item.source : undefined
   const sourceNode = useCanvasNode(nodeOutputSource?.nodeId ?? '')
   const sourceMediaView =
@@ -60,13 +65,6 @@ export function MediaSlotItem({ item, onChange, onRemove, onReplace }: MediaSlot
     staleTime: 10_000,
   })
   const upstreamResource = resolveMediaViewResource(taskQuery.data?.item.output, sourceMediaView)
-  const title =
-    item.source.type === 'media_object'
-      ? 'Uploaded media'
-      : item.source.type === 'external_url'
-        ? 'External media'
-        : `From ${sourceNode?.data.title ?? nodeOutputSource?.nodeId ?? 'node'}`
-  const detail = slotTypeLabel(item)
   const localPreview =
     item.source.type === 'external_url' && item.source.kind === 'image'
       ? previewUrlForMedia(item.source)
@@ -77,65 +75,40 @@ export function MediaSlotItem({ item, onChange, onRemove, onReplace }: MediaSlot
           : undefined
   const mediaKind =
     item.source.type === 'external_url' ? item.source.kind : mediaQuery.data?.item.kind ?? upstreamResource?.kind
-  const style: CSSProperties = {
-    cursor: sortable.isDragging ? 'grabbing' : 'grab',
-    transform: CSS.Transform.toString(sortable.transform),
-    touchAction: 'none',
-  }
 
   return (
     <article
-      className="mina-wc-slot-item nodrag nowheel nopan"
+      {...dragHandleProps}
+      className={slotItemClassName}
+      data-first={isFirst ? 'true' : undefined}
       data-mina-canvas-ignore="true"
-      data-dragging={sortable.isDragging ? 'true' : undefined}
       data-missing={hasUpstreamMedia ? undefined : 'true'}
-      ref={sortable.setNodeRef}
-      style={style}
+      title="Drag to reorder"
     >
-      <div
-        className="mina-wc-slot-thumb"
-        ref={sortable.setActivatorNodeRef}
-        {...sortable.attributes}
-        {...sortable.listeners}
-      >
+      <div className={cn(slotThumbClassName, !hasUpstreamMedia && missingSlotThumbClassName)}>
         {localPreview ? (
-          <img alt="" src={localPreview} />
+          <img alt="" className={slotImageClassName} draggable={false} src={localPreview} />
         ) : hasUpstreamMedia ? (
           mediaFallback(mediaKind)
         ) : (
-          <ImageOff size={18} />
+          <ImageOff size={14} />
         )}
-        <span>{item.order + 1}</span>
-        <div aria-hidden="true" className="mina-wc-slot-drag-affordance">
-          <GripVertical size={13} />
-        </div>
+        {showIndex ? <span className={slotIndexClassName}>{item.order + 1}</span> : null}
       </div>
-      <div className="mina-wc-slot-copy">
-        <strong>{title}</strong>
-        <span>{hasUpstreamMedia ? detail : 'No upstream output'}</span>
-        <SlotOutputSelector item={item} onChange={onChange} />
-      </div>
-      <div className="mina-wc-slot-actions">
-        {item.source.type === 'media_object' && onReplace ? (
-          <label aria-label="Replace media" title="Replace media">
-            <RefreshCcw aria-hidden="true" size={14} />
-            <input
-              accept="image/*,video/*,audio/*"
-              onChange={(event) => {
-                const file = event.currentTarget.files?.[0]
-                if (file) {
-                  onReplace(file)
-                  event.currentTarget.value = ''
-                }
-              }}
-              type="file"
-            />
-          </label>
-        ) : null}
-        <button aria-label="Remove slot item" onClick={onRemove} type="button">
-          <Trash2 aria-hidden="true" size={14} />
+      {showRemove ? (
+        <button
+          aria-label="Remove"
+          className={slotCloseClassName}
+          onClick={(event) => {
+            event.stopPropagation()
+            onRemove()
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          type="button"
+        >
+          <X aria-hidden="true" size={10} />
         </button>
-      </div>
+      ) : null}
     </article>
   )
 }

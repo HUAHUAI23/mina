@@ -34,7 +34,7 @@ export interface CanvasGraphState {
 
 export interface CanvasGraphActions {
   addMediaConnection(input: MediaConnectionInput): void
-  addNode(type: WorkflowNodeType): void
+  addNode(type: WorkflowNodeType, task?: TaskDraftConfig | undefined): string
   commitNodeFrames(input: readonly CanvasNodeFramePatch[]): void
   removeGraphEdges(edgeIds: readonly string[]): void
   removeGraphNodes(nodeIds: readonly string[]): void

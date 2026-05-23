@@ -1,0 +1,9 @@
+.mina-canvas-list-preview::before {
+  background:
+    radial-gradient(circle at 24% 26%, oklch(0.98 0.002 247), transparent 28%),
+    radial-gradient(circle at 74% 72%, oklch(0.55 0.01 286), transparent 38%),
+    linear-gradient(135deg, oklch(0.91 0.004 247), oklch(0.66 0.006 247));
+  content: "";
+  inset: 0;
+  position: absolute;
+}

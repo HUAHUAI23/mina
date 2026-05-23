@@ -1,37 +1,28 @@
-import { Clipboard, ImagePlus } from 'lucide-react'
-import { useState, type ClipboardEvent } from 'react'
-import {
-  closestCenter,
-  DndContext,
-  DragOverlay,
-  KeyboardSensor,
-  MeasuringStrategy,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragStartEvent,
-  type DragEndEvent,
-} from '@dnd-kit/core'
-import { horizontalListSortingStrategy, SortableContext, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
+import { type ClipboardEvent, type DragEvent, useMemo, useState } from 'react'
 import type { MediaSlotName, NodeMediaSlotItem } from '@mina/contracts/modules/media'
+import type { NodeMediaSlots } from '@mina/contracts/modules/media'
 import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
+import { cn } from '@mina/ui/lib/utils'
 
-import { LocalMediaUploader } from './LocalMediaUploader'
-import { MediaSlotItem } from './MediaSlotItem'
 import { isMediaGenerationNode } from '../../domain/canvas-node-types'
 import {
   defaultMediaSlotForNodeType,
+  type MediaSlotDescriptor,
   mediaSlotsForNodeType,
 } from '../../domain/media-slot-policy'
+import { slotRendererRegistry, type SlotRendererActions } from '../../composer/slot-renderer-registry'
+import '../../composer/slots'
 
 interface MediaSlotListProps {
+  forceExpanded?: boolean | undefined
   node: WorkflowCanvasNode
-  onAddUpload(slot: MediaSlotName, file: File): void
+  onAddUpload(slot: MediaSlotName, file: File, options?: { position?: 'end' | 'start' }): void
   onChange(item: NodeMediaSlotItem): void
   onRemove(slot: MediaSlotName, slotItemId: string): void
   onReplaceUpload(slot: MediaSlotName, slotItemId: string, file: File): void
   onReorder(slot: MediaSlotName, orderedIds: string[]): void
   uploading?: boolean
+  variant?: 'attachment' | 'block'
 }
 
 const firstPastedFile = (event: ClipboardEvent<HTMLElement>): File | undefined => {
@@ -46,7 +37,35 @@ const firstPastedFile = (event: ClipboardEvent<HTMLElement>): File | undefined =
   return undefined
 }
 
+const firstDroppedFile = (event: DragEvent<HTMLElement>): File | undefined =>
+  Array.from(event.dataTransfer.files).find((file) => file.type.startsWith('image/') || file.type.startsWith('video/') || file.type.startsWith('audio/'))
+
+const slotItemCount = (mediaSlots: NodeMediaSlots | undefined, slot: MediaSlotName): number =>
+  mediaSlots?.[slot]?.length ?? 0
+
+const slotListClassName = 'mina-wc-slot-list nodrag nowheel nopan grid min-w-0 items-start gap-2 outline-0'
+const attachmentSlotListClassName = 'max-w-[min(520px,calc(100vw_-_72px))] overflow-visible pointer-events-none'
+const slotTabsClassName = 'mina-wc-slot-tabs flex min-w-0 items-center gap-1.5 overflow-x-auto pb-0.5'
+const attachmentSlotTabsClassName = 'pointer-events-auto -mt-3 mb-[5px] max-w-max rounded-full bg-[color-mix(in_oklch,var(--surface-container-lowest)_88%,transparent)] p-[3px] shadow-[0_12px_26px_-22px_color-mix(in_oklch,var(--foreground)_24%,transparent)]'
+const slotTabClassName = 'mina-wc-slot-tab group inline-flex min-h-[30px] flex-none items-center gap-1.5 rounded-full border-0 bg-transparent px-[9px] text-[0.72rem] font-extrabold text-foreground-tertiary hover:bg-surface-container-low hover:text-foreground aria-selected:bg-surface-container-low aria-selected:text-foreground'
+const attachmentSlotTabClassName = 'min-h-6 px-[7px] text-[0.66rem]'
+const slotCountClassName = 'flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--foreground-quaternary)_12%,transparent)] px-[5px] text-[0.62rem] text-foreground-tertiary group-aria-selected:bg-foreground group-aria-selected:text-primary-foreground'
+
+const preferredActiveSlot = (
+  descriptors: readonly MediaSlotDescriptor[],
+  mediaSlots: NodeMediaSlots | undefined,
+  currentSlot: MediaSlotName | undefined,
+  fallbackSlot: MediaSlotName | undefined,
+): MediaSlotName | undefined => {
+  if (currentSlot && descriptors.some((descriptor) => descriptor.slot === currentSlot)) {
+    return currentSlot
+  }
+  const firstFilledSlot = descriptors.find((descriptor) => slotItemCount(mediaSlots, descriptor.slot) > 0)?.slot
+  return firstFilledSlot ?? fallbackSlot
+}
+
 export function MediaSlotList({
+  forceExpanded,
   node,
   onAddUpload,
   onChange,
@@ -54,104 +73,101 @@ export function MediaSlotList({
   onReplaceUpload,
   onReorder,
   uploading,
+  variant = 'block',
 }: MediaSlotListProps) {
-  const [activeDragItem, setActiveDragItem] = useState<NodeMediaSlotItem | undefined>()
   if (!isMediaGenerationNode(node)) {
     return null
   }
   const mediaSlots = node.data.mediaSlots ?? {}
   const slotPolicy = mediaSlotsForNodeType(node.data.nodeType)
   const defaultSlot = defaultMediaSlotForNodeType(node.data.nodeType)
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  const [expandedSlot, setExpandedSlot] = useState<MediaSlotName | undefined>()
+  const [selectedSlot, setSelectedSlot] = useState<MediaSlotName | undefined>(defaultSlot)
+  const activeSlot = preferredActiveSlot(slotPolicy, mediaSlots, selectedSlot, defaultSlot)
+  const activeDescriptor = slotPolicy.find((descriptor) => descriptor.slot === activeSlot) ?? slotPolicy[0]
+  const actions = useMemo<SlotRendererActions>(
+    () => ({
+      ...(uploading !== undefined ? { uploading } : {}),
+      onAddUpload,
+      onChange,
+      onRemove,
+      onReplaceUpload,
+      onReorder,
+    }),
+    [onAddUpload, onChange, onRemove, onReplaceUpload, onReorder, uploading],
   )
-  const handleDragStart = (items: NodeMediaSlotItem[]) => (event: DragStartEvent) => {
-    setActiveDragItem(items.find((item) => item.id === event.active.id))
+  if (!activeDescriptor) {
+    return null
   }
-  const handleDragEnd = (slot: MediaSlotName, items: NodeMediaSlotItem[]) => (event: DragEndEvent) => {
-    setActiveDragItem(undefined)
-    if (!event.over || event.active.id === event.over.id) {
-      return
-    }
-    const activeIndex = items.findIndex((item) => item.id === event.active.id)
-    const overIndex = items.findIndex((item) => item.id === event.over?.id)
-    if (activeIndex < 0 || overIndex < 0) {
-      return
-    }
-    const ordered = [...items]
-    const [moved] = ordered.splice(activeIndex, 1)
-    if (!moved) {
-      return
-    }
-    ordered.splice(overIndex, 0, moved)
-    onReorder(slot, ordered.map((item) => item.id))
-  }
-  const handleDragCancel = () => {
-    setActiveDragItem(undefined)
-  }
+  const renderer = slotRendererRegistry.resolve({ descriptor: activeDescriptor, node })
+  const SlotRenderer = renderer.Component
+
   return (
     <div
-      className="mina-wc-slot-list nodrag nowheel nopan"
+      className={cn(slotListClassName, variant === 'attachment' && attachmentSlotListClassName)}
       data-mina-canvas-ignore="true"
+      data-expanded={expandedSlot ? 'true' : undefined}
+      data-variant={variant}
       tabIndex={0}
-      onPaste={(event) => {
-        const file = firstPastedFile(event)
-        if (!file) {
+      onDragOver={(event) => {
+        if (event.dataTransfer.types.includes('Files')) {
+          event.preventDefault()
+        }
+      }}
+      onDrop={(event) => {
+        const file = firstDroppedFile(event)
+        if (!file || !defaultSlot) {
           return
         }
         event.preventDefault()
-        if (defaultSlot) {
-          onAddUpload(defaultSlot, file)
+        event.stopPropagation()
+        onAddUpload(defaultSlot, file)
+      }}
+      onPaste={(event) => {
+        const file = firstPastedFile(event)
+        if (!file || !defaultSlot) {
+          return
         }
+        event.preventDefault()
+        event.stopPropagation()
+        onAddUpload(defaultSlot, file, { position: 'start' })
       }}
     >
-      {slotPolicy.map(({ accept, label, slot }) => {
-        const items: NodeMediaSlotItem[] = mediaSlots[slot] ?? []
-        return (
-          <section className="mina-wc-slot-section" key={slot}>
-            <DndContext
-              collisionDetection={closestCenter}
-              measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
-              onDragCancel={handleDragCancel}
-              onDragEnd={handleDragEnd(slot, items)}
-              onDragStart={handleDragStart(items)}
-              sensors={sensors}
+      {slotPolicy.length > 1 ? (
+        <div
+          className={cn(
+            slotTabsClassName,
+            variant === 'attachment' && attachmentSlotTabsClassName,
+            variant === 'attachment' && !expandedSlot && 'hidden',
+          )}
+          role="tablist"
+          aria-label="Media slot"
+        >
+          {slotPolicy.map((descriptor) => (
+            <button
+              aria-selected={descriptor.slot === activeDescriptor.slot}
+              className={cn(slotTabClassName, variant === 'attachment' && attachmentSlotTabClassName)}
+              key={descriptor.slot}
+              onClick={() => setSelectedSlot(descriptor.slot)}
+              role="tab"
+              type="button"
             >
-              <SortableContext items={items.map((item) => item.id)} strategy={horizontalListSortingStrategy}>
-                <div className="mina-wc-slot-grid nodrag nowheel nopan" data-mina-canvas-ignore="true">
-                  {items.map((item) => (
-                    <MediaSlotItem
-                      item={item}
-                      key={item.id}
-                      onChange={onChange}
-                      onRemove={() => onRemove(slot, item.id)}
-                      onReplace={(file) => onReplaceUpload(slot, item.id, file)}
-                    />
-                  ))}
-                  <LocalMediaUploader
-                    accept={accept}
-                    ariaLabel={`Add ${label}`}
-                    className="mina-wc-slot-drop"
-                    disabled={uploading}
-                    onUpload={(file) => onAddUpload(slot, file)}
-                  >
-                    <ImagePlus aria-hidden="true" size={18} />
-                    <Clipboard aria-hidden="true" size={14} />
-                  </LocalMediaUploader>
-                </div>
-              </SortableContext>
-              <DragOverlay dropAnimation={null}>
-                {activeDragItem && items.some((item) => item.id === activeDragItem.id) ? (
-                  <div className="mina-wc-slot-drag-overlay" data-missing={undefined}>
-                    <span>{activeDragItem.order + 1}</span>
-                  </div>
-                ) : null}
-              </DragOverlay>
-            </DndContext>
-          </section>
-        )
-      })}
+              <span>{descriptor.label}</span>
+              <strong className={slotCountClassName}>{slotItemCount(mediaSlots, descriptor.slot)}</strong>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <SlotRenderer
+        actions={actions}
+        descriptor={activeDescriptor}
+        forceExpanded={forceExpanded}
+        items={mediaSlots[activeDescriptor.slot] ?? []}
+        key={activeDescriptor.slot}
+        node={node}
+        onExpandedChange={(expanded) => setExpandedSlot(expanded ? activeDescriptor.slot : undefined)}
+        variant={variant}
+      />
     </div>
   )
 }

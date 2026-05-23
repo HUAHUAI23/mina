@@ -16,6 +16,15 @@ function FormShell({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+const fieldClassName = 'grid gap-1.5'
+const fieldLabelClassName = 'text-[0.68rem] font-black text-foreground-tertiary'
+const fieldControlClassName = 'min-h-10 rounded-lg border-0 bg-surface-container-high px-2.5 py-2 text-foreground outline-0 focus:bg-surface-container-lowest focus:shadow-[0_12px_28px_-18px_color-mix(in_oklch,var(--foreground)_18%,transparent)]'
+const fieldErrorClassName = 'text-[0.72rem] not-italic text-destructive'
+const toolbarSelectClassName = 'inline-flex min-w-0 flex-none items-center gap-[7px] text-foreground'
+const toolbarControlClassName = 'min-h-10 min-w-0 appearance-none border-0 bg-transparent text-sm font-bold text-foreground outline-0'
+const switchFieldClassName = 'flex items-center justify-between gap-2'
+const switchInputClassName = 'relative h-6 w-12 appearance-none rounded-full border-0 bg-surface-container-high after:absolute after:top-[3px] after:left-[3px] after:size-4.5 after:rounded-full after:bg-surface-container-lowest after:shadow-floating checked:bg-foreground-secondary checked:after:translate-x-6'
+
 interface SelectOption {
   label: string
   value: string
@@ -25,9 +34,10 @@ export interface TextFieldProps {
   label?: string
   multiline?: boolean
   placeholder?: string
+  textareaClassName?: string | undefined
 }
 
-function TextField({ label, multiline = false, placeholder }: TextFieldProps) {
+function TextField({ label, multiline = false, placeholder, textareaClassName }: TextFieldProps) {
   const field = useFieldContext<string>()
   const error = getFieldErrorMessage(field.state.meta)
 
@@ -39,23 +49,25 @@ function TextField({ label, multiline = false, placeholder }: TextFieldProps) {
         onBlur={field.handleBlur}
         onChange={field.handleChange}
         placeholder={placeholder}
+        textareaClassName={textareaClassName}
         value={field.state.value ?? ''}
       />
     )
   }
 
   return (
-    <label className="mina-wc-field">
-      <span>{label}</span>
+    <label className={fieldClassName}>
+      <span className={fieldLabelClassName}>{label}</span>
       <input
         aria-invalid={error ? true : undefined}
+        className={fieldControlClassName}
         onBlur={field.handleBlur}
         onChange={(event) => field.handleChange(event.target.value)}
         placeholder={placeholder}
         type="text"
         value={field.state.value ?? ''}
       />
-      {error ? <em>{error}</em> : null}
+      {error ? <em className={fieldErrorClassName}>{error}</em> : null}
     </label>
   )
 }
@@ -77,6 +89,7 @@ function SelectField({ ariaLabel, icon: Icon, label, options, valueKind = 'strin
     <select
       aria-invalid={error ? true : undefined}
       aria-label={ariaLabel ?? label}
+      className={label ? fieldControlClassName : toolbarControlClassName}
       onBlur={field.handleBlur}
       onChange={(event) => field.handleChange(parseSelectValue(event.target.value, valueKind))}
       value={value}
@@ -91,7 +104,7 @@ function SelectField({ ariaLabel, icon: Icon, label, options, valueKind = 'strin
 
   if (!label) {
     return (
-      <label className="mina-wc-toolbar-select">
+      <label className={toolbarSelectClassName}>
         {Icon ? <Icon aria-hidden={true} size={16} /> : null}
         {select}
       </label>
@@ -99,10 +112,10 @@ function SelectField({ ariaLabel, icon: Icon, label, options, valueKind = 'strin
   }
 
   return (
-    <label className="mina-wc-field">
-      <span>{label}</span>
+    <label className={fieldClassName}>
+      <span className={fieldLabelClassName}>{label}</span>
       {select}
-      {error ? <em>{error}</em> : null}
+      {error ? <em className={fieldErrorClassName}>{error}</em> : null}
     </label>
   )
 }
@@ -123,6 +136,7 @@ function NumberField({ ariaLabel, icon: Icon, label, max, min, step }: NumberFie
     <input
       aria-invalid={error ? true : undefined}
       aria-label={ariaLabel ?? label}
+      className={label ? fieldControlClassName : `${toolbarControlClassName} w-[72px]`}
       max={max}
       min={min}
       onBlur={field.handleBlur}
@@ -138,7 +152,7 @@ function NumberField({ ariaLabel, icon: Icon, label, max, min, step }: NumberFie
 
   if (!label) {
     return (
-      <label className="mina-wc-toolbar-select">
+      <label className={toolbarSelectClassName}>
         {Icon ? <Icon aria-hidden={true} size={16} /> : null}
         {input}
       </label>
@@ -146,10 +160,10 @@ function NumberField({ ariaLabel, icon: Icon, label, max, min, step }: NumberFie
   }
 
   return (
-    <label className="mina-wc-field">
-      <span>{label}</span>
+    <label className={fieldClassName}>
+      <span className={fieldLabelClassName}>{label}</span>
       {input}
-      {error ? <em>{error}</em> : null}
+      {error ? <em className={fieldErrorClassName}>{error}</em> : null}
     </label>
   )
 }
@@ -167,10 +181,11 @@ function SliderField({ label, max, min, step }: SliderFieldProps) {
   const error = getFieldErrorMessage(field.state.meta)
 
   return (
-    <label className="mina-wc-field">
-      <span>{label}</span>
+    <label className={fieldClassName}>
+      <span className={fieldLabelClassName}>{label}</span>
       <input
         aria-invalid={error ? true : undefined}
+        className={fieldControlClassName}
         max={max}
         min={min}
         onBlur={field.handleBlur}
@@ -179,7 +194,7 @@ function SliderField({ label, max, min, step }: SliderFieldProps) {
         type="range"
         value={value}
       />
-      {error ? <em>{error}</em> : null}
+      {error ? <em className={fieldErrorClassName}>{error}</em> : null}
     </label>
   )
 }
@@ -194,16 +209,17 @@ function SwitchField({ label }: SwitchFieldProps) {
 
   return (
     <div>
-      <label className="mina-wc-switch-field">
-        <span>{label}</span>
+      <label className={switchFieldClassName}>
+        <span className={fieldLabelClassName}>{label}</span>
         <input
           checked={Boolean(field.state.value)}
+          className={switchInputClassName}
           onBlur={field.handleBlur}
           onChange={(event) => field.handleChange(event.target.checked)}
           type="checkbox"
         />
       </label>
-      {error ? <em className="mina-wc-field-error">{error}</em> : null}
+      {error ? <em className="mt-1 block text-[0.72rem] font-bold not-italic text-destructive">{error}</em> : null}
     </div>
   )
 }

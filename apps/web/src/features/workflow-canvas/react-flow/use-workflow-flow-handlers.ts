@@ -41,6 +41,7 @@ export const useWorkflowFlowHandlers = () => {
   const setDraggingNodeIds = useFlowRenderStore((state) => state.setDraggingNodeIds)
   const setLocalFrameNodeIds = useFlowRenderStore((state) => state.setLocalFrameNodeIds)
   const setLastViewport = useFlowRenderStore((state) => state.setLastViewport)
+  const setSelectionDragActive = useFlowRenderStore((state) => state.setSelectionDragActive)
   const setViewportMoving = useFlowRenderStore((state) => state.setViewportMoving)
   const addMediaConnection = useCanvasStore((state) => state.addMediaConnection)
   const commitNodeFrames = useCanvasStore((state) => state.commitNodeFrames)
@@ -201,6 +202,14 @@ export const useWorkflowFlowHandlers = () => {
     setViewportMoving(true)
   }, [setViewportMoving])
 
+  const onSelectionDragStart = useCallback(() => {
+    setSelectionDragActive(true)
+  }, [setSelectionDragActive])
+
+  const onSelectionDragStop = useCallback(() => {
+    setSelectionDragActive(false)
+  }, [setSelectionDragActive])
+
   return {
     changedNodeIds,
     isValidConnection,
@@ -212,6 +221,8 @@ export const useWorkflowFlowHandlers = () => {
     onNodeDragStart,
     onNodeDragStop,
     onNodesChange,
+    onSelectionDragStart,
+    onSelectionDragStop,
   }
 }
 

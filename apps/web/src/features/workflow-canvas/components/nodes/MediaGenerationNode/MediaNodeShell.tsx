@@ -24,6 +24,12 @@ interface MediaNodeShellProps {
   title: string
 }
 
+const mediaNodeClassName = 'mina-wc-node relative grid min-h-[274px] w-[390px] origin-center gap-[9px] overflow-visible rounded-[14px] bg-[color-mix(in_oklch,var(--surface-container-lowest)_92%,transparent)] p-3 shadow-[0_26px_48px_-34px_color-mix(in_oklch,var(--foreground)_28%,transparent),inset_0_0_0_1px_color-mix(in_oklch,var(--foreground-quaternary)_13%,transparent)]'
+const nodeHeaderClassName = 'mina-wc-node-header flex items-center justify-between px-0.5'
+const nodeTitleClassName = 'text-[0.84rem] text-foreground'
+const nodeKindClassName = 'text-[0.66rem] font-extrabold text-foreground-tertiary'
+const nodePreviewClassName = 'grid aspect-video place-items-center overflow-hidden rounded-xl bg-surface-container-high shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--foreground-quaternary)_10%,transparent)]'
+
 const mediaNodeRenderSignature = (input: Omit<MediaNodeShellProps, 'renderPreview'>): string =>
   JSON.stringify({
     mediaView: input.mediaView,
@@ -64,13 +70,13 @@ export const MediaNodeShell = memo(function MediaNodeShell({
   const visiblePreview = task?.output ? preview : cachedPreview ?? preview
 
   return (
-    <article className="mina-wc-node mina-wc-media-node">
+    <article className={mediaNodeClassName}>
       <WorkflowNodeHandles />
-      <div className="mina-wc-node-header">
-        <strong>{title}</strong>
-        <span>{nodeType === 'video_generation' ? 'Video' : 'Image'}</span>
+      <div className={nodeHeaderClassName}>
+        <strong className={nodeTitleClassName}>{title}</strong>
+        <span className={nodeKindClassName}>{nodeType === 'video_generation' ? 'Video' : 'Image'}</span>
       </div>
-      <div className="mina-wc-node-preview">
+      <div className={nodePreviewClassName}>
         {renderPreview({ preview: visiblePreview })}
       </div>
       <MediaOutputStrip

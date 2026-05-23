@@ -23,7 +23,7 @@ export const createGraphSlice: CanvasSliceCreator<
   return {
     ...initialGraphState,
     addMediaConnection: (input) => workflowYjsCommands.addMediaConnection(context(), input),
-    addNode: (type) => workflowYjsCommands.addNode(context(), type),
+    addNode: (type, task) => workflowYjsCommands.addNode(context(), type, task),
     commitNodeFrames: (frames) => workflowYjsCommands.commitNodeFrames(context(), frames),
     removeGraphEdges: (edgeIds) => workflowYjsCommands.removeGraphEdges(context(), edgeIds),
     removeGraphNodes: (nodeIds) => workflowYjsCommands.removeGraphNodes(context(), nodeIds),

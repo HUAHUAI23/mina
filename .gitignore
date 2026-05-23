@@ -9,5 +9,7 @@ test-results
 .env.local
 .env.*.local
 .env*
+.env
 temp
 .tanstack
+helloagents/

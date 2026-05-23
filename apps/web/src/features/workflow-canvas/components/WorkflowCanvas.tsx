@@ -9,7 +9,7 @@ import { ImageGenerationNode } from './nodes/MediaGenerationNode/ImageGeneration
 import { VideoGenerationNode } from './nodes/MediaGenerationNode/VideoGenerationNode'
 import { NodeGroupNode } from './nodes/NodeGroupNode'
 import { TextNode } from './nodes/TextNode'
-import { NodePanelLayer } from './panels/NodePanelLayer'
+import { CanvasDock } from './dock/CanvasDock'
 import { useCanvasUiStore } from '../store/canvas-ui-store'
 import { useCanvasEdges, useCanvasNodes } from '../store/selectors'
 import { isIgnoredCanvasTarget, isReactFlowPaneTarget } from '../utils/canvas-dom-scope'
@@ -69,6 +69,8 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
     onNodeDragStart,
     onNodeDragStop,
     onNodesChange,
+    onSelectionDragStart,
+    onSelectionDragStop,
   } = useWorkflowFlowHandlers()
   const stageRef = useRef<HTMLDivElement | null>(null)
   const runtimeActions = useMemo(
@@ -96,6 +98,9 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
       get activeNodePanel() {
         return useCanvasUiStore.getState().activeNodePanel
       },
+      get selectedNodeIds() {
+        return useCanvasUiStore.getState().selectedNodeIds
+      },
     }
     return () => {
       delete window.__minaWorkflowCanvasUi
@@ -106,15 +111,19 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
     if (isIgnoredCanvasTarget(event.target)) {
       return
     }
+    if (event.ctrlKey || event.metaKey || event.shiftKey) {
+      return
+    }
     openNodePanel(node.id, 'config')
   }, [openNodePanel])
   const handlePaneClick = useCallback(
     (event: React.MouseEvent) => {
       if (isReactFlowPaneTarget(event.target)) {
         closeNodePanel()
+        selectNodeIds([])
       }
     },
-    [closeNodePanel],
+    [closeNodePanel, selectNodeIds],
   )
   const handleSelectionChange = useCallback(
     ({ nodes: selectedNodes, edges: selectedEdges }: { nodes: WorkflowFlowNode[]; edges: WorkflowFlowEdge[] }) => {
@@ -137,7 +146,7 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
   return (
     <ReactFlowProvider>
       <Profiler id="WorkflowCanvas" onRender={recordCanvasProfilerCommit}>
-        <div className="mina-wc-flow-shell" ref={stageRef} style={WORKFLOW_CANVAS_GEOMETRY_CSS_VARS}>
+        <div className="mina-wc-flow-shell h-full w-full" ref={stageRef} style={WORKFLOW_CANVAS_GEOMETRY_CSS_VARS}>
           <ReactFlow<WorkflowFlowNode, WorkflowFlowEdge>
             connectionLineComponent={WorkflowConnectionLine}
             connectionMode={ConnectionMode.Loose}
@@ -146,6 +155,7 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
             edges={flowEdges}
             fitView
             isValidConnection={isValidConnection}
+            multiSelectionKeyCode="Control"
             nodes={flowNodes}
             nodeTypes={nodeTypes}
             onConnect={onConnect}
@@ -161,11 +171,14 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
             onNodesChange={onNodesChange}
             onPaneClick={handlePaneClick}
             onSelectionChange={handleSelectionChange}
+            onSelectionDragStart={onSelectionDragStart}
+            onSelectionDragStop={onSelectionDragStop}
             onlyRenderVisibleElements={performancePolicy.onlyRenderVisibleElements}
+            selectNodesOnDrag={false}
           >
             <Background gap={24} size={1} />
             <Controls showInteractive={false} />
-            <NodePanelLayer onRunNode={onRunNode} runError={runError} runningNodeId={runningNodeId} />
+            <CanvasDock onRunNode={onRunNode} runError={runError} runningNodeId={runningNodeId} />
           </ReactFlow>
         </div>
       </Profiler>
@@ -179,6 +192,7 @@ declare global {
   interface Window {
     __minaWorkflowCanvasUi?: {
       activeNodePanel: { nodeId: string; panel: string } | undefined
+      selectedNodeIds: string[]
     }
   }
 }

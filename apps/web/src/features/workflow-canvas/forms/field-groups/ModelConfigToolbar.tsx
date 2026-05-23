@@ -37,6 +37,10 @@ const modeLabel = (mode: GenerationMode): string => {
   return 'Text to Image'
 }
 
+const toolbarClassName = 'mina-wc-config-toolbar flex min-h-[54px] min-w-0 items-center gap-2.5 overflow-x-auto pr-[66px] max-[720px]:gap-2'
+const modeChipClassName = 'inline-flex min-h-7 flex-none items-center rounded-full bg-surface-container-high px-2.5 text-[0.68rem] font-[850] text-foreground-tertiary'
+const iconToggleClassName = 'flex size-10.5 items-center justify-center rounded-lg border-0 bg-transparent text-foreground-tertiary hover:bg-surface-container-low hover:text-foreground data-[active=true]:bg-surface-container-low data-[active=true]:text-foreground'
+
 export function ModelConfigToolbar({
   advancedOpen,
   canSubmit,
@@ -54,11 +58,12 @@ export function ModelConfigToolbar({
   const value = modelSelectValue(spec.key)
 
   return (
-    <div className="mina-wc-config-toolbar">
-      <label className="mina-wc-toolbar-select mina-wc-model-select">
+    <div className={toolbarClassName}>
+      <label className="inline-flex max-w-60 min-w-0 flex-none items-center gap-[7px] text-foreground">
         <Sparkles aria-hidden="true" size={16} />
         <select
           aria-label="Model"
+          className="min-h-10 min-w-0 appearance-none border-0 bg-transparent text-sm font-bold text-foreground outline-0"
           value={value}
           onChange={(event) => {
             const selected = compatible.find((candidate) => modelSelectValue(candidate.key) === event.target.value)
@@ -80,15 +85,15 @@ export function ModelConfigToolbar({
         <ChevronDown aria-hidden="true" size={14} />
       </label>
 
-      <span className="mina-wc-mode-chip">{modeLabel(generationMode)}</span>
+      <span className={modeChipClassName}>{modeLabel(generationMode)}</span>
 
       {spec.BasicFields ? <spec.BasicFields form={form} /> : null}
 
-      <button className="mina-wc-icon-toggle mina-wc-language-toggle" type="button" title="Language tools" aria-label="Language tools">
+      <button className={`${iconToggleClassName} ml-auto`} type="button" title="Language tools" aria-label="Language tools">
         <Languages aria-hidden="true" size={17} />
       </button>
       <button
-        className="mina-wc-icon-toggle"
+        className={iconToggleClassName}
         data-active={advancedOpen ? 'true' : undefined}
         type="button"
         title="Advanced settings"
@@ -97,7 +102,7 @@ export function ModelConfigToolbar({
       >
         <SlidersHorizontal aria-hidden="true" size={17} />
       </button>
-      <RunControls disabled={!canSubmit} onRun={onRun} running={running} error={runError} />
+      <RunControls compact disabled={!canSubmit} onRun={onRun} running={running} error={runError} />
     </div>
   )
 }
