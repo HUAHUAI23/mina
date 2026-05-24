@@ -3,7 +3,7 @@ import { ChevronDown, Languages, SlidersHorizontal, Sparkles } from 'lucide-reac
 import { RunControls } from '../../components/panels/RunControls'
 import {
   listClientModels,
-  modelSelectValue,
+  modelKey,
   type ClientModelSpec,
   type GenerationMode,
   type ModelCompatibilityMode,
@@ -16,6 +16,7 @@ interface ModelConfigToolbarProps {
   compatibilityMode: ModelCompatibilityMode
   form: NodeTaskFormApi
   generationMode: GenerationMode
+  models?: ClientModelSpec[] | undefined
   onModelChange(spec: ClientModelSpec): void
   onRun(): void
   runError?: string | undefined
@@ -47,6 +48,7 @@ export function ModelConfigToolbar({
   compatibilityMode,
   form,
   generationMode,
+  models,
   onModelChange,
   onRun,
   runError,
@@ -54,8 +56,8 @@ export function ModelConfigToolbar({
   setAdvancedOpen,
   spec,
 }: ModelConfigToolbarProps) {
-  const compatible = listClientModels(spec.key.kind, compatibilityMode)
-  const value = modelSelectValue(spec.key)
+  const compatible = models ?? listClientModels(spec.key.kind, compatibilityMode)
+  const value = modelKey(spec.key)
 
   return (
     <div className={toolbarClassName}>
@@ -66,7 +68,7 @@ export function ModelConfigToolbar({
           className="min-h-10 min-w-0 appearance-none border-0 bg-transparent text-sm font-bold text-foreground outline-0"
           value={value}
           onChange={(event) => {
-            const selected = compatible.find((candidate) => modelSelectValue(candidate.key) === event.target.value)
+            const selected = compatible.find((candidate) => modelKey(candidate.key) === event.target.value)
             if (selected) {
               onModelChange(selected)
             }
@@ -74,7 +76,7 @@ export function ModelConfigToolbar({
         >
           {compatible.length ? (
             compatible.map((modelSpec) => (
-              <option key={modelSelectValue(modelSpec.key)} value={modelSelectValue(modelSpec.key)}>
+              <option key={modelKey(modelSpec.key)} value={modelKey(modelSpec.key)}>
                 {modelSpec.displayName}
               </option>
             ))

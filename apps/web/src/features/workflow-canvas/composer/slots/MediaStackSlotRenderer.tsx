@@ -42,9 +42,10 @@ const attachmentSlotGridClassName = 'pointer-events-auto min-h-[calc(var(--compo
 const reorderItemClassName = 'mina-wc-slot-reorder-item flex-none hover:!z-50 focus-within:!z-50'
 const attachmentReorderItemClassName = 'pointer-events-auto outline-0 focus-visible:[&_.mina-wc-slot-thumb]:shadow-[0_18px_28px_-24px_color-mix(in_oklch,var(--foreground)_34%,transparent),0_0_0_2px_color-mix(in_oklch,var(--foreground-secondary)_55%,transparent)]'
 const stackAddClassName = 'mina-wc-stack-add pointer-events-auto relative flex aspect-[3/4] min-h-0 w-full flex-none cursor-pointer items-center justify-center gap-1 overflow-hidden rounded-[12px] border-0 bg-[color-mix(in_oklch,var(--surface-container-lowest)_92%,var(--surface-container-low))] text-foreground-tertiary shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--foreground-quaternary)_18%,transparent),0_8px_18px_-14px_color-mix(in_oklch,var(--foreground)_24%,transparent)] hover:bg-[color-mix(in_oklch,var(--surface-container-lowest)_100%,var(--surface-container-low))] hover:text-foreground focus-within:bg-[color-mix(in_oklch,var(--surface-container-lowest)_100%,var(--surface-container-low))] focus-within:text-foreground'
-const collapsedStackAddClassName = 'absolute bottom-[5px] left-[calc(var(--composer-media-width)_-_12px)] z-10 m-0 aspect-square size-8 min-h-8 rounded-full border-[1.5px] border-white bg-zinc-200 p-0 text-zinc-900 shadow-[0_4px_8px_-2px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.06)] hover:bg-zinc-200 hover:text-zinc-900 hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.16),0_2px_4px_rgba(0,0,0,0.1)] focus-within:bg-zinc-200 focus-within:text-zinc-900 focus-within:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.16),0_2px_4px_rgba(0,0,0,0.1)] [&_svg]:size-4 [&_svg]:stroke-[2.5px]'
+const collapsedStackAddClassName = 'absolute bottom-[4px] left-[calc(var(--composer-media-width)_-_10px)] z-10 m-0 aspect-square size-7 min-h-7 rounded-full border-[1.5px] border-white bg-zinc-200 p-0 text-zinc-900 shadow-[0_4px_8px_-2px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.06)] hover:bg-zinc-200 hover:text-zinc-900 hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.16),0_2px_4px_rgba(0,0,0,0.1)] focus-within:bg-zinc-200 focus-within:text-zinc-900 focus-within:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.16),0_2px_4px_rgba(0,0,0,0.1)] [&_svg]:size-3.5 [&_svg]:stroke-[2.5px]'
 const expandedStackAddClassName = 'ml-2.5 h-auto w-(--composer-media-width) origin-center rounded-[12px] border-[1.5px] border-dashed border-[color:rgba(24,24,27,0.15)] bg-zinc-100/80 text-zinc-900 shadow-[0_4px_10px_-4px_rgba(0,0,0,0.1)] hover:bg-surface-container-high hover:text-foreground focus-within:bg-surface-container-high focus-within:text-foreground'
 const emptyStackAddClassName = 'relative z-[1] m-0 h-auto w-(--composer-media-width) rounded-[12px] bg-[color-mix(in_oklch,var(--surface-container-lowest)_92%,var(--surface-container-low))]'
+const collapsedEmptyStackAddClassName = 'relative z-[1] m-0 h-auto w-(--composer-media-width) rounded-[10px] border-[1.5px] border-dashed border-[color:rgba(24,24,27,0.18)] bg-zinc-100/80 text-zinc-900 shadow-[0_4px_10px_-4px_rgba(0,0,0,0.1)] [&_svg]:size-4'
 
 const itemIdFromUnique = (id: UniqueIdentifier): string => String(id)
 
@@ -182,7 +183,7 @@ function SortableMediaSlotItem({
       ? `${CSS.Transform.toString(transform)} rotate(var(--slot-stack-rotate, 0deg))`
       : stackTransform,
     transformOrigin: attachment ? (expanded ? 'center center' : '86% 76%') : undefined,
-    willChange: attachment ? 'transform' : undefined,
+    willChange: isDragging ? 'transform' : undefined,
     zIndex: isDragging ? 99 : itemCount - index,
   } as CSSProperties
   const dragHandleProps = {
@@ -299,6 +300,7 @@ export function MediaStackSlotRenderer({
   const [dragPoint, setDragPoint] = useState<DragPoint | undefined>()
   const [outsideDropTarget, setOutsideDropTarget] = useState(false)
   const collapseTimerRef = useRef<number | undefined>(undefined)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const slotElementRef = useRef<HTMLElement | undefined>(undefined)
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -311,7 +313,8 @@ export function MediaStackSlotRenderer({
     }),
   )
   const { accept, label, slot } = descriptor
-  const attachment = variant === 'attachment'
+  const attachment = variant === 'attachment' || variant === 'collapsed'
+  const collapsed = variant === 'collapsed'
   const expanded = forceExpanded || hoveredSlot === slot || focusedSlot === slot || Boolean(draggingItemId) || (!attachment && items.length <= 4)
   const visibleItems = expanded ? items : items.slice(0, COLLAPSED_VISIBLE_COUNT)
   const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
@@ -423,7 +426,8 @@ export function MediaStackSlotRenderer({
             className={cn(
               slotGridClassName,
               attachment && attachmentSlotGridClassName,
-              attachment && expanded ? 'py-1.5' : expanded && 'pb-1',
+              collapsed && 'h-[62px] max-h-[62px] min-h-[62px]',
+              attachment && expanded && !collapsed ? 'py-1.5' : expanded && !collapsed && 'pb-1',
               attachment && outsideDropTarget && 'opacity-[0.64]',
             )}
             data-mina-canvas-ignore="true"
@@ -450,13 +454,15 @@ export function MediaStackSlotRenderer({
       {activeItem && dragPoint ? (
         <DragPreviewPortal actions={actions} dragPoint={dragPoint} item={activeItem} slot={slot} />
       ) : null}
-      <label
+      <button
         aria-label={`Add ${label}`}
         className={cn(
           stackAddClassName,
           attachment && items.length === 0 && emptyStackAddClassName,
+          collapsed && items.length === 0 && collapsedEmptyStackAddClassName,
           attachment && items.length > 0 && !expanded && collapsedStackAddClassName,
           attachment && expanded && expandedStackAddClassName,
+          collapsed && items.length > 0 && 'size-7 min-h-7',
           attachment && draggingItemId && 'pointer-events-none opacity-0',
           actions.uploading && 'pointer-events-none opacity-50',
         )}
@@ -464,8 +470,14 @@ export function MediaStackSlotRenderer({
         data-variant={variant}
         data-uploading={actions.uploading ? 'true' : undefined}
         title={`Add ${label}`}
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
+          fileInputRef.current?.click()
+        }}
         onMouseEnter={expanded ? expandSlot : undefined}
         onMouseLeave={expanded ? scheduleCollapseSlot : undefined}
+        onPointerDown={(event) => event.stopPropagation()}
         style={
           expanded
             ? ({
@@ -478,17 +490,18 @@ export function MediaStackSlotRenderer({
         }
       >
         <Plus aria-hidden="true" size={18} />
-        <input
-          accept={accept}
-          className="hidden"
-          disabled={actions.uploading}
-          onChange={(event) => {
-            uploadToSlot(event.currentTarget.files?.[0])
-            event.currentTarget.value = ''
-          }}
-          type="file"
-        />
-      </label>
+      </button>
+      <input
+        ref={fileInputRef}
+        accept={accept}
+        className="hidden"
+        disabled={actions.uploading}
+        onChange={(event) => {
+          uploadToSlot(event.currentTarget.files?.[0])
+          event.currentTarget.value = ''
+        }}
+        type="file"
+      />
     </section>
   )
 }

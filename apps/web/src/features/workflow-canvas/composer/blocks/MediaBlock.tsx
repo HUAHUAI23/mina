@@ -8,12 +8,13 @@ interface MediaBlockProps {
   surface: Exclude<ComposerSurface, 'hidden'>
 }
 
-export function MediaBlock({ node }: MediaBlockProps) {
-  const { mediaActions } = useMediaTaskForm()
+export function MediaBlock(_: MediaBlockProps) {
+  const { mediaActions, mediaSlots, nodeType } = useMediaTaskForm()
 
   return (
     <MediaSlotList
-      node={node}
+      mediaSlots={mediaSlots}
+      nodeType={nodeType}
       {...(mediaActions.uploading !== undefined ? { uploading: mediaActions.uploading } : {})}
       onAddUpload={mediaActions.onAddUpload}
       onChange={mediaActions.onChange}

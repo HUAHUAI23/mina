@@ -69,6 +69,23 @@ if (!selectedEdgeAfter?.selected) {
   throw new Error('Hydrating document updates should preserve selected edge interaction state.')
 }
 
+const secondNode = getFlowRenderSnapshot().flowNodes[1]
+if (!secondNode) {
+  throw new Error('Expected a second hydrated flow node.')
+}
+
+useFlowRenderStore.getState().hydrateFromDocument({
+  edges: fixture.edges,
+  nodes: fixture.nodes,
+  selectedNodeIds: [secondNode.id],
+})
+
+const firstAfterExternalSelection = getFlowRenderSnapshot().flowNodesById[firstNode.id]
+const secondAfterExternalSelection = getFlowRenderSnapshot().flowNodesById[secondNode.id]
+if (firstAfterExternalSelection?.selected || !secondAfterExternalSelection?.selected) {
+  throw new Error('External selected node ids should project into flow node selection.')
+}
+
 useFlowRenderStore.getState().setLocalFrameNodeIds([firstNode.id])
 useFlowRenderStore.getState().applyNodeChanges([
   {

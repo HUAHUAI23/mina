@@ -5,7 +5,7 @@ import type {
   WorkflowCanvasNode,
   WorkflowNodeType,
 } from '@mina/contracts/modules/canvas'
-import type { MediaSlotName, NodeMediaSlotItem } from '@mina/contracts/modules/media'
+import type { MediaSlotName, NodeMediaSlotItem, NodeMediaSlots } from '@mina/contracts/modules/media'
 import type { TaskDraftConfig } from '@mina/contracts/modules/tasks'
 import type { XYPosition } from '@xyflow/react'
 
@@ -34,6 +34,12 @@ export interface CanvasGraphState {
 
 export interface CanvasGraphActions {
   addMediaConnection(input: MediaConnectionInput): void
+  addMediaGenerationNode(input: {
+    mediaSlots?: NodeMediaSlots | undefined
+    nodeType: Extract<WorkflowNodeType, 'image_generation' | 'video_generation'>
+    position?: XYPosition | undefined
+    task: TaskDraftConfig
+  }): string
   addNode(type: WorkflowNodeType, task?: TaskDraftConfig | undefined): string
   commitNodeFrames(input: readonly CanvasNodeFramePatch[]): void
   removeGraphEdges(edgeIds: readonly string[]): void

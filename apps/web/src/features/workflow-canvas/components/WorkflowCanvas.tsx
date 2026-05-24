@@ -11,6 +11,7 @@ import { NodeGroupNode } from './nodes/NodeGroupNode'
 import { TextNode } from './nodes/TextNode'
 import { CanvasDock } from './dock/CanvasDock'
 import { useCanvasUiStore } from '../store/canvas-ui-store'
+import { selectWorkflowCanvasNodes } from '../store/canvas-selection-actions'
 import { useCanvasEdges, useCanvasNodes } from '../store/selectors'
 import { isIgnoredCanvasTarget, isReactFlowPaneTarget } from '../utils/canvas-dom-scope'
 import { useWorkflowFlowHandlers } from '../react-flow/use-workflow-flow-handlers'
@@ -58,7 +59,7 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
   const setRuntime = useWorkflowRuntimeStore((state) => state.setRuntime)
   const openNodePanel = useCanvasUiStore((state) => state.openNodePanel)
   const closeNodePanel = useCanvasUiStore((state) => state.closeNodePanel)
-  const selectNodeIds = useCanvasUiStore((state) => state.selectNodeIds)
+  const selectedNodeIds = useCanvasUiStore((state) => state.selectedNodeIds)
   const {
     onConnect,
     onEdgesChange,
@@ -83,8 +84,8 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
   )
 
   useEffect(() => {
-    hydrateRenderFromDocument({ edges, nodes })
-  }, [edges, hydrateRenderFromDocument, nodes])
+    hydrateRenderFromDocument({ edges, nodes, selectedNodeIds })
+  }, [edges, hydrateRenderFromDocument, nodes, selectedNodeIds])
 
   useEffect(() => {
     setRuntime({ actions: runtimeActions, runError, runningNodeId })
@@ -120,21 +121,21 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
     (event: React.MouseEvent) => {
       if (isReactFlowPaneTarget(event.target)) {
         closeNodePanel()
-        selectNodeIds([])
+        selectWorkflowCanvasNodes([])
       }
     },
-    [closeNodePanel, selectNodeIds],
+    [closeNodePanel],
   )
   const handleSelectionChange = useCallback(
     ({ nodes: selectedNodes, edges: selectedEdges }: { nodes: WorkflowFlowNode[]; edges: WorkflowFlowEdge[] }) => {
       const nodeIds = selectedNodes.map((node) => node.id)
-      selectNodeIds(nodeIds)
+      selectWorkflowCanvasNodes(nodeIds)
       publishLocalSelection({
         edgeIds: selectedEdges.map((edge) => edge.id),
         nodeIds,
       })
     },
-    [selectNodeIds],
+    [],
   )
   const handleConnectStart = useCallback(() => {
     stageRef.current?.setAttribute('data-connecting', '')

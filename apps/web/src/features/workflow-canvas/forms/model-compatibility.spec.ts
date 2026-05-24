@@ -1,4 +1,5 @@
 import { formValuesEqual, formValueWithCompatibleModel, taskWithCompatibleModel } from './model-compatibility'
+import { normalizeMediaSlotsForNodeType } from '../domain/media-slot-policy'
 
 const assert = (condition: unknown, message: string): void => {
   if (!condition) {
@@ -83,5 +84,29 @@ assert(
   ),
   'formValuesEqual should catch same-model remote prompt changes',
 )
+
+const incompatibleSlots = normalizeMediaSlotsForNodeType('video_generation', {
+  firstFrame: [
+    {
+      id: 'compatible-video-slot',
+      order: 0,
+      required: true,
+      slot: 'firstFrame',
+      source: { type: 'media_object' as const, mediaObjectId: 'media_1' },
+    },
+  ],
+  inputImages: [
+    {
+      id: 'image-only-slot',
+      order: 0,
+      required: true,
+      slot: 'inputImages',
+      source: { type: 'media_object' as const, mediaObjectId: 'media_2' },
+    },
+  ],
+})
+
+assert(incompatibleSlots.firstFrame?.length === 1, 'cross-kind media slot normalization should preserve compatible slots')
+assert(!incompatibleSlots.inputImages?.length, 'cross-kind media slot normalization should remove incompatible slots')
 
 console.log('model compatibility checks passed')

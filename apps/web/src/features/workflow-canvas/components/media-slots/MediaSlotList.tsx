@@ -1,10 +1,9 @@
 import { type ClipboardEvent, type DragEvent, useMemo, useState } from 'react'
 import type { MediaSlotName, NodeMediaSlotItem } from '@mina/contracts/modules/media'
 import type { NodeMediaSlots } from '@mina/contracts/modules/media'
-import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
+import type { WorkflowNodeType } from '@mina/contracts/modules/canvas'
 import { cn } from '@mina/ui/lib/utils'
 
-import { isMediaGenerationNode } from '../../domain/canvas-node-types'
 import {
   defaultMediaSlotForNodeType,
   type MediaSlotDescriptor,
@@ -14,15 +13,17 @@ import { slotRendererRegistry, type SlotRendererActions } from '../../composer/s
 import '../../composer/slots'
 
 interface MediaSlotListProps {
+  actions?: SlotRendererActions | undefined
   forceExpanded?: boolean | undefined
-  node: WorkflowCanvasNode
-  onAddUpload(slot: MediaSlotName, file: File, options?: { position?: 'end' | 'start' }): void
-  onChange(item: NodeMediaSlotItem): void
-  onRemove(slot: MediaSlotName, slotItemId: string): void
-  onReplaceUpload(slot: MediaSlotName, slotItemId: string, file: File): void
-  onReorder(slot: MediaSlotName, orderedIds: string[]): void
-  uploading?: boolean
-  variant?: 'attachment' | 'block'
+  mediaSlots: NodeMediaSlots
+  nodeType: Extract<WorkflowNodeType, 'image_generation' | 'video_generation'>
+  onAddUpload?: ((slot: MediaSlotName, file: File, options?: { position?: 'end' | 'start' }) => void) | undefined
+  onChange?: ((item: NodeMediaSlotItem) => void) | undefined
+  onRemove?: ((slot: MediaSlotName, slotItemId: string) => void) | undefined
+  onReplaceUpload?: ((slot: MediaSlotName, slotItemId: string, file: File) => void) | undefined
+  onReorder?: ((slot: MediaSlotName, orderedIds: string[]) => void) | undefined
+  uploading?: boolean | undefined
+  variant?: 'attachment' | 'block' | 'collapsed'
 }
 
 const firstPastedFile = (event: ClipboardEvent<HTMLElement>): File | undefined => {
@@ -45,6 +46,7 @@ const slotItemCount = (mediaSlots: NodeMediaSlots | undefined, slot: MediaSlotNa
 
 const slotListClassName = 'mina-wc-slot-list nodrag nowheel nopan grid min-w-0 items-start gap-2 outline-0'
 const attachmentSlotListClassName = 'max-w-[min(520px,calc(100vw_-_72px))] overflow-visible pointer-events-none'
+const collapsedSlotListClassName = 'w-auto overflow-visible pointer-events-auto [--composer-media-width:46px]'
 const slotTabsClassName = 'mina-wc-slot-tabs flex min-w-0 items-center gap-1.5 overflow-x-auto pb-0.5'
 const attachmentSlotTabsClassName = 'pointer-events-auto -mt-3 mb-[5px] max-w-max rounded-full bg-[color-mix(in_oklch,var(--surface-container-lowest)_88%,transparent)] p-[3px] shadow-[0_12px_26px_-22px_color-mix(in_oklch,var(--foreground)_24%,transparent)]'
 const slotTabClassName = 'mina-wc-slot-tab group inline-flex min-h-[30px] flex-none items-center gap-1.5 rounded-full border-0 bg-transparent px-[9px] text-[0.72rem] font-extrabold text-foreground-tertiary hover:bg-surface-container-low hover:text-foreground aria-selected:bg-surface-container-low aria-selected:text-foreground'
@@ -65,8 +67,10 @@ const preferredActiveSlot = (
 }
 
 export function MediaSlotList({
+  actions: actionsProp,
   forceExpanded,
-  node,
+  mediaSlots,
+  nodeType,
   onAddUpload,
   onChange,
   onRemove,
@@ -75,36 +79,36 @@ export function MediaSlotList({
   uploading,
   variant = 'block',
 }: MediaSlotListProps) {
-  if (!isMediaGenerationNode(node)) {
-    return null
-  }
-  const mediaSlots = node.data.mediaSlots ?? {}
-  const slotPolicy = mediaSlotsForNodeType(node.data.nodeType)
-  const defaultSlot = defaultMediaSlotForNodeType(node.data.nodeType)
+  const slotPolicy = mediaSlotsForNodeType(nodeType)
+  const defaultSlot = defaultMediaSlotForNodeType(nodeType)
   const [expandedSlot, setExpandedSlot] = useState<MediaSlotName | undefined>()
   const [selectedSlot, setSelectedSlot] = useState<MediaSlotName | undefined>(defaultSlot)
   const activeSlot = preferredActiveSlot(slotPolicy, mediaSlots, selectedSlot, defaultSlot)
   const activeDescriptor = slotPolicy.find((descriptor) => descriptor.slot === activeSlot) ?? slotPolicy[0]
   const actions = useMemo<SlotRendererActions>(
-    () => ({
+    () => actionsProp ?? {
       ...(uploading !== undefined ? { uploading } : {}),
-      onAddUpload,
-      onChange,
-      onRemove,
-      onReplaceUpload,
-      onReorder,
-    }),
-    [onAddUpload, onChange, onRemove, onReplaceUpload, onReorder, uploading],
+      onAddUpload: onAddUpload ?? (() => undefined),
+      onChange: onChange ?? (() => undefined),
+      onRemove: onRemove ?? (() => undefined),
+      onReplaceUpload: onReplaceUpload ?? (() => undefined),
+      onReorder: onReorder ?? (() => undefined),
+    },
+    [actionsProp, onAddUpload, onChange, onRemove, onReplaceUpload, onReorder, uploading],
   )
   if (!activeDescriptor) {
     return null
   }
-  const renderer = slotRendererRegistry.resolve({ descriptor: activeDescriptor, node })
+  const renderer = slotRendererRegistry.resolve({ descriptor: activeDescriptor, nodeType })
   const SlotRenderer = renderer.Component
 
   return (
     <div
-      className={cn(slotListClassName, variant === 'attachment' && attachmentSlotListClassName)}
+      className={cn(
+        slotListClassName,
+        variant === 'attachment' && attachmentSlotListClassName,
+        variant === 'collapsed' && collapsedSlotListClassName,
+      )}
       data-mina-canvas-ignore="true"
       data-expanded={expandedSlot ? 'true' : undefined}
       data-variant={variant}
@@ -112,6 +116,7 @@ export function MediaSlotList({
       onDragOver={(event) => {
         if (event.dataTransfer.types.includes('Files')) {
           event.preventDefault()
+          event.stopPropagation()
         }
       }}
       onDrop={(event) => {
@@ -121,7 +126,7 @@ export function MediaSlotList({
         }
         event.preventDefault()
         event.stopPropagation()
-        onAddUpload(defaultSlot, file)
+        actions.onAddUpload(defaultSlot, file, { position: 'start' })
       }}
       onPaste={(event) => {
         const file = firstPastedFile(event)
@@ -130,15 +135,16 @@ export function MediaSlotList({
         }
         event.preventDefault()
         event.stopPropagation()
-        onAddUpload(defaultSlot, file, { position: 'start' })
+        actions.onAddUpload(defaultSlot, file, { position: 'start' })
       }}
     >
       {slotPolicy.length > 1 ? (
         <div
           className={cn(
             slotTabsClassName,
-            variant === 'attachment' && attachmentSlotTabsClassName,
+            (variant === 'attachment' || variant === 'collapsed') && attachmentSlotTabsClassName,
             variant === 'attachment' && !expandedSlot && 'hidden',
+            variant === 'collapsed' && 'hidden',
           )}
           role="tablist"
           aria-label="Media slot"
@@ -146,7 +152,7 @@ export function MediaSlotList({
           {slotPolicy.map((descriptor) => (
             <button
               aria-selected={descriptor.slot === activeDescriptor.slot}
-              className={cn(slotTabClassName, variant === 'attachment' && attachmentSlotTabClassName)}
+              className={cn(slotTabClassName, (variant === 'attachment' || variant === 'collapsed') && attachmentSlotTabClassName)}
               key={descriptor.slot}
               onClick={() => setSelectedSlot(descriptor.slot)}
               role="tab"
@@ -164,7 +170,7 @@ export function MediaSlotList({
         forceExpanded={forceExpanded}
         items={mediaSlots[activeDescriptor.slot] ?? []}
         key={activeDescriptor.slot}
-        node={node}
+        nodeType={nodeType}
         onExpandedChange={(expanded) => setExpandedSlot(expanded ? activeDescriptor.slot : undefined)}
         variant={variant}
       />

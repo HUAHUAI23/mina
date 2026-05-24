@@ -1,5 +1,3 @@
-export * from './client-model-registry'
-
 import { imageClientModelSpecs } from './image-specs'
 import { registerClientModel } from './client-model-registry'
 import { videoClientModelSpecs } from './video-specs'

@@ -1,4 +1,5 @@
-import { deriveGenerationMode, deriveModelCompatibilityMode, listClientModels, paramsForSpec, resolveClientModel } from './index'
+import { deriveGenerationMode, deriveModelCompatibilityMode, listClientModels, paramsForSpec, resolveClientModel } from './client-model-registry'
+import './index'
 
 const assert = (condition: unknown, message: string): void => {
   if (!condition) {

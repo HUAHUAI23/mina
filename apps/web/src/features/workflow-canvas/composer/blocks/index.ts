@@ -8,7 +8,7 @@ import { composerRegistry } from '../registry'
 import { GroupBlock } from './GroupBlock'
 import { MediaComposerBlock } from './MediaComposerBlock'
 import { MultiSelectionBlock } from './MultiSelectionBlock'
-import { PromptBlock } from './PromptBlock'
+import { EmptyMediaComposer } from './EmptyMediaComposer'
 import { TextBlock } from './TextBlock'
 
 composerRegistry.register<{ node: MediaGenerationCanvasNode; runtime: ComposerRuntime }>({
@@ -25,16 +25,15 @@ composerRegistry.register<{ node: MediaGenerationCanvasNode; runtime: ComposerRu
   Component: MediaComposerBlock,
 })
 
-composerRegistry.register<{ node?: MediaGenerationCanvasNode | undefined; runtime: ComposerRuntime }>({
-  id: 'prompt',
+composerRegistry.register<{ runtime: ComposerRuntime }>({
+  id: 'empty-media-composer',
   priority: 20,
   match: (ctx) => ctx.kind === 'empty',
   surface: (ctx) => (ctx.kind === 'empty' ? 'collapsed' : 'expanded'),
   selectProps: (_ctx, runtime) => ({
-    node: undefined,
     runtime,
   }),
-  Component: PromptBlock,
+  Component: EmptyMediaComposer,
 })
 
 composerRegistry.register<{ node: WorkflowCanvasNode }>({

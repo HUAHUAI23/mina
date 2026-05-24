@@ -1,6 +1,7 @@
 import { createFormHook, createFormHookContexts, type AppFieldExtendedReactFormApi } from '@tanstack/react-form'
 import type { FormAsyncValidateOrFn, FormValidateOrFn } from '@tanstack/react-form'
 import type { ComponentType, ReactNode } from 'react'
+import { cn } from '@mina/ui/lib/utils'
 
 import type { NodeTaskFormValue } from './model-form-utils'
 import { PromptField } from './shared/PromptField'
@@ -31,13 +32,15 @@ interface SelectOption {
 }
 
 export interface TextFieldProps {
+  ariaLabel?: string
+  inputClassName?: string | undefined
   label?: string
   multiline?: boolean
   placeholder?: string
   textareaClassName?: string | undefined
 }
 
-function TextField({ label, multiline = false, placeholder, textareaClassName }: TextFieldProps) {
+function TextField({ ariaLabel, inputClassName, label, multiline = false, placeholder, textareaClassName }: TextFieldProps) {
   const field = useFieldContext<string>()
   const error = getFieldErrorMessage(field.state.meta)
 
@@ -57,10 +60,11 @@ function TextField({ label, multiline = false, placeholder, textareaClassName }:
 
   return (
     <label className={fieldClassName}>
-      <span className={fieldLabelClassName}>{label}</span>
+      {label ? <span className={fieldLabelClassName}>{label}</span> : null}
       <input
         aria-invalid={error ? true : undefined}
-        className={fieldControlClassName}
+        aria-label={ariaLabel ?? label}
+        className={cn(fieldControlClassName, inputClassName)}
         onBlur={field.handleBlur}
         onChange={(event) => field.handleChange(event.target.value)}
         placeholder={placeholder}

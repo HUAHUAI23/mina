@@ -32,6 +32,7 @@ interface FlowRenderActions {
   hydrateFromDocument(input: {
     edges: readonly WorkflowCanvasEdge[]
     nodes: readonly WorkflowCanvasNode[]
+    selectedNodeIds?: readonly string[] | undefined
   }): void
   releaseLocalFrameNodeIds(nodeIds: readonly string[]): void
   setDraggingNodeIds(nodeIds: readonly string[]): void
@@ -53,11 +54,14 @@ const preserveNodeInteraction = (
   nodes: readonly WorkflowFlowNode[],
   previousNodes: Readonly<Record<string, WorkflowFlowNode>>,
   localFrameNodeIds: ReadonlySet<string>,
+  selectedNodeIds?: ReadonlySet<string> | undefined,
 ): WorkflowFlowNode[] => {
   let changed = false
   const nextNodes = nodes.map((node) => {
     const previous = previousNodes[node.id]
+    const selected = selectedNodeIds ? selectedNodeIds.has(node.id) : previous?.selected
     if (previous && localFrameNodeIds.has(node.id)) {
+      const nextSelected = selected ?? previous.selected
       changed = true
       return {
         ...node,
@@ -65,14 +69,15 @@ const preserveNodeInteraction = (
         measured: previous.measured,
         parentId: previous.parentId,
         position: previous.position,
+        selected: nextSelected,
         width: previous.width,
       } as WorkflowFlowNode
     }
-    if (previous?.selected === undefined || previous.selected === node.selected) {
+    if (selected === undefined || selected === node.selected) {
       return node
     }
     changed = true
-    return { ...node, selected: previous.selected } as WorkflowFlowNode
+    return { ...node, selected } as WorkflowFlowNode
   })
   return changed ? nextNodes : (nodes as WorkflowFlowNode[])
 }
@@ -136,7 +141,8 @@ export const useFlowRenderStore = create<FlowRenderStore>((set, get) => ({
       ...state.interaction.draggingNodeIds,
       ...state.interaction.localFrameNodeIds,
     ])
-    const flowNodes = preserveNodeInteraction(projected.nodes, state.flowNodesById, localFrameNodeIds)
+    const selectedNodeIds = input.selectedNodeIds ? new Set(input.selectedNodeIds) : undefined
+    const flowNodes = preserveNodeInteraction(projected.nodes, state.flowNodesById, localFrameNodeIds, selectedNodeIds)
     const flowEdges = preserveEdgeInteraction(projected.edges, state.flowEdgesById)
     if (state.flowNodes === flowNodes && state.flowEdges === flowEdges) {
       return

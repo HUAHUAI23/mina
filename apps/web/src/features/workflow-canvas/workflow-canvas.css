@@ -280,17 +280,9 @@
   bottom: 34px;
   left: 50%;
   margin: 0;
-  max-width: min(980px, calc(100vw - 48px));
   pointer-events: none;
   transform: translateX(-50%);
-  width: min(980px, calc(100vw - 48px));
   z-index: 20;
-}
-
-@media (max-width: 1024px) {
-  .mina-wc-canvas-dock.react-flow__panel {
-    width: min(680px, calc(100vw - 32px));
-  }
 }
 
 @media (max-width: 720px) {
@@ -300,7 +292,7 @@
     max-width: none;
     right: 10px !important;
     transform: none !important;
-    width: auto;
+    width: auto !important;
   }
 
 }

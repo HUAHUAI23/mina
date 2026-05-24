@@ -1,5 +1,5 @@
 import type { WorkflowCanvasEdge, WorkflowCanvasNode, WorkflowNodeType } from '@mina/contracts/modules/canvas'
-import type { MediaSlotName, NodeMediaSlotItem } from '@mina/contracts/modules/media'
+import type { MediaSlotName, NodeMediaSlotItem, NodeMediaSlots } from '@mina/contracts/modules/media'
 import type { NodeMediaViewState } from '@mina/contracts/modules/canvas'
 import type { TaskDraftConfig } from '@mina/contracts/modules/tasks'
 
@@ -8,6 +8,7 @@ import {
   coerceMediaSlotForNodeType,
   defaultSelectorForMediaSlot,
   isMediaSlotAllowedForNodeType,
+  normalizeMediaSlotsForNodeType,
 } from '../../domain/media-slot-policy'
 import { mediaSlotFromHandleId } from '../../domain/media-slot-handles'
 import { shareFlowGroupScope } from '../../utils/flow-scope'
@@ -231,6 +232,26 @@ export const workflowYjsCommands = {
 
   addNode(context: WorkflowYjsCommandContext, type: WorkflowNodeType, task?: TaskDraftConfig | undefined): string {
     const node = createWorkflowCanvasNode(type, context.nodes.length, task)
+    withYDoc(context, (y) => upsertNode(y, node))
+    return node.id
+  },
+
+  addMediaGenerationNode(context: WorkflowYjsCommandContext, input: {
+    mediaSlots?: NodeMediaSlots | undefined
+    nodeType: Extract<WorkflowNodeType, 'image_generation' | 'video_generation'>
+    position?: { x: number; y: number } | undefined
+    task: TaskDraftConfig
+  }): string {
+    const node = createWorkflowCanvasNode(input.nodeType, context.nodes.length, input.task)
+    if (!isMediaGenerationNode(node)) {
+      return node.id
+    }
+    if (input.position) {
+      node.position = input.position
+    }
+    node.data.config.task = input.task
+    node.data.mediaSlots = normalizeMediaSlotsForNodeType(input.nodeType, input.mediaSlots)
+    node.data.config.task = taskWithCompatibleModel(node.data.config.task, node.data.mediaSlots)
     withYDoc(context, (y) => upsertNode(y, node))
     return node.id
   },

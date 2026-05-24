@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react'
 import type { MediaSlotName, NodeMediaSlotItem } from '@mina/contracts/modules/media'
-import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
+import type { WorkflowNodeType } from '@mina/contracts/modules/canvas'
 
 import type { MediaSlotDescriptor } from '../domain/media-slot-policy'
 
@@ -18,15 +18,15 @@ export interface SlotRendererProps {
   descriptor: MediaSlotDescriptor
   forceExpanded?: boolean | undefined
   items: NodeMediaSlotItem[]
-  node: WorkflowCanvasNode
+  nodeType: Extract<WorkflowNodeType, 'image_generation' | 'video_generation'>
   onExpandedChange?: ((expanded: boolean) => void) | undefined
-  variant?: 'attachment' | 'block'
+  variant?: 'attachment' | 'block' | 'collapsed'
 }
 
 export interface SlotRendererSpec {
   Component: ComponentType<SlotRendererProps>
   id: string
-  match(input: { descriptor: MediaSlotDescriptor; node: WorkflowCanvasNode }): boolean
+  match(input: { descriptor: MediaSlotDescriptor; nodeType: Extract<WorkflowNodeType, 'image_generation' | 'video_generation'> }): boolean
   priority: number
 }
 
@@ -40,7 +40,7 @@ class SlotRendererRegistry {
     this.specs.push(spec)
   }
 
-  resolve(input: { descriptor: MediaSlotDescriptor; node: WorkflowCanvasNode }): SlotRendererSpec {
+  resolve(input: { descriptor: MediaSlotDescriptor; nodeType: Extract<WorkflowNodeType, 'image_generation' | 'video_generation'> }): SlotRendererSpec {
     const [spec] = this.specs
       .filter((candidate) => candidate.match(input))
       .sort((left, right) => left.priority - right.priority)

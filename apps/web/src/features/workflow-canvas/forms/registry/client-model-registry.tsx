@@ -47,9 +47,6 @@ const registry = new Map<string, ClientModelSpec>()
 export const modelKey = (key: Pick<ModelKey, 'kind' | 'model' | 'provider'>): string =>
   `${key.kind}:${key.provider}:${key.model}`
 
-export const modelSelectValue = (key: Pick<ModelKey, 'model' | 'provider'>): string =>
-  `${key.provider}:${key.model}`
-
 export const registerClientModel = (spec: ClientModelSpec): void => {
   const key = modelKey(spec.key)
   if (registry.has(key)) {
