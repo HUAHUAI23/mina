@@ -2,6 +2,8 @@ import { imageClientModelSpecs } from './image-specs'
 import { registerClientModel } from './client-model-registry'
 import { videoClientModelSpecs } from './video-specs'
 
-for (const spec of [...imageClientModelSpecs, ...videoClientModelSpecs]) {
+export const allClientModelSpecs = [...imageClientModelSpecs, ...videoClientModelSpecs] as const
+
+for (const spec of allClientModelSpecs) {
   registerClientModel(spec)
 }

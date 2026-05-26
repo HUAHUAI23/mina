@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import * as Y from 'yjs'
 
 import {
@@ -34,10 +34,21 @@ export const useWorkflowYjsSync = (workflowId: string, enabled = true): void => 
   const yRef = useRef<WorkflowYDocHandles | undefined>(undefined)
   const yWorkflowIdRef = useRef<string | undefined>(undefined)
 
-  if (enabled && (!yRef.current || yWorkflowIdRef.current !== workflowId)) {
-    yRef.current = createWorkflowYDoc()
+  useLayoutEffect(() => {
+    if (!enabled) {
+      return
+    }
+    const y = createWorkflowYDoc()
+    yRef.current = y
     yWorkflowIdRef.current = workflowId
-  }
+    return () => {
+      if (yRef.current === y) {
+        yRef.current = undefined
+        yWorkflowIdRef.current = undefined
+      }
+      y.ydoc.destroy()
+    }
+  }, [enabled, workflowId])
 
   useEffect(() => {
     if (!enabled) {
@@ -51,6 +62,10 @@ export const useWorkflowYjsSync = (workflowId: string, enabled = true): void => 
     registerWorkflowYjsRuntime(workflowId, y, getCanvasSnapshot())
     const provider = createWorkflowYjsProvider(workflowId, y)
     providerRef.current = provider
+
+    let disposed = false
+    let projectionFrame: number | undefined
+    let projectionScheduled = false
 
     const projectYjsToStore = () => {
       const snapshot = exportWorkflowYjsSnapshot(y)
@@ -86,6 +101,26 @@ export const useWorkflowYjsSync = (workflowId: string, enabled = true): void => 
       })
     }
 
+    const runScheduledProjection = () => {
+      projectionFrame = undefined
+      projectionScheduled = false
+      if (!disposed) {
+        projectYjsToStore()
+      }
+    }
+
+    const scheduleProjectYjsToStore = () => {
+      if (projectionScheduled) {
+        return
+      }
+      projectionScheduled = true
+      if (typeof window === 'undefined') {
+        queueMicrotask(runScheduledProjection)
+        return
+      }
+      projectionFrame = window.requestAnimationFrame(runScheduledProjection)
+    }
+
     const onUpdate = (_update: Uint8Array, origin: unknown) => {
       const isLocal = origin === 'mina-local' || origin === 'mina-bootstrap'
       if (isLocal) {
@@ -93,7 +128,7 @@ export const useWorkflowYjsSync = (workflowId: string, enabled = true): void => 
       } else {
         incrementCanvasPerfCounter('yjsUpdatesReceived')
       }
-      projectYjsToStore()
+      scheduleProjectYjsToStore()
     }
     const onAwarenessUpdate = () => {
       useWorkflowPresenceStore.getState().setPeers(readRemoteWorkflowAwareness(provider.awareness))
@@ -126,10 +161,9 @@ export const useWorkflowYjsSync = (workflowId: string, enabled = true): void => 
       providerRef.current = undefined
       y.ydoc.off('update', onUpdate)
       unregisterWorkflowYjsRuntime(workflowId, y)
-      y.ydoc.destroy()
-      if (yRef.current === y) {
-        yRef.current = undefined
-        yWorkflowIdRef.current = undefined
+      disposed = true
+      if (projectionFrame !== undefined && typeof window !== 'undefined') {
+        window.cancelAnimationFrame(projectionFrame)
       }
     }
   }, [applyRemoteSnapshot, enabled, hydratedWorkflowId, setYjsConnectionStatus, workflowId])
@@ -168,13 +202,14 @@ export const useWorkflowYjsSync = (workflowId: string, enabled = true): void => 
     if (!enabled) {
       return
     }
-    let lastLocalState = useWorkflowPresenceStore.getState().local
+    let lastLocalSignature = JSON.stringify(useWorkflowPresenceStore.getState().local)
     const unsubscribe = useWorkflowPresenceStore.subscribe((state) => {
       const provider = providerRef.current
-      if (!provider || state.local === lastLocalState) {
+      const signature = JSON.stringify(state.local)
+      if (!provider || signature === lastLocalSignature) {
         return
       }
-      lastLocalState = state.local
+      lastLocalSignature = signature
       applyLocalWorkflowAwareness(provider.awareness, state.local)
     })
     return unsubscribe

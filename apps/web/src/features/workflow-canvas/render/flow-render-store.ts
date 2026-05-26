@@ -6,7 +6,7 @@ import {
   incrementCanvasPerfCounter,
   markCanvasPerformance,
 } from '../diagnostics/canvas-performance-marks'
-import { flowProjectionCache } from './flow-projection-cache'
+import { FlowProjectionCache } from './flow-projection-cache'
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import type { WorkflowFlowEdge, WorkflowFlowNode } from '../domain/flow-types'
 
@@ -24,6 +24,7 @@ interface FlowRenderState {
   flowNodesById: Record<string, WorkflowFlowNode>
   interaction: FlowRenderInteraction
   lastViewport: Viewport | undefined
+  projectionCache: FlowProjectionCache
 }
 
 interface FlowRenderActions {
@@ -112,6 +113,7 @@ export const useFlowRenderStore = create<FlowRenderStore>((set, get) => ({
   flowNodesById: {},
   interaction: emptyInteraction(),
   lastViewport: undefined,
+  projectionCache: new FlowProjectionCache(),
   applyEdgeChanges: (changes) => {
     if (changes.length === 0) {
       return
@@ -135,7 +137,7 @@ export const useFlowRenderStore = create<FlowRenderStore>((set, get) => ({
     })
   },
   hydrateFromDocument: (input) => {
-    const projected = flowProjectionCache.projectGraph(input)
+    const projected = get().projectionCache.projectGraph(input)
     const state = get()
     const localFrameNodeIds = new Set([
       ...state.interaction.draggingNodeIds,

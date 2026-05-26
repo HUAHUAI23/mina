@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react'
+import { createContext, useContext, useMemo, type ComponentType, type PropsWithChildren } from 'react'
 import type { TaskKind } from '@mina/contracts/modules/tasks'
 import type { NodeMediaSlots } from '@mina/contracts/modules/media'
 import type { z } from 'zod'
@@ -30,41 +30,98 @@ export interface ClientModelMediaCapabilities {
 }
 
 export interface ClientModelSpec<TParams extends TaskParams = TaskParams> {
-  AdvancedFields?: ComponentType<{ form: NodeTaskFormApi }>
-  BasicFields?: ComponentType<{ form: NodeTaskFormApi }>
+  AdvancedFields?: ComponentType<{ fields: 'params'; form: NodeTaskFormApi }>
+  BasicFields?: ComponentType<{ fields: 'params'; form: NodeTaskFormApi }>
   defaults: Partial<TParams>
   displayName: string
   key: ModelKey
   mediaCapabilities: ClientModelMediaCapabilities
-  paramKeys?: readonly string[]
+  /**
+   * Use only when a model intentionally exposes a strict subset of paramsSchema.
+   * The registry validates the override against the schema shape at registration.
+   */
+  paramKeysOverride?: readonly string[]
   paramsSchema?: z.ZodType<TParams>
   supportsMedia: boolean
   supportsText: boolean
 }
 
-const registry = new Map<string, ClientModelSpec>()
+export interface ClientModelRegistry {
+  listAll(kind?: TaskKind): ClientModelSpec[]
+  listModels(kind: TaskKind, mode: ModelCompatibilityMode): ClientModelSpec[]
+  register(spec: ClientModelSpec): void
+  resolve(key: ModelKey): ClientModelSpec | undefined
+}
 
 export const modelKey = (key: Pick<ModelKey, 'kind' | 'model' | 'provider'>): string =>
   `${key.kind}:${key.provider}:${key.model}`
 
-export const registerClientModel = (spec: ClientModelSpec): void => {
-  const key = modelKey(spec.key)
-  if (registry.has(key)) {
-    throw new Error(`Duplicate client model registration: ${key}`)
+export const createClientModelRegistry = (initialSpecs: readonly ClientModelSpec[] = []): ClientModelRegistry => {
+  const registry = new Map<string, ClientModelSpec>()
+  const api: ClientModelRegistry = {
+    listAll: (kind) =>
+      [...registry.values()].filter((spec) => !kind || spec.key.kind === kind),
+    listModels: (kind, mode) =>
+      [...registry.values()].filter(
+        (spec) => spec.key.kind === kind && (mode === 'media' ? spec.supportsMedia : spec.supportsText),
+      ),
+    register: (spec) => {
+      const key = modelKey(spec.key)
+      if (registry.has(key)) {
+        throw new Error(`Duplicate client model registration: ${key}`)
+      }
+      assertParamKeysOverride(spec)
+      registry.set(key, spec)
+    },
+    resolve: (key) => registry.get(modelKey(key)),
   }
-  registry.set(key, spec)
+  for (const spec of initialSpecs) {
+    api.register(spec)
+  }
+  return api
 }
 
-export const resolveClientModel = (key: ModelKey): ClientModelSpec | undefined =>
-  registry.get(modelKey(key))
+const defaultRegistry = createClientModelRegistry()
+const ClientModelRegistryContext = createContext<ClientModelRegistry | undefined>(undefined)
 
-export const listClientModels = (kind: TaskKind, mode: ModelCompatibilityMode): ClientModelSpec[] =>
-  [...registry.values()].filter(
-    (spec) => spec.key.kind === kind && (mode === 'media' ? spec.supportsMedia : spec.supportsText),
+export function ClientModelRegistryProvider({
+  children,
+  registry,
+  specs,
+}: PropsWithChildren<{
+  registry?: ClientModelRegistry | undefined
+  specs?: readonly ClientModelSpec[] | undefined
+}>) {
+  const value = useMemo(
+    () => registry ?? createClientModelRegistry(specs),
+    [registry, specs],
   )
 
+  return (
+    <ClientModelRegistryContext.Provider value={value}>
+      {children}
+    </ClientModelRegistryContext.Provider>
+  )
+}
+
+export const useClientModelRegistry = (): ClientModelRegistry => {
+  const registry = useContext(ClientModelRegistryContext)
+  if (!registry) {
+    return defaultRegistry
+  }
+  return registry
+}
+
+export const registerClientModel = (spec: ClientModelSpec): void => defaultRegistry.register(spec)
+
+export const resolveClientModel = (key: ModelKey): ClientModelSpec | undefined =>
+  defaultRegistry.resolve(key)
+
+export const listClientModels = (kind: TaskKind, mode: ModelCompatibilityMode): ClientModelSpec[] =>
+  defaultRegistry.listModels(kind, mode)
+
 export const listAllClientModels = (kind?: TaskKind): ClientModelSpec[] =>
-  [...registry.values()].filter((spec) => !kind || spec.key.kind === kind)
+  defaultRegistry.listAll(kind)
 
 export const deriveModelCompatibilityMode = (mediaSlots: NodeMediaSlots | undefined): ModelCompatibilityMode => {
   const hasMedia = Object.values(mediaSlots ?? {}).some((items) => (items?.length ?? 0) > 0)
@@ -84,8 +141,23 @@ const schemaParamKeys = (spec: ClientModelSpec): string[] => {
   return shape && typeof shape === 'object' ? Object.keys(shape) : []
 }
 
+const assertParamKeysOverride = (spec: ClientModelSpec): void => {
+  if (!spec.paramKeysOverride) {
+    return
+  }
+  const schemaKeys = schemaParamKeys(spec)
+  if (schemaKeys.length === 0) {
+    return
+  }
+  const schemaKeySet = new Set(schemaKeys)
+  const unknownKeys = spec.paramKeysOverride.filter((key) => !schemaKeySet.has(key))
+  if (unknownKeys.length > 0) {
+    throw new Error(`Client model ${modelKey(spec.key)} declares params outside its schema: ${unknownKeys.join(', ')}`)
+  }
+}
+
 export const paramsForSpec = (previousParams: TaskParams, spec: ClientModelSpec): TaskParams => {
-  const keys = new Set(spec.paramKeys ?? schemaParamKeys(spec))
+  const keys = new Set(spec.paramKeysOverride ?? schemaParamKeys(spec))
   const next: TaskParams = {}
   for (const [key, value] of Object.entries(spec.defaults)) {
     if (keys.size === 0 || keys.has(key)) {

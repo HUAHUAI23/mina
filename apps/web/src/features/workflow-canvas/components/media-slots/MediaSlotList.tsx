@@ -10,12 +10,15 @@ import {
   mediaSlotsForNodeType,
 } from '../../domain/media-slot-policy'
 import { slotRendererRegistry, type SlotRendererActions } from '../../composer/slot-renderer-registry'
-import '../../composer/slots'
+import type { ClientModelSpec } from '../../forms/registry/client-model-registry'
+import { useCanvasUiStore } from '../../store/canvas-ui-store'
 
 interface MediaSlotListProps {
   actions?: SlotRendererActions | undefined
+  composerId: string
   forceExpanded?: boolean | undefined
   mediaSlots: NodeMediaSlots
+  modelSpec?: ClientModelSpec | undefined
   nodeType: Extract<WorkflowNodeType, 'image_generation' | 'video_generation'>
   onAddUpload?: ((slot: MediaSlotName, file: File, options?: { position?: 'end' | 'start' }) => void) | undefined
   onChange?: ((item: NodeMediaSlotItem) => void) | undefined
@@ -44,6 +47,9 @@ const firstDroppedFile = (event: DragEvent<HTMLElement>): File | undefined =>
 const slotItemCount = (mediaSlots: NodeMediaSlots | undefined, slot: MediaSlotName): number =>
   mediaSlots?.[slot]?.length ?? 0
 
+const slotHasRoom = (mediaSlots: NodeMediaSlots | undefined, descriptor: MediaSlotDescriptor): boolean =>
+  descriptor.maxItems === undefined || slotItemCount(mediaSlots, descriptor.slot) < descriptor.maxItems
+
 const slotListClassName = 'mina-wc-slot-list nodrag nowheel nopan grid min-w-0 items-start gap-2 outline-0'
 const attachmentSlotListClassName = 'max-w-[min(520px,calc(100vw_-_72px))] overflow-visible pointer-events-none'
 const collapsedSlotListClassName = 'w-auto overflow-visible pointer-events-auto [--composer-media-width:46px]'
@@ -68,8 +74,10 @@ const preferredActiveSlot = (
 
 export function MediaSlotList({
   actions: actionsProp,
+  composerId,
   forceExpanded,
   mediaSlots,
+  modelSpec,
   nodeType,
   onAddUpload,
   onChange,
@@ -79,12 +87,16 @@ export function MediaSlotList({
   uploading,
   variant = 'block',
 }: MediaSlotListProps) {
-  const slotPolicy = mediaSlotsForNodeType(nodeType)
-  const defaultSlot = defaultMediaSlotForNodeType(nodeType)
+  const slotPolicy = mediaSlotsForNodeType(nodeType, modelSpec?.mediaCapabilities)
+  const defaultSlot = defaultMediaSlotForNodeType(nodeType, modelSpec?.mediaCapabilities)
+  const selectedSlot = useCanvasUiStore((state) => state.selectedSlotByComposerId[composerId])
+  const setSelectedSlot = useCanvasUiStore((state) => state.setComposerSelectedSlot)
   const [expandedSlot, setExpandedSlot] = useState<MediaSlotName | undefined>()
-  const [selectedSlot, setSelectedSlot] = useState<MediaSlotName | undefined>(defaultSlot)
   const activeSlot = preferredActiveSlot(slotPolicy, mediaSlots, selectedSlot, defaultSlot)
   const activeDescriptor = slotPolicy.find((descriptor) => descriptor.slot === activeSlot) ?? slotPolicy[0]
+  const uploadDescriptor = activeDescriptor && slotHasRoom(mediaSlots, activeDescriptor)
+    ? activeDescriptor
+    : slotPolicy.find((descriptor) => slotHasRoom(mediaSlots, descriptor))
   const actions = useMemo<SlotRendererActions>(
     () => actionsProp ?? {
       ...(uploading !== undefined ? { uploading } : {}),
@@ -121,21 +133,21 @@ export function MediaSlotList({
       }}
       onDrop={(event) => {
         const file = firstDroppedFile(event)
-        if (!file || !defaultSlot) {
+        if (!file || !uploadDescriptor) {
           return
         }
         event.preventDefault()
         event.stopPropagation()
-        actions.onAddUpload(defaultSlot, file, { position: 'start' })
+        actions.onAddUpload(uploadDescriptor.slot, file, { position: 'start' })
       }}
       onPaste={(event) => {
         const file = firstPastedFile(event)
-        if (!file || !defaultSlot) {
+        if (!file || !uploadDescriptor) {
           return
         }
         event.preventDefault()
         event.stopPropagation()
-        actions.onAddUpload(defaultSlot, file, { position: 'start' })
+        actions.onAddUpload(uploadDescriptor.slot, file, { position: 'start' })
       }}
     >
       {slotPolicy.length > 1 ? (
@@ -154,7 +166,7 @@ export function MediaSlotList({
               aria-selected={descriptor.slot === activeDescriptor.slot}
               className={cn(slotTabClassName, (variant === 'attachment' || variant === 'collapsed') && attachmentSlotTabClassName)}
               key={descriptor.slot}
-              onClick={() => setSelectedSlot(descriptor.slot)}
+              onClick={() => setSelectedSlot(composerId, descriptor.slot)}
               role="tab"
               type="button"
             >

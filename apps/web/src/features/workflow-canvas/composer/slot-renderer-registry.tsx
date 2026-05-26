@@ -1,3 +1,4 @@
+import { X } from 'lucide-react'
 import type { ComponentType } from 'react'
 import type { MediaSlotName, NodeMediaSlotItem } from '@mina/contracts/modules/media'
 import type { WorkflowNodeType } from '@mina/contracts/modules/canvas'
@@ -45,10 +46,52 @@ class SlotRendererRegistry {
       .filter((candidate) => candidate.match(input))
       .sort((left, right) => left.priority - right.priority)
     if (!spec) {
-      throw new Error(`No slot renderer registered for ${input.descriptor.slot}`)
+      if (import.meta.env.DEV) {
+        console.warn(`No slot renderer registered for ${input.descriptor.slot}; using fallback renderer.`)
+      }
+      return fallbackSlotRendererSpec
     }
     return spec
   }
+}
+
+const fallbackSlotRendererClassName = 'grid min-h-[88px] min-w-0 gap-1.5 rounded-lg bg-surface-container-high p-2'
+const fallbackItemClassName = 'flex min-w-0 items-center justify-between gap-2 rounded-md bg-surface-container-lowest px-2 py-1.5 text-[0.74rem] font-bold text-foreground-tertiary'
+const fallbackButtonClassName = 'flex size-7 flex-none items-center justify-center rounded-md border-0 bg-transparent text-foreground-tertiary hover:bg-surface-container-low hover:text-foreground'
+
+function FallbackSlotRenderer({ actions, descriptor, items }: SlotRendererProps) {
+  if (items.length === 0) {
+    return (
+      <div className={fallbackSlotRendererClassName}>
+        <span className="text-[0.72rem] font-bold text-foreground-quaternary">No {descriptor.label.toLowerCase()} items</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className={fallbackSlotRendererClassName}>
+      {items.map((item) => (
+        <div className={fallbackItemClassName} key={item.id}>
+          <span className="truncate">{descriptor.label} {item.order + 1}</span>
+          <button
+            aria-label={`Remove ${descriptor.label}`}
+            className={fallbackButtonClassName}
+            onClick={() => actions.onRemove(descriptor.slot, item.id)}
+            type="button"
+          >
+            <X aria-hidden="true" size={14} />
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+const fallbackSlotRendererSpec: SlotRendererSpec = {
+  Component: FallbackSlotRenderer,
+  id: 'fallback',
+  match: () => true,
+  priority: Number.MAX_SAFE_INTEGER,
 }
 
 export const slotRendererRegistry = new SlotRendererRegistry()

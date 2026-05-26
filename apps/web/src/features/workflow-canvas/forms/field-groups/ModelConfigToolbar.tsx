@@ -2,8 +2,8 @@ import { ChevronDown, Languages, SlidersHorizontal, Sparkles } from 'lucide-reac
 
 import { RunControls } from '../../components/panels/RunControls'
 import {
-  listClientModels,
   modelKey,
+  useClientModelRegistry,
   type ClientModelSpec,
   type GenerationMode,
   type ModelCompatibilityMode,
@@ -56,7 +56,8 @@ export function ModelConfigToolbar({
   setAdvancedOpen,
   spec,
 }: ModelConfigToolbarProps) {
-  const compatible = models ?? listClientModels(spec.key.kind, compatibilityMode)
+  const registry = useClientModelRegistry()
+  const compatible = models ?? registry.listModels(spec.key.kind, compatibilityMode)
   const value = modelKey(spec.key)
 
   return (
@@ -89,7 +90,7 @@ export function ModelConfigToolbar({
 
       <span className={modeChipClassName}>{modeLabel(generationMode)}</span>
 
-      {spec.BasicFields ? <spec.BasicFields form={form} /> : null}
+      {spec.BasicFields ? <spec.BasicFields fields="params" form={form} /> : null}
 
       <button className={`${iconToggleClassName} ml-auto`} type="button" title="Language tools" aria-label="Language tools">
         <Languages aria-hidden="true" size={17} />

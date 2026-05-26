@@ -12,7 +12,6 @@ import { TextNode } from './nodes/TextNode'
 import { CanvasDock } from './dock/CanvasDock'
 import { useCanvasUiStore } from '../store/canvas-ui-store'
 import { selectWorkflowCanvasNodes } from '../store/canvas-selection-actions'
-import { useCanvasEdges, useCanvasNodes } from '../store/selectors'
 import { isIgnoredCanvasTarget, isReactFlowPaneTarget } from '../utils/canvas-dom-scope'
 import { useWorkflowFlowHandlers } from '../react-flow/use-workflow-flow-handlers'
 import { publishLocalSelection } from '../sync/workflow-presence'
@@ -20,6 +19,8 @@ import { recordCanvasProfilerCommit } from '../diagnostics/canvas-profiler-marks
 import { useFlowRenderStore } from '../render/flow-render-store'
 import { getFlowPerformancePolicy } from '../render/flow-performance-policy'
 import { useWorkflowRuntimeStore } from '../store/workflow-runtime-store'
+import { useCanvasStore } from '../store/canvas-store'
+import { useCanvasEdgeCount, useCanvasMediaNodeCount, useCanvasNodeCount } from '../store/selectors'
 import {
   WORKFLOW_CANVAS_GEOMETRY_CSS_VARS,
   WORKFLOW_CONNECTION_GEOMETRY,
@@ -51,15 +52,15 @@ const nodeTypes = {
 } satisfies WorkflowFlowNodeTypes
 
 export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNodeId }: WorkflowCanvasProps) {
-  const nodes = useCanvasNodes()
-  const edges = useCanvasEdges()
+  useHydrateFlowRender()
   const flowNodes = useFlowRenderStore((state) => state.flowNodes)
   const flowEdges = useFlowRenderStore((state) => state.flowEdges)
-  const hydrateRenderFromDocument = useFlowRenderStore((state) => state.hydrateFromDocument)
+  const nodeCount = useCanvasNodeCount()
+  const edgeCount = useCanvasEdgeCount()
+  const mediaNodeCount = useCanvasMediaNodeCount()
   const setRuntime = useWorkflowRuntimeStore((state) => state.setRuntime)
   const openNodePanel = useCanvasUiStore((state) => state.openNodePanel)
   const closeNodePanel = useCanvasUiStore((state) => state.closeNodePanel)
-  const selectedNodeIds = useCanvasUiStore((state) => state.selectedNodeIds)
   const {
     onConnect,
     onEdgesChange,
@@ -79,13 +80,9 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
     [onRunNode, onSelectOutput],
   )
   const performancePolicy = useMemo(
-    () => getFlowPerformancePolicy({ edges, nodes }),
-    [edges, nodes],
+    () => getFlowPerformancePolicy({ edgeCount, mediaNodeCount, nodeCount }),
+    [edgeCount, mediaNodeCount, nodeCount],
   )
-
-  useEffect(() => {
-    hydrateRenderFromDocument({ edges, nodes, selectedNodeIds })
-  }, [edges, hydrateRenderFromDocument, nodes, selectedNodeIds])
 
   useEffect(() => {
     setRuntime({ actions: runtimeActions, runError, runningNodeId })
@@ -188,6 +185,43 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
 }
 
 export const MemoizedWorkflowCanvas = memo(WorkflowCanvas)
+
+function useHydrateFlowRender(): void {
+  const hydrateRenderFromDocument = useFlowRenderStore((state) => state.hydrateFromDocument)
+
+  useEffect(() => {
+    const hydrate = () => {
+      const canvas = useCanvasStore.getState()
+      const selectedNodeIds = useCanvasUiStore.getState().selectedNodeIds
+      hydrateRenderFromDocument({
+        edges: canvas.edges,
+        nodes: canvas.nodes,
+        selectedNodeIds,
+      })
+    }
+    hydrate()
+    const unsubscribeCanvas = useCanvasStore.subscribe(
+      (state, previousState) => {
+        if (state.nodes === previousState.nodes && state.edges === previousState.edges) {
+          return
+        }
+        hydrate()
+      },
+    )
+    const unsubscribeSelection = useCanvasUiStore.subscribe(
+      (state, previousState) => {
+        if (state.selectedNodeIds === previousState.selectedNodeIds) {
+          return
+        }
+        hydrate()
+      },
+    )
+    return () => {
+      unsubscribeCanvas()
+      unsubscribeSelection()
+    }
+  }, [hydrateRenderFromDocument])
+}
 
 declare global {
   interface Window {

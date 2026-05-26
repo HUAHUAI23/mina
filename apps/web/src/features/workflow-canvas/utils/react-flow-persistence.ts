@@ -1,6 +1,7 @@
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 
 import { normalizeMediaSlotsForNodeType } from '../domain/media-slot-policy'
+import { resolveClientModel } from '../forms/registry/client-model-registry'
 
 const stableNode = (node: WorkflowCanvasNode): WorkflowCanvasNode => ({
   id: node.id,
@@ -14,7 +15,17 @@ const stableNode = (node: WorkflowCanvasNode): WorkflowCanvasNode => ({
     node.data.nodeType === 'image_generation' || node.data.nodeType === 'video_generation'
       ? {
           ...node.data,
-          mediaSlots: normalizeMediaSlotsForNodeType(node.data.nodeType, node.data.mediaSlots),
+          mediaSlots: normalizeMediaSlotsForNodeType(
+            node.data.nodeType,
+            node.data.mediaSlots,
+            node.data.config.task
+              ? resolveClientModel({
+                kind: node.data.config.task.kind,
+                model: node.data.config.task.model,
+                provider: node.data.config.task.provider,
+              })?.mediaCapabilities
+              : undefined,
+          ),
         }
       : node.data,
 })

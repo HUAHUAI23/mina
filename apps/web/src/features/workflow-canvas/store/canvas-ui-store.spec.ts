@@ -45,6 +45,20 @@ if (useCanvasUiStore.getState().activeNodePanel) {
   throw new Error('Explicit close should close the active config panel.')
 }
 
+useCanvasUiStore.getState().setComposerAdvancedOpen('node:node_1', true)
+useCanvasUiStore.getState().setComposerSelectedSlot('node:node_1', 'lastFrame')
+useCanvasUiStore.getState().setComposerSelectedSlot('node:node_2', 'referenceImages')
+
+if (!useCanvasUiStore.getState().advancedOpenByComposerId['node:node_1']) {
+  throw new Error('Advanced config state should persist by composer id.')
+}
+if (
+  useCanvasUiStore.getState().selectedSlotByComposerId['node:node_1'] !== 'lastFrame' ||
+  useCanvasUiStore.getState().selectedSlotByComposerId['node:node_2'] !== 'referenceImages'
+) {
+  throw new Error('Selected media slot state should be isolated by composer id.')
+}
+
 const fixture = createCanvasPerformanceFixture(3)
 const firstNode = fixture.nodes[1]
 

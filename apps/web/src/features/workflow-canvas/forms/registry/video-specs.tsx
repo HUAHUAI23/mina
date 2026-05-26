@@ -9,10 +9,12 @@ import {
   VOLCENGINE_VIDEO_RESOLUTIONS,
   VOLCENGINE_VIDEO_SERVICE_TIERS,
   VolcengineSeedanceParamsSchema,
+  type GoogleVeoParams,
+  type VolcengineSeedanceParams,
 } from '@mina/contracts/modules/tasks/video-model-params'
 
 import type { ClientModelSpec } from './client-model-registry'
-import type { NodeTaskFormApi } from '../form-context'
+import { withNodeTaskFieldGroup } from '../form-context'
 
 const option = (value: string) => ({ label: value, value })
 const numericOption = (value: number) => ({ label: `${value}s`, value: String(value) })
@@ -25,101 +27,106 @@ const volcengineRatioOptions = VOLCENGINE_VIDEO_RATIOS.map(option)
 const volcengineResolutionOptions = VOLCENGINE_VIDEO_RESOLUTIONS.map(option)
 const volcengineServiceTierOptions = [{ label: 'Default', value: '' }, ...VOLCENGINE_VIDEO_SERVICE_TIERS.map(option)]
 
-const GoogleVeoBasicFields = ({ form }: { form: NodeTaskFormApi }) => (
-  <>
-    <form.AppField name="params.aspectRatio">
-      {(field) => <field.SelectField ariaLabel="Aspect ratio" icon={ImageIcon} options={googleAspectRatioOptions} />}
-    </form.AppField>
-    <form.AppField name="params.durationSeconds">
-      {(field) => <field.SelectField ariaLabel="Duration" icon={Clock} options={googleDurationOptions} valueKind="number" />}
-    </form.AppField>
-    <form.AppField name="params.resolution">
-      {(field) => <field.SelectField ariaLabel="Resolution" icon={MonitorPlay} options={googleResolutionOptions} />}
-    </form.AppField>
-  </>
-)
+const GoogleVeoBasicFields = withNodeTaskFieldGroup<Partial<GoogleVeoParams>, unknown>({
+  defaultValues: {},
+  render: ({ group }) => (
+    <>
+      <group.AppField name="aspectRatio">
+        {(field) => <field.SelectField ariaLabel="Aspect ratio" icon={ImageIcon} options={googleAspectRatioOptions} />}
+      </group.AppField>
+      <group.AppField name="durationSeconds">
+        {(field) => <field.SelectField ariaLabel="Duration" icon={Clock} options={googleDurationOptions} valueKind="number" />}
+      </group.AppField>
+      <group.AppField name="resolution">
+        {(field) => <field.SelectField ariaLabel="Resolution" icon={MonitorPlay} options={googleResolutionOptions} />}
+      </group.AppField>
+    </>
+  ),
+})
 
-const GoogleVeoAdvancedFields = ({ form }: { form: NodeTaskFormApi }) => (
-  <>
-    <form.AppField name="params.personGeneration">
-      {(field) => <field.SelectField label="Person generation" options={googlePersonGenerationOptions} />}
-    </form.AppField>
-  </>
-)
+const GoogleVeoAdvancedFields = withNodeTaskFieldGroup<Partial<GoogleVeoParams>, unknown>({
+  defaultValues: {},
+  render: ({ group }) => (
+    <>
+      <group.AppField name="personGeneration">
+        {(field) => <field.SelectField label="Person generation" options={googlePersonGenerationOptions} />}
+      </group.AppField>
+    </>
+  ),
+})
 
-const SeedanceBasicFields = ({
-  form,
-  maxDuration,
-  minDuration,
-  supports1080p,
-}: {
-  form: NodeTaskFormApi
+const SeedanceBasicFields = withNodeTaskFieldGroup<Partial<VolcengineSeedanceParams>, unknown, {
   maxDuration: number
   minDuration: number
   supports1080p: boolean
-}) => (
-  <>
-    <form.AppField name="params.ratio">
-      {(field) => <field.SelectField ariaLabel="Ratio" icon={ImageIcon} options={volcengineRatioOptions} />}
-    </form.AppField>
-    <form.AppField name="params.durationSeconds">
-      {(field) => <field.NumberField ariaLabel="Duration" icon={Clock} max={maxDuration} min={minDuration} step={1} />}
-    </form.AppField>
-    <form.AppField name="params.resolution">
-      {(field) => (
-        <field.SelectField
-          ariaLabel="Resolution"
-          icon={MonitorPlay}
-          options={volcengineResolutionOptions.filter((item) => supports1080p || item.value !== '1080p')}
-        />
-      )}
-    </form.AppField>
-  </>
-)
+}>({
+  defaultValues: {},
+  render: ({ group, maxDuration, minDuration, supports1080p }) => (
+    <>
+      <group.AppField name="ratio">
+        {(field) => <field.SelectField ariaLabel="Ratio" icon={ImageIcon} options={volcengineRatioOptions} />}
+      </group.AppField>
+      <group.AppField name="durationSeconds">
+        {(field) => <field.NumberField ariaLabel="Duration" icon={Clock} max={maxDuration} min={minDuration} step={1} />}
+      </group.AppField>
+      <group.AppField name="resolution">
+        {(field) => (
+          <field.SelectField
+            ariaLabel="Resolution"
+            icon={MonitorPlay}
+            options={volcengineResolutionOptions.filter((item) => supports1080p || item.value !== '1080p')}
+          />
+        )}
+      </group.AppField>
+    </>
+  ),
+})
 
-const SeedanceAdvancedFields = ({
-  form,
-  supportsCameraFixed,
-  supportsGenerateAudio,
-  supportsReturnLastFrame,
-  supportsServiceTier,
-  supportsWebSearch,
-}: {
-  form: NodeTaskFormApi
+const SeedanceAdvancedFields = withNodeTaskFieldGroup<Partial<VolcengineSeedanceParams>, unknown, {
   supportsCameraFixed: boolean
   supportsGenerateAudio: boolean
   supportsReturnLastFrame: boolean
   supportsServiceTier: boolean
   supportsWebSearch: boolean
-}) => (
-  <>
-    {supportsGenerateAudio ? (
-      <form.AppField name="params.generateAudio">
-        {(field) => <field.SwitchField label="Generate audio" />}
-      </form.AppField>
-    ) : null}
-    {supportsCameraFixed ? (
-      <form.AppField name="params.cameraFixed">
-        {(field) => <field.SwitchField label="Fixed camera" />}
-      </form.AppField>
-    ) : null}
-    {supportsReturnLastFrame ? (
-      <form.AppField name="params.returnLastFrame">
-        {(field) => <field.SwitchField label="Return last frame" />}
-      </form.AppField>
-    ) : null}
-    {supportsServiceTier ? (
-      <form.AppField name="params.serviceTier">
-        {(field) => <field.SelectField label="Service tier" options={volcengineServiceTierOptions} />}
-      </form.AppField>
-    ) : null}
-    {supportsWebSearch ? (
-      <form.AppField name="params.webSearch">
-        {(field) => <field.SwitchField label="Web search" />}
-      </form.AppField>
-    ) : null}
-  </>
-)
+}>({
+  defaultValues: {},
+  render: ({
+    group,
+    supportsCameraFixed,
+    supportsGenerateAudio,
+    supportsReturnLastFrame,
+    supportsServiceTier,
+    supportsWebSearch,
+  }) => (
+    <>
+      {supportsGenerateAudio ? (
+        <group.AppField name="generateAudio">
+          {(field) => <field.SwitchField label="Generate audio" />}
+        </group.AppField>
+      ) : null}
+      {supportsCameraFixed ? (
+        <group.AppField name="cameraFixed">
+          {(field) => <field.SwitchField label="Fixed camera" />}
+        </group.AppField>
+      ) : null}
+      {supportsReturnLastFrame ? (
+        <group.AppField name="returnLastFrame">
+          {(field) => <field.SwitchField label="Return last frame" />}
+        </group.AppField>
+      ) : null}
+      {supportsServiceTier ? (
+        <group.AppField name="serviceTier">
+          {(field) => <field.SelectField label="Service tier" options={volcengineServiceTierOptions} />}
+        </group.AppField>
+      ) : null}
+      {supportsWebSearch ? (
+        <group.AppField name="webSearch">
+          {(field) => <field.SwitchField label="Web search" />}
+        </group.AppField>
+      ) : null}
+    </>
+  ),
+})
 
 export const videoClientModelSpecs: ClientModelSpec[] = [
   {
@@ -134,7 +141,6 @@ export const videoClientModelSpecs: ClientModelSpec[] = [
     displayName: 'Veo 3.1',
     key: { kind: 'video_generation', provider: 'google', model: 'veo-3.1-generate-preview' },
     mediaCapabilities: { firstFrame: true, lastFrame: true, referenceImages: { max: 3 } },
-    paramKeys: ['aspectRatio', 'durationSeconds', 'personGeneration', 'resolution'],
     paramsSchema: GoogleVeoParamsSchema,
     supportsMedia: true,
     supportsText: true,
@@ -151,14 +157,14 @@ export const videoClientModelSpecs: ClientModelSpec[] = [
     displayName: 'Veo 3.1 Fast',
     key: { kind: 'video_generation', provider: 'google', model: 'veo-3.1-fast-generate-preview' },
     mediaCapabilities: { firstFrame: true, lastFrame: true, referenceImages: { max: 3 } },
-    paramKeys: ['aspectRatio', 'durationSeconds', 'personGeneration', 'resolution'],
     paramsSchema: GoogleVeoParamsSchema,
     supportsMedia: true,
     supportsText: true,
   },
   {
-    AdvancedFields: ({ form }) => (
+    AdvancedFields: ({ fields, form }) => (
       <SeedanceAdvancedFields
+        fields={fields}
         form={form}
         supportsCameraFixed={false}
         supportsGenerateAudio
@@ -167,7 +173,9 @@ export const videoClientModelSpecs: ClientModelSpec[] = [
         supportsWebSearch
       />
     ),
-    BasicFields: ({ form }) => <SeedanceBasicFields form={form} minDuration={4} maxDuration={15} supports1080p={false} />,
+    BasicFields: ({ fields, form }) => (
+      <SeedanceBasicFields fields={fields} form={form} minDuration={4} maxDuration={15} supports1080p={false} />
+    ),
     defaults: {
       durationSeconds: 5,
       generateAudio: false,
@@ -179,14 +187,14 @@ export const videoClientModelSpecs: ClientModelSpec[] = [
     displayName: 'Seedance 2.0',
     key: { kind: 'video_generation', provider: 'volcengine', model: 'doubao-seedance-2-0-260128' },
     mediaCapabilities: { firstFrame: true, lastFrame: true, referenceAudios: { max: 3 }, referenceImages: { max: 12 }, referenceVideos: { max: 3 } },
-    paramKeys: ['durationSeconds', 'generateAudio', 'ratio', 'resolution', 'returnLastFrame', 'webSearch'],
     paramsSchema: VolcengineSeedanceParamsSchema,
     supportsMedia: true,
     supportsText: true,
   },
   {
-    AdvancedFields: ({ form }) => (
+    AdvancedFields: ({ fields, form }) => (
       <SeedanceAdvancedFields
+        fields={fields}
         form={form}
         supportsCameraFixed
         supportsGenerateAudio
@@ -195,7 +203,9 @@ export const videoClientModelSpecs: ClientModelSpec[] = [
         supportsWebSearch={false}
       />
     ),
-    BasicFields: ({ form }) => <SeedanceBasicFields form={form} minDuration={4} maxDuration={12} supports1080p />,
+    BasicFields: ({ fields, form }) => (
+      <SeedanceBasicFields fields={fields} form={form} minDuration={4} maxDuration={12} supports1080p />
+    ),
     defaults: {
       cameraFixed: false,
       durationSeconds: 5,
@@ -207,14 +217,14 @@ export const videoClientModelSpecs: ClientModelSpec[] = [
     displayName: 'Seedance 1.5 Pro',
     key: { kind: 'video_generation', provider: 'volcengine', model: 'doubao-seedance-1-5-pro-251215' },
     mediaCapabilities: { firstFrame: true, lastFrame: true, referenceAudios: { max: 0 }, referenceImages: { max: 2 }, referenceVideos: { max: 0 } },
-    paramKeys: ['cameraFixed', 'durationSeconds', 'generateAudio', 'ratio', 'resolution', 'returnLastFrame', 'serviceTier', 'webSearch'],
     paramsSchema: VolcengineSeedanceParamsSchema,
     supportsMedia: true,
     supportsText: true,
   },
   {
-    AdvancedFields: ({ form }) => (
+    AdvancedFields: ({ fields, form }) => (
       <SeedanceAdvancedFields
+        fields={fields}
         form={form}
         supportsCameraFixed={false}
         supportsGenerateAudio
@@ -223,7 +233,9 @@ export const videoClientModelSpecs: ClientModelSpec[] = [
         supportsWebSearch={false}
       />
     ),
-    BasicFields: ({ form }) => <SeedanceBasicFields form={form} minDuration={4} maxDuration={15} supports1080p={false} />,
+    BasicFields: ({ fields, form }) => (
+      <SeedanceBasicFields fields={fields} form={form} minDuration={4} maxDuration={15} supports1080p={false} />
+    ),
     defaults: {
       durationSeconds: 5,
       generateAudio: false,
@@ -235,14 +247,14 @@ export const videoClientModelSpecs: ClientModelSpec[] = [
     displayName: 'Jimeng Seedance 2.0',
     key: { kind: 'video_generation', provider: 'volcengine', model: 'jimeng-video-seedance-2.0' },
     mediaCapabilities: { firstFrame: true, lastFrame: true, referenceAudios: { max: 3 }, referenceImages: { max: 12 }, referenceVideos: { max: 3 } },
-    paramKeys: ['durationSeconds', 'generateAudio', 'ratio', 'resolution', 'returnLastFrame', 'webSearch'],
     paramsSchema: VolcengineSeedanceParamsSchema,
     supportsMedia: true,
     supportsText: true,
   },
   {
-    AdvancedFields: ({ form }) => (
+    AdvancedFields: ({ fields, form }) => (
       <SeedanceAdvancedFields
+        fields={fields}
         form={form}
         supportsCameraFixed={false}
         supportsGenerateAudio
@@ -251,7 +263,9 @@ export const videoClientModelSpecs: ClientModelSpec[] = [
         supportsWebSearch={false}
       />
     ),
-    BasicFields: ({ form }) => <SeedanceBasicFields form={form} minDuration={4} maxDuration={15} supports1080p={false} />,
+    BasicFields: ({ fields, form }) => (
+      <SeedanceBasicFields fields={fields} form={form} minDuration={4} maxDuration={15} supports1080p={false} />
+    ),
     defaults: {
       durationSeconds: 5,
       generateAudio: false,
@@ -263,7 +277,6 @@ export const videoClientModelSpecs: ClientModelSpec[] = [
     displayName: 'Jimeng Seedance 2.0 Fast',
     key: { kind: 'video_generation', provider: 'volcengine', model: 'jimeng-video-seedance-2.0-fast' },
     mediaCapabilities: { firstFrame: true, lastFrame: true, referenceAudios: { max: 3 }, referenceImages: { max: 12 }, referenceVideos: { max: 3 } },
-    paramKeys: ['durationSeconds', 'generateAudio', 'ratio', 'resolution', 'returnLastFrame', 'webSearch'],
     paramsSchema: VolcengineSeedanceParamsSchema,
     supportsMedia: true,
     supportsText: true,

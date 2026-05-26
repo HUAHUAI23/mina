@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
+import { cn } from '@mina/ui/lib/utils'
 
 import { workflowKeys } from '../../api/workflow-keys'
 import { listNodeTasks } from '../../api/workflow-queries'
@@ -15,6 +16,9 @@ interface TaskHistoryCardProps {
 
 export function TaskHistoryCard({ node, open, workflowId }: TaskHistoryCardProps) {
   const setNodeMediaView = useCanvasStore((state) => state.setNodeMediaView)
+  const mediaView = node.data.nodeType === 'image_generation' || node.data.nodeType === 'video_generation'
+    ? node.data.mediaView
+    : undefined
   const query = useQuery({
     enabled: open && (node.data.nodeType === 'image_generation' || node.data.nodeType === 'video_generation'),
     queryFn: () => listNodeTasks(workflowId, node.id),
@@ -40,10 +44,21 @@ export function TaskHistoryCard({ node, open, workflowId }: TaskHistoryCardProps
               <div className="flex min-w-0 gap-1.5 overflow-x-auto">
                 {resources.map((resource) => {
                   const previewUrl = previewUrlForMedia(resource)
+                  const selected =
+                    mediaView?.taskId === item.task.id &&
+                    (mediaView.outputResourceId ? mediaView.outputResourceId === resource.id : mediaView.outputIndex === resource.index)
+                  const disabled = item.task.status === 'failed'
                   return (
                     <button
                       aria-label={`Select ${resource.role ?? resource.kind} ${resource.index + 1}`}
-                      className="flex h-10 w-11 flex-none items-center justify-center overflow-hidden rounded-md border-0 bg-surface-container-lowest p-0 text-foreground-tertiary"
+                      aria-pressed={selected}
+                      className={cn(
+                        'flex h-10 w-11 flex-none items-center justify-center overflow-hidden rounded-md border-0 bg-surface-container-lowest p-0 text-foreground-tertiary',
+                        'hover:shadow-[inset_0_0_0_1.5px_color-mix(in_oklch,var(--foreground-secondary)_48%,transparent)]',
+                        selected && 'shadow-[inset_0_0_0_2px_color-mix(in_oklch,var(--primary)_64%,var(--foreground-secondary))]',
+                        disabled && 'cursor-not-allowed opacity-45',
+                      )}
+                      disabled={disabled}
                       key={resource.id}
                       onClick={() =>
                         setNodeMediaView(node.id, {

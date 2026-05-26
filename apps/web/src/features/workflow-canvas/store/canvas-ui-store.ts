@@ -6,7 +6,7 @@ import { isMediaGenerationNode, type MediaGenerationCanvasNode } from '../domain
 import { normalizeMediaSlotsForNodeType } from '../domain/media-slot-policy'
 import { defaultPromptForKind, defaultFormValueForKind, formValueWithCompatibleModel } from '../forms/model-compatibility'
 import { taskToFormValue, type NodeTaskFormValue } from '../forms/model-form-utils'
-import { listAllClientModels, modelKey } from '../forms/registry/client-model-registry'
+import { listAllClientModels, modelKey, resolveClientModel } from '../forms/registry/client-model-registry'
 import { assignSlotOrder, normalizeSlotOrder } from '../utils/media-slots'
 import { useCanvasStore } from './canvas-store'
 import '../forms/registry'
@@ -34,7 +34,9 @@ export interface ComposerDraftState {
 
 interface CanvasUiState {
   activeNodePanel: ActiveNodePanel | undefined
+  advancedOpenByComposerId: Record<string, boolean>
   composerDraft: ComposerDraftState
+  selectedSlotByComposerId: Record<string, MediaSlotName | undefined>
   selectedNodeIds: string[]
 }
 
@@ -51,6 +53,8 @@ interface CanvasUiActions {
   setDraftFromNode(node: MediaGenerationCanvasNode): void
   setDraftMediaSlots(slots: NodeMediaSlots): void
   setDraftTask(task: NodeTaskFormValue): void
+  setComposerAdvancedOpen(composerId: string, open: boolean): void
+  setComposerSelectedSlot(composerId: string, slot: MediaSlotName | undefined): void
 }
 
 type CanvasUiStore = CanvasUiState & CanvasUiActions
@@ -120,8 +124,12 @@ const cloneTask = (task: NodeTaskFormValue): NodeTaskFormValue => ({
 const normalizeDraftMediaSlots = (
   nodeType: NodeTaskFormValue['kind'],
   mediaSlots: NodeMediaSlots,
+  task?: NodeTaskFormValue | undefined,
 ): NodeMediaSlots => {
-  const compatibleSlots = normalizeMediaSlotsForNodeType(nodeType, cloneMediaSlots(mediaSlots))
+  const spec = task
+    ? resolveClientModel({ kind: task.kind, model: task.model, provider: task.provider })
+    : undefined
+  const compatibleSlots = normalizeMediaSlotsForNodeType(nodeType, cloneMediaSlots(mediaSlots), spec?.mediaCapabilities)
   const nextSlots: NodeMediaSlots = {}
   for (const [slot, items] of Object.entries(compatibleSlots) as Array<[MediaSlotName, NodeMediaSlotItem[]]>) {
     const mediaObjectItems = items.filter((item) => {
@@ -142,7 +150,9 @@ const normalizeDraftMediaSlots = (
 
 export const useCanvasUiStore = create<CanvasUiStore>()(subscribeWithSelector((set) => ({
   activeNodePanel: undefined,
+  advancedOpenByComposerId: {},
   composerDraft: createDefaultComposerDraft(),
+  selectedSlotByComposerId: {},
   beginDraftUpload: (uploadId, slot) =>
     set((state) => ({
       composerDraft: {
@@ -211,6 +221,7 @@ export const useCanvasUiStore = create<CanvasUiStore>()(subscribeWithSelector((s
     set({
       composerDraft: {
         expanded: false,
+        // Deselect snapshots intentionally copy the task only; node media sources stay node-owned.
         mediaSlots: {},
         task: node.data.config.task
           ? taskToFormValue(node.data.config.task)
@@ -220,7 +231,7 @@ export const useCanvasUiStore = create<CanvasUiStore>()(subscribeWithSelector((s
     }),
   setDraftMediaSlots: (slots) =>
     set((state) => {
-      const nextSlots = normalizeDraftMediaSlots(state.composerDraft.task.kind, slots)
+      const nextSlots = normalizeDraftMediaSlots(state.composerDraft.task.kind, slots, state.composerDraft.task)
       return {
         composerDraft: {
           ...state.composerDraft,
@@ -232,13 +243,37 @@ export const useCanvasUiStore = create<CanvasUiStore>()(subscribeWithSelector((s
   setDraftTask: (task) =>
     set((state) => {
       const nextTask = cloneTask(task)
-      const mediaSlots = normalizeDraftMediaSlots(nextTask.kind, state.composerDraft.mediaSlots)
+      const mediaSlots = normalizeDraftMediaSlots(nextTask.kind, state.composerDraft.mediaSlots, nextTask)
       return {
         composerDraft: {
           ...state.composerDraft,
           error: undefined,
           mediaSlots,
           task: nextTask,
+        },
+      }
+    }),
+  setComposerAdvancedOpen: (composerId, open) =>
+    set((state) => {
+      if (state.advancedOpenByComposerId[composerId] === open) {
+        return state
+      }
+      return {
+        advancedOpenByComposerId: {
+          ...state.advancedOpenByComposerId,
+          [composerId]: open,
+        },
+      }
+    }),
+  setComposerSelectedSlot: (composerId, slot) =>
+    set((state) => {
+      if (state.selectedSlotByComposerId[composerId] === slot) {
+        return state
+      }
+      return {
+        selectedSlotByComposerId: {
+          ...state.selectedSlotByComposerId,
+          [composerId]: slot,
         },
       }
     }),

@@ -4,6 +4,7 @@ import type { ComponentType, ReactNode } from 'react'
 import { cn } from '@mina/ui/lib/utils'
 
 import type { NodeTaskFormValue } from './model-form-utils'
+import type { validateNodeTaskFormValue } from './validation'
 import { PromptField } from './shared/PromptField'
 
 const {
@@ -248,6 +249,7 @@ function SubmitButton({ children }: SubmitButtonProps) {
 export const {
   useAppForm: useNodeTaskAppForm,
   withForm: withNodeTaskForm,
+  withFieldGroup: withNodeTaskFieldGroup,
 } = createFormHook({
   fieldComponents: {
     NumberField,
@@ -277,14 +279,16 @@ type NodeTaskFormComponents = {
   SubmitButton: typeof SubmitButton
 }
 
+type NodeTaskFormValidator = typeof validateNodeTaskFormValue
+
 export type NodeTaskFormApi = AppFieldExtendedReactFormApi<
   NodeTaskFormValue,
   FormValidateOrFn<NodeTaskFormValue> | undefined,
-  FormValidateOrFn<NodeTaskFormValue> | undefined,
+  NodeTaskFormValidator,
   FormAsyncValidateOrFn<NodeTaskFormValue> | undefined,
   FormValidateOrFn<NodeTaskFormValue> | undefined,
   FormAsyncValidateOrFn<NodeTaskFormValue> | undefined,
-  FormValidateOrFn<NodeTaskFormValue> | undefined,
+  NodeTaskFormValidator,
   FormAsyncValidateOrFn<NodeTaskFormValue> | undefined,
   FormValidateOrFn<NodeTaskFormValue> | undefined,
   FormAsyncValidateOrFn<NodeTaskFormValue> | undefined,

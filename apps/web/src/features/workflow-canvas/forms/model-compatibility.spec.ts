@@ -1,5 +1,6 @@
 import { formValuesEqual, formValueWithCompatibleModel, taskWithCompatibleModel } from './model-compatibility'
-import { normalizeMediaSlotsForNodeType } from '../domain/media-slot-policy'
+import { mediaSlotsForNodeType, normalizeMediaSlotsForNodeType } from '../domain/media-slot-policy'
+import { resolveClientModel } from './registry/client-model-registry'
 
 const assert = (condition: unknown, message: string): void => {
   if (!condition) {
@@ -108,5 +109,27 @@ const incompatibleSlots = normalizeMediaSlotsForNodeType('video_generation', {
 
 assert(incompatibleSlots.firstFrame?.length === 1, 'cross-kind media slot normalization should preserve compatible slots')
 assert(!incompatibleSlots.inputImages?.length, 'cross-kind media slot normalization should remove incompatible slots')
+
+const seedanceProSpec = resolveClientModel({
+  kind: 'video_generation',
+  model: 'doubao-seedance-1-5-pro-251215',
+  provider: 'volcengine',
+})
+assert(Boolean(seedanceProSpec), 'Seedance Pro should resolve')
+const seedanceProSlots = mediaSlotsForNodeType('video_generation', seedanceProSpec?.mediaCapabilities)
+assert(seedanceProSlots.some((descriptor) => descriptor.slot === 'referenceImages'), 'capability slot policy should expose reference image slots')
+assert(!seedanceProSlots.some((descriptor) => descriptor.slot === 'referenceAudios'), 'capability slot policy should hide unsupported reference audio slots')
+assert(!seedanceProSlots.some((descriptor) => descriptor.slot === 'referenceVideos'), 'capability slot policy should hide unsupported reference video slots')
+
+const limitedReferenceSlots = normalizeMediaSlotsForNodeType('video_generation', {
+  referenceImages: Array.from({ length: 4 }, (_unused, index) => ({
+    id: `reference_${index}`,
+    order: index,
+    required: true,
+    slot: 'referenceImages' as const,
+    source: { type: 'media_object' as const, mediaObjectId: `media_${index}` },
+  })),
+}, seedanceProSpec?.mediaCapabilities)
+assert(limitedReferenceSlots.referenceImages?.length === 2, 'capability slot normalization should enforce max items')
 
 console.log('model compatibility checks passed')

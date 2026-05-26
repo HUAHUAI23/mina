@@ -1,5 +1,4 @@
 import {
-  Fragment,
   createContext,
   useCallback,
   useContext,
@@ -7,13 +6,17 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { formOptions } from '@tanstack/react-form'
-import type { FormApi } from '@tanstack/react-form'
+import type { FormApi, FormValidateOrFn } from '@tanstack/react-form'
 import type { MediaSlotName, NodeMediaSlotItem, NodeMediaSlots } from '@mina/contracts/modules/media'
+import type { TaskDraftConfig } from '@mina/contracts/modules/tasks'
 
 import { uploadMediaObject } from '../api/media-mutations'
 import type { MediaGenerationCanvasNode } from '../domain/canvas-node-types'
-import { defaultMediaSlotForNodeType, isMediaSlotAllowedForNodeType, normalizeMediaSlotsForNodeType } from '../domain/media-slot-policy'
+import {
+  defaultMediaSlotForNodeType,
+  isMediaSlotAllowedForNodeType,
+  normalizeMediaSlotsForNodeType,
+} from '../domain/media-slot-policy'
 import { useNodeTaskAppForm, type NodeTaskFormApi } from '../forms/form-context'
 import {
   defaultFormValueForKind,
@@ -21,6 +24,7 @@ import {
   tasksEqual,
 } from '../forms/model-compatibility'
 import { formValueToTask, taskToFormValue, type NodeTaskFormValue } from '../forms/model-form-utils'
+import { resolveClientModel } from '../forms/registry/client-model-registry'
 import { validateNodeTaskFormValue } from '../forms/validation'
 import { useCanvasStore } from '../store/canvas-store'
 import type { ComposerDraftState } from '../store/canvas-ui-store'
@@ -37,6 +41,7 @@ type MediaTaskFormProviderProps = MediaTaskFormTarget & {
 
 export interface MediaTaskFormRenderProps {
   commitTask(value: NodeTaskFormValue): void
+  composerId: string
   form: NodeTaskFormApi
   mediaSlots: NodeMediaSlots
   mediaActions: {
@@ -62,27 +67,19 @@ export const useMediaTaskForm = (): MediaTaskFormRenderProps => {
 
 const emptyMediaSlots = {}
 
-const nodeTaskFormOptions = formOptions({
-  defaultValues: defaultFormValueForKind('image_generation', {}),
-  validators: {
-    onChange: validateNodeTaskFormValue,
-    onSubmit: validateNodeTaskFormValue,
-  },
-})
-
 type NodeTaskFormBaseApi = FormApi<
   NodeTaskFormValue,
-  typeof validateNodeTaskFormValue,
-  typeof validateNodeTaskFormValue,
+  undefined,
+  FormValidateOrFn<NodeTaskFormValue>,
   undefined,
   undefined,
   undefined,
-  typeof validateNodeTaskFormValue,
+  FormValidateOrFn<NodeTaskFormValue>,
   undefined,
   undefined,
   undefined,
   undefined,
-  never
+  unknown
 >
 
 const createSlotItem = (slot: MediaSlotName, mediaObjectId: string, order: number): NodeMediaSlotItem => ({
@@ -100,14 +97,94 @@ const cloneTaskValue = (value: NodeTaskFormValue): NodeTaskFormValue => ({
 
 const cloneMediaSlots = (slots: NodeMediaSlots): NodeMediaSlots => structuredClone(slots)
 
-export function MediaTaskFormProvider(props: MediaTaskFormProviderProps) {
-  const targetKey = props.kind === 'node' ? `node:${props.node.id}` : 'draft'
-  const content =
-    props.kind === 'node'
-      ? <NodeTargetProvider {...props} />
-      : <DraftTargetProvider {...props} />
+const nodeTaskValidators = {
+  onChange: validateNodeTaskFormValue,
+  onSubmit: validateNodeTaskFormValue,
+} satisfies {
+  onChange: FormValidateOrFn<NodeTaskFormValue>
+  onSubmit: FormValidateOrFn<NodeTaskFormValue>
+}
 
-  return <Fragment key={targetKey}>{content}</Fragment>
+const taskMediaCapabilities = (task: Pick<TaskDraftConfig, 'kind' | 'model' | 'provider'> | undefined) =>
+  task ? resolveClientModel({ kind: task.kind, model: task.model, provider: task.provider })?.mediaCapabilities : undefined
+
+const itemWithMediaObject = (item: NodeMediaSlotItem, mediaObjectId: string): NodeMediaSlotItem => ({
+  ...item,
+  source: { type: 'media_object', mediaObjectId },
+})
+
+const addSlotItemToSlots = (
+  slots: NodeMediaSlots,
+  item: NodeMediaSlotItem,
+  position: 'end' | 'start',
+): NodeMediaSlots => {
+  const currentItems = normalizeSlotOrder(slots[item.slot] ?? [])
+  const insertIndex = position === 'start' ? 0 : currentItems.length
+  return {
+    ...slots,
+    [item.slot]: assignSlotOrder([
+      ...currentItems.slice(0, insertIndex),
+      { ...item, order: insertIndex },
+      ...currentItems.slice(insertIndex),
+    ]),
+  }
+}
+
+const changeSlotItemInSlots = (
+  slots: NodeMediaSlots,
+  item: NodeMediaSlotItem,
+): NodeMediaSlots => ({
+  ...slots,
+  [item.slot]: normalizeSlotOrder((slots[item.slot] ?? []).map((candidate) => (candidate.id === item.id ? item : candidate))),
+})
+
+const removeSlotItemFromSlots = (
+  slots: NodeMediaSlots,
+  slot: MediaSlotName,
+  slotItemId: string,
+): NodeMediaSlots => ({
+  ...slots,
+  [slot]: normalizeSlotOrder((slots[slot] ?? []).filter((item) => item.id !== slotItemId)),
+})
+
+const reorderSlotItemsInSlots = (
+  slots: NodeMediaSlots,
+  slot: MediaSlotName,
+  orderedIds: readonly string[],
+): NodeMediaSlots => {
+  const currentItems = normalizeSlotOrder(slots[slot] ?? [])
+  const itemsById = new Map(currentItems.map((item) => [item.id, item]))
+  const orderedItems = orderedIds
+    .map((id) => itemsById.get(id))
+    .filter((item): item is NodeMediaSlotItem => Boolean(item))
+  const orderedSet = new Set(orderedIds)
+  return {
+    ...slots,
+    [slot]: assignSlotOrder([...orderedItems, ...currentItems.filter((item) => !orderedSet.has(item.id))]),
+  }
+}
+
+const replaceSlotItemMediaObjectInSlots = (
+  slots: NodeMediaSlots,
+  slot: MediaSlotName,
+  slotItemId: string,
+  mediaObjectId: string,
+): NodeMediaSlots => ({
+  ...slots,
+  [slot]: normalizeSlotOrder(
+    (slots[slot] ?? []).map((item) => (item.id === slotItemId ? itemWithMediaObject(item, mediaObjectId) : item)),
+  ),
+})
+
+interface MediaSlotsBinding {
+  addUpload(slot: MediaSlotName, file: File, options?: { position?: 'end' | 'start' }): void
+  actions: MediaTaskFormRenderProps['mediaActions']
+}
+
+export function MediaTaskFormProvider(props: MediaTaskFormProviderProps) {
+  return props.kind === 'node'
+    ? <NodeTargetProvider {...props} />
+    : <DraftTargetProvider {...props} />
 }
 
 function NodeTargetProvider({
@@ -117,9 +194,6 @@ function NodeTargetProvider({
 }: Extract<MediaTaskFormProviderProps, { kind: 'node' }>) {
   const [uploading, setUploading] = useState(false)
   const setNodeTaskConfig = useCanvasStore((state) => state.setNodeTaskConfig)
-  const removeSlotItem = useCanvasStore((state) => state.removeSlotItem)
-  const reorderSlotItems = useCanvasStore((state) => state.reorderSlotItems)
-  const updateSlotItem = useCanvasStore((state) => state.updateSlotItem)
 
   const mediaSlots = node.data.mediaSlots ?? emptyMediaSlots
   const task = node.data.config.task
@@ -129,13 +203,12 @@ function NodeTargetProvider({
   )
   const transform = useCompatibleFormTransform(mediaSlots)
   const form = useNodeTaskAppForm({
-    ...nodeTaskFormOptions,
     defaultValues,
     formId: `node-task:${node.id}`,
     listeners: {
       onChangeDebounceMs: 200,
       onChange: ({ formApi }) => {
-        const nextTask = formValueToTask(formApi.state.values as NodeTaskFormValue)
+        const nextTask = formValueToTask(formApi.state.values)
         if (task && tasksEqual(task, nextTask)) {
           return
         }
@@ -143,42 +216,16 @@ function NodeTargetProvider({
       },
     },
     transform,
+    validators: nodeTaskValidators,
     onSubmit: ({ value }) => {
-      const nextTask = formValueToTask(value as NodeTaskFormValue)
+      const nextTask = formValueToTask(value)
       if (!task || !tasksEqual(task, nextTask)) {
         setNodeTaskConfig(node.id, nextTask)
       }
       onRun()
     },
-  }) as unknown as NodeTaskFormApi
-
-  const uploadAndAttach = async (
-    input:
-      | { file: File; kind: 'add'; nodeId: string; position: 'end' | 'start'; slot: MediaSlotName }
-      | { file: File; kind: 'replace'; nodeId: string; slot: MediaSlotName; slotItemId: string },
-  ) => {
-    setUploading(true)
-    try {
-      const response = await uploadMediaObject(input.file)
-      const state = useCanvasStore.getState()
-      if (input.kind === 'add') {
-        const stateNode = state.nodes.find((candidate) => candidate.id === input.nodeId)
-        const current =
-          stateNode?.data.nodeType === 'image_generation' || stateNode?.data.nodeType === 'video_generation'
-            ? stateNode.data.mediaSlots?.[input.slot] ?? []
-            : []
-        const order = input.position === 'start' ? 0 : current.length
-        state.addSlotItem(input.nodeId, createSlotItem(input.slot, response.item.id, order))
-        return
-      }
-      state.replaceSlotItemMediaObject(input.nodeId, input.slot, input.slotItemId, response.item.id)
-    } finally {
-      setUploading(false)
-    }
-  }
-  const addUpload = (slot: MediaSlotName, file: File, options?: { position?: 'end' | 'start' }) => {
-    void uploadAndAttach({ file, kind: 'add', nodeId: node.id, position: options?.position ?? 'start', slot })
-  }
+  })
+  const binding = useNodeMediaSlotsBinding(node, setUploading, uploading)
   const commitTask = (value: NodeTaskFormValue) => {
     const nextTask = formValueToTask(value)
     if (!task || !tasksEqual(task, nextTask)) {
@@ -188,28 +235,76 @@ function NodeTargetProvider({
 
   const value: MediaTaskFormRenderProps = {
     commitTask,
+    composerId: `node:${node.id}`,
     form,
-    mediaActions: {
-      onAddUpload: addUpload,
-      onChange: (item) => updateSlotItem(node.id, item),
-      onRemove: (slot, slotItemId) => removeSlotItem(node.id, slot, slotItemId),
-      onReorder: (slot, orderedIds) => reorderSlotItems(node.id, slot, orderedIds),
-      onReplaceUpload: (slot, slotItemId, file) => {
-        void uploadAndAttach({ file, kind: 'replace', nodeId: node.id, slot, slotItemId })
-      },
-      uploading,
-    },
+    mediaActions: binding.actions,
     mediaSlots,
     nodeType: node.data.nodeType,
   }
 
   return (
     <MediaTaskFormContext.Provider value={value}>
-      <MediaTaskPasteTarget nodeType={node.data.nodeType} onAddUpload={addUpload}>
+      <MediaTaskPasteTarget nodeType={node.data.nodeType} onAddUpload={binding.addUpload}>
         {children(value)}
       </MediaTaskPasteTarget>
     </MediaTaskFormContext.Provider>
   )
+}
+
+function useNodeMediaSlotsBinding(
+  node: MediaGenerationCanvasNode,
+  setUploading: (uploading: boolean) => void,
+  uploading: boolean,
+): MediaSlotsBinding {
+  const nodeId = node.id
+  const addSlotItem = useCanvasStore((state) => state.addSlotItem)
+  const removeSlotItem = useCanvasStore((state) => state.removeSlotItem)
+  const reorderSlotItems = useCanvasStore((state) => state.reorderSlotItems)
+  const replaceSlotItemMediaObject = useCanvasStore((state) => state.replaceSlotItemMediaObject)
+  const updateSlotItem = useCanvasStore((state) => state.updateSlotItem)
+
+  const uploadAndAttach = async (
+    input:
+      | { file: File; kind: 'add'; position: 'end' | 'start'; slot: MediaSlotName }
+      | { file: File; kind: 'replace'; slot: MediaSlotName; slotItemId: string },
+  ) => {
+    setUploading(true)
+    try {
+      const response = await uploadMediaObject(input.file)
+      if (input.kind === 'add') {
+        addSlotItem(
+          nodeId,
+          createSlotItem(
+            input.slot,
+            response.item.id,
+            input.position === 'start' ? 0 : Number.MAX_SAFE_INTEGER,
+          ),
+        )
+        return
+      }
+      replaceSlotItemMediaObject(nodeId, input.slot, input.slotItemId, response.item.id)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const addUpload: MediaSlotsBinding['addUpload'] = (slot, file, options) => {
+    void uploadAndAttach({ file, kind: 'add', position: options?.position ?? 'start', slot })
+  }
+
+  return {
+    addUpload,
+    actions: {
+      onAddUpload: addUpload,
+      onChange: (item) => updateSlotItem(nodeId, item),
+      onRemove: (slot, slotItemId) => removeSlotItem(nodeId, slot, slotItemId),
+      onReorder: (slot, orderedIds) => reorderSlotItems(nodeId, slot, orderedIds),
+      onReplaceUpload: (slot, slotItemId, file) => {
+        void uploadAndAttach({ file, kind: 'replace', slot, slotItemId })
+      },
+      uploading,
+    },
+  }
 }
 
 function DraftTargetProvider({
@@ -217,29 +312,24 @@ function DraftTargetProvider({
   draft,
   onSubmitDraft,
 }: Extract<MediaTaskFormProviderProps, { kind: 'draft' }>) {
-  const beginUpload = useCanvasUiStore((state) => state.beginDraftUpload)
-  const completeUpload = useCanvasUiStore((state) => state.completeDraftUpload)
-  const failUpload = useCanvasUiStore((state) => state.failDraftUpload)
-  const setDraftError = useCanvasUiStore((state) => state.setDraftError)
-  const setDraftMediaSlots = useCanvasUiStore((state) => state.setDraftMediaSlots)
   const setDraftTask = useCanvasUiStore((state) => state.setDraftTask)
 
   const mediaSlots = draft.mediaSlots ?? emptyMediaSlots
   const defaultValues = useMemo(() => formValueWithCompatibleModel(draft.task, mediaSlots), [draft.task, mediaSlots])
   const transform = useCompatibleFormTransform(mediaSlots)
   const form = useNodeTaskAppForm({
-    ...nodeTaskFormOptions,
     defaultValues,
     formId: 'node-task:draft',
     listeners: {
       onChangeDebounceMs: 200,
       onChange: ({ formApi }) => {
-        setDraftTask(cloneTaskValue(formApi.state.values as NodeTaskFormValue))
+        setDraftTask(cloneTaskValue(formApi.state.values))
       },
     },
     transform,
+    validators: nodeTaskValidators,
     onSubmit: async ({ value }) => {
-      const nextTask = cloneTaskValue(value as NodeTaskFormValue)
+      const nextTask = cloneTaskValue(value)
       setDraftTask(nextTask)
       await onSubmitDraft({
         ...useCanvasUiStore.getState().composerDraft,
@@ -247,7 +337,40 @@ function DraftTargetProvider({
         task: nextTask,
       })
     },
-  }) as unknown as NodeTaskFormApi
+  })
+  const binding = useDraftMediaSlotsBinding(draft)
+  const commitTask = (value: NodeTaskFormValue) => {
+    setDraftTask(cloneTaskValue(value))
+  }
+
+  const value: MediaTaskFormRenderProps = {
+    commitTask,
+    composerId: 'draft',
+    form,
+    mediaActions: binding.actions,
+    mediaSlots,
+    nodeType: draft.task.kind,
+  }
+
+  return (
+    <MediaTaskFormContext.Provider value={value}>
+      <MediaTaskPasteTarget nodeType={draft.task.kind} onAddUpload={binding.addUpload}>
+        {children(value)}
+      </MediaTaskPasteTarget>
+    </MediaTaskFormContext.Provider>
+  )
+}
+
+function useDraftMediaSlotsBinding(draft: ComposerDraftState): MediaSlotsBinding {
+  const beginUpload = useCanvasUiStore((state) => state.beginDraftUpload)
+  const completeUpload = useCanvasUiStore((state) => state.completeDraftUpload)
+  const failUpload = useCanvasUiStore((state) => state.failDraftUpload)
+  const setDraftError = useCanvasUiStore((state) => state.setDraftError)
+  const setDraftMediaSlots = useCanvasUiStore((state) => state.setDraftMediaSlots)
+
+  const updateDraftSlots = (task: NodeTaskFormValue, nextSlots: NodeMediaSlots) => {
+    setDraftMediaSlots(normalizeMediaSlotsForNodeType(task.kind, nextSlots, taskMediaCapabilities(task)))
+  }
 
   const uploadAndAttach = async (
     input:
@@ -255,39 +378,36 @@ function DraftTargetProvider({
       | { file: File; kind: 'replace'; slot: MediaSlotName; slotItemId: string; uploadId: string },
   ) => {
     const currentDraft = useCanvasUiStore.getState().composerDraft
-    if (!isMediaSlotAllowedForNodeType(currentDraft.task.kind, input.slot)) {
+    if (!isMediaSlotAllowedForNodeType(currentDraft.task.kind, input.slot, taskMediaCapabilities(currentDraft.task))) {
       setDraftError('Media slot is not compatible with the selected model type.')
       return
     }
     beginUpload(input.uploadId, input.slot)
     try {
       const response = await uploadMediaObject(input.file)
+      const latestDraft = useCanvasUiStore.getState().composerDraft
+      const latestSlots = cloneMediaSlots(latestDraft.mediaSlots)
       if (input.kind === 'add') {
-        const latestSlots = useCanvasUiStore.getState().composerDraft.mediaSlots
-        const current = normalizeSlotOrder(latestSlots[input.slot] ?? [])
-        const order = input.position === 'start' ? 0 : current.length
-        completeUpload(input.uploadId, createSlotItem(input.slot, response.item.id, order))
+        const nextSlots = addSlotItemToSlots(
+          latestSlots,
+          createSlotItem(input.slot, response.item.id, 0),
+          input.position,
+        )
+        updateDraftSlots(latestDraft.task, nextSlots)
+        completeUpload(input.uploadId)
         return
       }
-      const latestSlots = cloneMediaSlots(useCanvasUiStore.getState().composerDraft.mediaSlots)
-      const nextItems = normalizeSlotOrder(
-        (latestSlots[input.slot] ?? []).map((item) =>
-          item.id === input.slotItemId
-            ? { ...item, source: { type: 'media_object' as const, mediaObjectId: response.item.id } }
-            : item,
-        ),
+      updateDraftSlots(
+        latestDraft.task,
+        replaceSlotItemMediaObjectInSlots(latestSlots, input.slot, input.slotItemId, response.item.id),
       )
-      setDraftMediaSlots({
-        ...latestSlots,
-        [input.slot]: nextItems,
-      })
       completeUpload(input.uploadId)
     } catch (error) {
       failUpload(input.uploadId, error instanceof Error ? error.message : 'Unable to attach media.')
     }
   }
 
-  const addUpload = (slot: MediaSlotName, file: File, options?: { position?: 'end' | 'start' }) => {
+  const addUpload: MediaSlotsBinding['addUpload'] = (slot, file, options) => {
     void uploadAndAttach({
       file,
       kind: 'add',
@@ -296,43 +416,14 @@ function DraftTargetProvider({
       uploadId: `upload_${crypto.randomUUID()}`,
     })
   }
-  const commitTask = (value: NodeTaskFormValue) => {
-    setDraftTask(cloneTaskValue(value))
-  }
 
-  const updateDraftSlots = (nextSlots: NodeMediaSlots) => {
-    setDraftMediaSlots(normalizeMediaSlotsForNodeType(draft.task.kind, nextSlots))
-  }
-
-  const value: MediaTaskFormRenderProps = {
-    commitTask,
-    form,
-    mediaActions: {
+  return {
+    addUpload,
+    actions: {
       onAddUpload: addUpload,
-      onChange: (item) => {
-        updateDraftSlots({
-          ...draft.mediaSlots,
-          [item.slot]: normalizeSlotOrder((draft.mediaSlots[item.slot] ?? []).map((candidate) => (candidate.id === item.id ? item : candidate))),
-        })
-      },
-      onRemove: (slot, slotItemId) => {
-        updateDraftSlots({
-          ...draft.mediaSlots,
-          [slot]: normalizeSlotOrder((draft.mediaSlots[slot] ?? []).filter((item) => item.id !== slotItemId)),
-        })
-      },
-      onReorder: (slot, orderedIds) => {
-        const currentItems = normalizeSlotOrder(draft.mediaSlots[slot] ?? [])
-        const itemsById = new Map(currentItems.map((item) => [item.id, item]))
-        const orderedItems = orderedIds
-          .map((id) => itemsById.get(id))
-          .filter((item): item is NodeMediaSlotItem => Boolean(item))
-        const orderedSet = new Set(orderedIds)
-        updateDraftSlots({
-          ...draft.mediaSlots,
-          [slot]: assignSlotOrder([...orderedItems, ...currentItems.filter((item) => !orderedSet.has(item.id))]),
-        })
-      },
+      onChange: (item) => updateDraftSlots(draft.task, changeSlotItemInSlots(draft.mediaSlots, item)),
+      onRemove: (slot, slotItemId) => updateDraftSlots(draft.task, removeSlotItemFromSlots(draft.mediaSlots, slot, slotItemId)),
+      onReorder: (slot, orderedIds) => updateDraftSlots(draft.task, reorderSlotItemsInSlots(draft.mediaSlots, slot, orderedIds)),
       onReplaceUpload: (slot, slotItemId, file) => {
         void uploadAndAttach({
           file,
@@ -344,17 +435,7 @@ function DraftTargetProvider({
       },
       uploading: Object.values(draft.uploads).some((entry) => entry.status === 'uploading'),
     },
-    mediaSlots,
-    nodeType: draft.task.kind,
   }
-
-  return (
-    <MediaTaskFormContext.Provider value={value}>
-      <MediaTaskPasteTarget nodeType={draft.task.kind} onAddUpload={addUpload}>
-        {children(value)}
-      </MediaTaskPasteTarget>
-    </MediaTaskFormContext.Provider>
-  )
 }
 
 function useCompatibleFormTransform(mediaSlots: NodeMediaSlots) {
@@ -374,6 +455,13 @@ function useCompatibleFormTransform(mediaSlots: NodeMediaSlots) {
   }, [mediaSlots])
 }
 
+const isEditablePasteTarget = (target: EventTarget | null): boolean => {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+  return Boolean(target.closest('textarea,input,[contenteditable="true"]'))
+}
+
 function MediaTaskPasteTarget({
   children,
   nodeType,
@@ -390,12 +478,18 @@ function MediaTaskPasteTarget({
       className="mina-wc-media-task-composer"
       data-mina-canvas-ignore="true"
       onDragOver={(event) => {
+        if (isEditablePasteTarget(event.target)) {
+          return
+        }
         if (event.dataTransfer.types.includes('Files')) {
           event.preventDefault()
           event.stopPropagation()
         }
       }}
       onDrop={(event) => {
+        if (isEditablePasteTarget(event.target)) {
+          return
+        }
         const file = Array.from(event.dataTransfer.files).find((candidate) =>
           candidate.type.startsWith('image/') || candidate.type.startsWith('video/') || candidate.type.startsWith('audio/'),
         )
@@ -407,6 +501,9 @@ function MediaTaskPasteTarget({
         onAddUpload(defaultSlot, file, { position: 'start' })
       }}
       onPaste={(event) => {
+        if (isEditablePasteTarget(event.target)) {
+          return
+        }
         const file = Array.from(event.clipboardData.items)
           .map((item) => (item.kind === 'file' ? item.getAsFile() : null))
           .find((candidate): candidate is File => Boolean(candidate))

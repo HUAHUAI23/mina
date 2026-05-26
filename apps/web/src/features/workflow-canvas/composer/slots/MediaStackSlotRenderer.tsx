@@ -46,6 +46,7 @@ const collapsedStackAddClassName = 'absolute bottom-[4px] left-[calc(var(--compo
 const expandedStackAddClassName = 'ml-2.5 h-auto w-(--composer-media-width) origin-center rounded-[12px] border-[1.5px] border-dashed border-[color:rgba(24,24,27,0.15)] bg-zinc-100/80 text-zinc-900 shadow-[0_4px_10px_-4px_rgba(0,0,0,0.1)] hover:bg-surface-container-high hover:text-foreground focus-within:bg-surface-container-high focus-within:text-foreground'
 const emptyStackAddClassName = 'relative z-[1] m-0 h-auto w-(--composer-media-width) rounded-[12px] bg-[color-mix(in_oklch,var(--surface-container-lowest)_92%,var(--surface-container-low))]'
 const collapsedEmptyStackAddClassName = 'relative z-[1] m-0 h-auto w-(--composer-media-width) rounded-[10px] border-[1.5px] border-dashed border-[color:rgba(24,24,27,0.18)] bg-zinc-100/80 text-zinc-900 shadow-[0_4px_10px_-4px_rgba(0,0,0,0.1)] [&_svg]:size-4'
+const disabledStackAddClassName = 'pointer-events-none opacity-45'
 
 const itemIdFromUnique = (id: UniqueIdentifier): string => String(id)
 
@@ -160,7 +161,7 @@ function SortableMediaSlotItem({
   } = useSortable({
     id: item.id,
   })
-  // Per design: progressive fan rotation in expanded state, subtle top-left crossed stack when collapsed.
+  // Progressive fan rotation in expanded state, subtle top-left crossed stack when collapsed.
   const rotate = expanded
     ? (index % 2 === 0 ? -8 : 6)
     : ([2.8, -5][index] ?? 0)
@@ -229,7 +230,7 @@ function SortableMediaSlotItem({
           {content}
         </TooltipTrigger>
         <TooltipContent side="top" sideOffset={8}>
-          图片{index + 1}
+          Item {index + 1}
         </TooltipContent>
       </Tooltip>
     )
@@ -313,6 +314,7 @@ export function MediaStackSlotRenderer({
     }),
   )
   const { accept, label, slot } = descriptor
+  const full = descriptor.maxItems !== undefined && items.length >= descriptor.maxItems
   const attachment = variant === 'attachment' || variant === 'collapsed'
   const collapsed = variant === 'collapsed'
   const expanded = forceExpanded || hoveredSlot === slot || focusedSlot === slot || Boolean(draggingItemId) || (!attachment && items.length <= 4)
@@ -464,12 +466,13 @@ export function MediaStackSlotRenderer({
           attachment && expanded && expandedStackAddClassName,
           collapsed && items.length > 0 && 'size-7 min-h-7',
           attachment && draggingItemId && 'pointer-events-none opacity-0',
-          actions.uploading && 'pointer-events-none opacity-50',
+          (actions.uploading || full) && disabledStackAddClassName,
         )}
         data-empty={items.length ? undefined : 'true'}
         data-variant={variant}
         data-uploading={actions.uploading ? 'true' : undefined}
-        title={`Add ${label}`}
+        disabled={actions.uploading || full}
+        title={full ? `${label} limit reached` : `Add ${label}`}
         type="button"
         onClick={(event) => {
           event.stopPropagation()

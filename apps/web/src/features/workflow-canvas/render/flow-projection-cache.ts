@@ -104,5 +104,3 @@ export class FlowProjectionCache {
     return { edges: this.#edges, nodes: this.#nodes }
   }
 }
-
-export const flowProjectionCache = new FlowProjectionCache()

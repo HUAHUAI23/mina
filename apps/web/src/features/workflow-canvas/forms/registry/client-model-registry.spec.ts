@@ -1,5 +1,13 @@
-import { deriveGenerationMode, deriveModelCompatibilityMode, listClientModels, paramsForSpec, resolveClientModel } from './client-model-registry'
+import {
+  createClientModelRegistry,
+  deriveGenerationMode,
+  deriveModelCompatibilityMode,
+  listClientModels,
+  paramsForSpec,
+  resolveClientModel,
+} from './client-model-registry'
 import './index'
+import { imageClientModelSpecs } from './image-specs'
 
 const assert = (condition: unknown, message: string): void => {
   if (!condition) {
@@ -116,6 +124,32 @@ assert(
 assert(
   paramsForSpec({ count: 2, imageSearch: true, thinkingLevel: 'high' }, geminiPro!).count === 2,
   'paramsForSpec should preserve supported params',
+)
+assert(
+  !Object.hasOwn(paramsForSpec({ optimizePrompt: true, webSearch: true }, resolveClientModel({
+    kind: 'image_generation',
+    provider: 'volcengine',
+    model: 'doubao-seedream-4-5-251128',
+  })!), 'webSearch'),
+  'paramsForSpec should honor explicit schema subset overrides',
+)
+
+const isolatedRegistry = createClientModelRegistry([imageClientModelSpecs[0]!])
+assert(
+  isolatedRegistry.listModels('image_generation', 'text').length === 1,
+  'createClientModelRegistry should allow isolated model sets.',
+)
+assert(
+  !isolatedRegistry.resolve({
+    kind: 'image_generation',
+    provider: 'volcengine',
+    model: 'doubao-seedream-5-0-260128',
+  }),
+  'isolated registries should not inherit default registrations.',
+)
+assert(
+  listClientModels('image_generation', 'text').length === expectedModels.length,
+  'isolated registries should not mutate the default registry.',
 )
 
 console.log('client model registry checks passed')

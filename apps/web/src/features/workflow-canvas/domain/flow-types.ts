@@ -5,8 +5,7 @@ import type {
   WorkflowCanvasEdge,
 } from '@mina/contracts/modules/canvas'
 
-interface WorkflowFlowEdgeData {
-  [key: string]: WorkflowCanvasEdge['data']['connection'] | undefined
+interface WorkflowFlowEdgeData extends Record<string, unknown> {
   connection?: WorkflowCanvasEdge['data']['connection'] | undefined
 }
 

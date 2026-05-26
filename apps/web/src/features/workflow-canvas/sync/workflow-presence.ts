@@ -90,13 +90,40 @@ const createAnimationFrameThrottle = <TValue>(callback: (value: TValue) => void)
   }
 }
 
+const createTimedThrottle = <TValue>(callback: (value: TValue) => void, intervalMs: number) => {
+  let latest: TValue
+  let lastRun = 0
+  let timeout: number | undefined
+  return (value: TValue) => {
+    latest = value
+    const now = Date.now()
+    const run = () => {
+      timeout = undefined
+      lastRun = Date.now()
+      callback(latest)
+    }
+    const delay = Math.max(0, intervalMs - (now - lastRun))
+    if (delay === 0 && timeout === undefined) {
+      run()
+      return
+    }
+    if (timeout === undefined) {
+      if (typeof window === 'undefined') {
+        run()
+        return
+      }
+      timeout = window.setTimeout(run, delay)
+    }
+  }
+}
+
 const publishDraggingFrame = createAnimationFrameThrottle<WorkflowAwarenessState['dragging']>((dragging) => {
   useWorkflowPresenceStore.getState().setLocalDragging(dragging)
 })
 
-const publishViewportFrame = createAnimationFrameThrottle<Viewport>((viewport) => {
+const publishViewportFrame = createTimedThrottle<Viewport>((viewport) => {
   useWorkflowPresenceStore.getState().setLocalViewport(viewport)
-})
+}, 200)
 
 export const publishLocalDragging = (dragging: WorkflowAwarenessState['dragging']): void => {
   publishDraggingFrame(dragging)

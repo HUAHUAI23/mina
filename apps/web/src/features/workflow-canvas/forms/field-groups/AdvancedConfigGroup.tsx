@@ -13,7 +13,7 @@ export function AdvancedConfigGroup({ form, spec }: AdvancedConfigGroupProps) {
 
   return (
     <div className="grid gap-3 rounded-xl bg-surface-container-lowest/55 p-3.5">
-      <spec.AdvancedFields form={form} />
+      <spec.AdvancedFields fields="params" form={form} />
     </div>
   )
 }

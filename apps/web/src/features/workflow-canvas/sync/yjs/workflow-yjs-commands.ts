@@ -8,6 +8,7 @@ import {
   coerceMediaSlotForNodeType,
   defaultSelectorForMediaSlot,
   isMediaSlotAllowedForNodeType,
+  mediaSlotsForNodeType,
   normalizeMediaSlotsForNodeType,
 } from '../../domain/media-slot-policy'
 import { mediaSlotFromHandleId } from '../../domain/media-slot-handles'
@@ -19,10 +20,10 @@ import {
 } from '../../utils/media-slots'
 import { updateNodesWithCompatibleMediaModels } from '../../store/model-compatibility-actions'
 import { taskWithCompatibleModel } from '../../forms/model-compatibility'
+import { resolveClientModel } from '../../forms/registry/client-model-registry'
 import { createStoreId } from '../../store/store-helpers'
 import type { CanvasNodeFramePatch, MediaConnectionInput } from '../../store/store-types'
-import { createWorkflowYDoc, type WorkflowYDocHandles } from './yjs-document'
-import { exportWorkflowYjsSnapshot } from './yjs-snapshot'
+import { exportWorkflowSnapshotFromYjs, writeWorkflowNode, type WorkflowYDocHandles } from './yjs-document'
 import { getWorkflowYjsRuntimeForWorkflow } from './workflow-yjs-store'
 import { validateWorkflowCanvasGraph } from '../../domain/canvas-graph-validation'
 
@@ -34,20 +35,16 @@ export interface WorkflowYjsCommandContext {
 
 const withYDoc = (
   context: WorkflowYjsCommandContext,
-  mutate: (y: WorkflowYDocHandles, workflowId: string) => void,
+  apply: (y: WorkflowYDocHandles, workflowId: string) => void,
 ): void => {
   const runtime = getWorkflowYjsRuntimeForWorkflow(context.workflowId)
   if (!runtime) {
-    return
+    throw new Error(`Yjs runtime not registered for workflow ${context.workflowId}`)
   }
-  const clone = cloneYDoc(runtime.y)
-  try {
-    mutate(clone, runtime.workflowId)
-    const candidate = exportWorkflowYjsSnapshot(clone)
-    validateWorkflowCanvasGraph(candidate.nodes, candidate.edges)
-    runtime.y.ydoc.transact(() => mutate(runtime.y, runtime.workflowId), 'mina-local')
-  } finally {
-    clone.ydoc.destroy()
+  runtime.y.ydoc.transact(() => apply(runtime.y, runtime.workflowId), 'mina-local')
+  if (!import.meta.env.PROD) {
+    const snapshot = exportWorkflowSnapshotFromYjs(runtime.y)
+    validateWorkflowCanvasGraph(snapshot.nodes, snapshot.edges)
   }
 }
 
@@ -62,26 +59,6 @@ const withNodeFrameYDoc = (
   runtime.y.ydoc.transact(() => mutate(runtime.y, runtime.workflowId), 'mina-local')
 }
 
-const cloneYDoc = (source: WorkflowYDocHandles): WorkflowYDocHandles => {
-  const clone = createWorkflowYDoc()
-  for (const [id, node] of source.nodes.entries()) {
-    clone.nodes.set(id, structuredClone(node))
-  }
-  for (const [id, frame] of source.nodeFrames.entries()) {
-    clone.nodeFrames.set(id, structuredClone(frame))
-  }
-  if (source.nodeOrder.length > 0) {
-    clone.nodeOrder.push(source.nodeOrder.toArray())
-  }
-  for (const [id, edge] of source.edges.entries()) {
-    clone.edges.set(id, structuredClone(edge))
-  }
-  if (source.edgeOrder.length > 0) {
-    clone.edgeOrder.push(source.edgeOrder.toArray())
-  }
-  return clone
-}
-
 const frameFromNode = (node: WorkflowCanvasNode): Partial<WorkflowCanvasNode> => ({
   position: node.position,
   ...(node.parentId ? { parentId: node.parentId } : {}),
@@ -91,7 +68,7 @@ const frameFromNode = (node: WorkflowCanvasNode): Partial<WorkflowCanvasNode> =>
 })
 
 const upsertNode = (y: WorkflowYDocHandles, node: WorkflowCanvasNode): void => {
-  y.nodes.set(node.id, structuredClone(node))
+  writeWorkflowNode(y.nodes, node)
   y.nodeFrames.set(node.id, frameFromNode(node))
   if (!y.nodeOrder.toArray().includes(node.id)) {
     y.nodeOrder.push([node.id])
@@ -99,9 +76,10 @@ const upsertNode = (y: WorkflowYDocHandles, node: WorkflowCanvasNode): void => {
 }
 
 const updateNode = (y: WorkflowYDocHandles, node: WorkflowCanvasNode): void => {
-  if (y.nodes.has(node.id)) {
-    y.nodes.set(node.id, structuredClone(node))
+  if (!y.nodes.has(node.id)) {
+    return
   }
+  writeWorkflowNode(y.nodes, node)
 }
 
 const upsertEdge = (y: WorkflowYDocHandles, edge: WorkflowCanvasEdge): void => {
@@ -162,6 +140,9 @@ const createMediaEdge = (
   },
 })
 
+const mediaCapabilitiesForTask = (task: TaskDraftConfig | undefined) =>
+  task ? resolveClientModel({ kind: task.kind, model: task.model, provider: task.provider })?.mediaCapabilities : undefined
+
 export const workflowYjsCommands = {
   addMediaConnection(context: WorkflowYjsCommandContext, input: MediaConnectionInput): void {
     const { nodes } = context
@@ -186,13 +167,18 @@ export const workflowYjsCommands = {
     }
 
     const requestedSlot = mediaSlotFromHandleId(target.data.nodeType, input.targetHandle)
-    const slot = coerceMediaSlotForNodeType(target.data.nodeType, requestedSlot)
+    const capabilities = mediaCapabilitiesForTask(target.data.config.task)
+    const slot = coerceMediaSlotForNodeType(target.data.nodeType, requestedSlot, capabilities)
     if (!slot) {
       return
     }
 
     const targetSlotItemId = createStoreId('slot_item')
+    const slotDescriptor = mediaSlotsForNodeType(target.data.nodeType, capabilities).find((descriptor) => descriptor.slot === slot)
     const existingItems = target.data.mediaSlots?.[slot] ?? []
+    if (slotDescriptor?.maxItems !== undefined && existingItems.length >= slotDescriptor.maxItems) {
+      return
+    }
     const useRunOutput = shareFlowGroupScope(source, target, nodes)
     const item: NodeMediaSlotItem = {
       id: targetSlotItemId,
@@ -250,7 +236,7 @@ export const workflowYjsCommands = {
       node.position = input.position
     }
     node.data.config.task = input.task
-    node.data.mediaSlots = normalizeMediaSlotsForNodeType(input.nodeType, input.mediaSlots)
+    node.data.mediaSlots = normalizeMediaSlotsForNodeType(input.nodeType, input.mediaSlots, mediaCapabilitiesForTask(input.task))
     node.data.config.task = taskWithCompatibleModel(node.data.config.task, node.data.mediaSlots)
     withYDoc(context, (y) => upsertNode(y, node))
     return node.id
@@ -260,9 +246,9 @@ export const workflowYjsCommands = {
     if (frames.length === 0) {
       return
     }
-    const nodeIds = new Set(context.nodes.map((node) => node.id))
+    const nodesById = new Map(context.nodes.map((node) => [node.id, node]))
     const validFrames = frames.filter((frame) => {
-      if (!nodeIds.has(frame.nodeId)) {
+      if (!nodesById.has(frame.nodeId)) {
         return false
       }
       return (
@@ -277,14 +263,14 @@ export const workflowYjsCommands = {
     }
     withNodeFrameYDoc(context, (y) => {
       for (const frame of validFrames) {
-        const current = y.nodes.get(frame.nodeId) as WorkflowCanvasNode | undefined
+        const current = nodesById.get(frame.nodeId)
         if (!current) {
           continue
         }
         const currentFrame = y.nodeFrames.get(frame.nodeId) as Partial<WorkflowCanvasNode> | undefined
         y.nodeFrames.set(frame.nodeId, {
           ...(currentFrame ?? {}),
-          position: frame.position ?? current.position,
+          position: frame.position ?? currentFrame?.position ?? current.position,
           ...(frame.parentId !== undefined ? { parentId: frame.parentId } : {}),
           ...(frame.width !== undefined ? { width: frame.width } : {}),
           ...(frame.height !== undefined ? { height: frame.height } : {}),
@@ -308,11 +294,12 @@ export const workflowYjsCommands = {
       nodes,
     ))
     const touchedNodes = new Set(removedEdges.map((edge) => edge.target))
+    const touchedNextNodes = nextNodes.filter((node) => touchedNodes.has(node.id))
     withYDoc(context, (y) => {
       for (const edgeId of removedIds) {
         deleteEdge(y, edgeId)
       }
-      for (const node of nextNodes.filter((node) => touchedNodes.has(node.id))) {
+      for (const node of touchedNextNodes) {
         updateNode(y, node)
       }
     })
@@ -330,6 +317,7 @@ export const workflowYjsCommands = {
       nodes.filter((node) => !removedIds.has(node.id)),
     ))
     const touchedNodes = new Set(removedEdges.map((edge) => edge.target).filter((nodeId) => !removedIds.has(nodeId)))
+    const touchedNextNodes = nextNodes.filter((node) => touchedNodes.has(node.id))
     withYDoc(context, (y) => {
       for (const nodeId of removedIds) {
         deleteNode(y, nodeId)
@@ -337,7 +325,7 @@ export const workflowYjsCommands = {
       for (const edge of removedEdges) {
         deleteEdge(y, edge.id)
       }
-      for (const node of nextNodes.filter((node) => touchedNodes.has(node.id))) {
+      for (const node of touchedNextNodes) {
         updateNode(y, node)
       }
     })
@@ -361,10 +349,18 @@ export const workflowYjsCommands = {
 
   addSlotItem(context: WorkflowYjsCommandContext, nodeId: string, item: NodeMediaSlotItem): void {
     workflowYjsCommands.updateNodeById(context, nodeId, (node) => {
-      if (!isMediaGenerationNode(node) || !isMediaSlotAllowedForNodeType(node.data.nodeType, item.slot)) {
+      if (!isMediaGenerationNode(node)) {
         return undefined
       }
+      const capabilities = mediaCapabilitiesForTask(node.data.config.task)
+      if (!isMediaSlotAllowedForNodeType(node.data.nodeType, item.slot, capabilities)) {
+        return undefined
+      }
+      const slotDescriptor = mediaSlotsForNodeType(node.data.nodeType, capabilities).find((descriptor) => descriptor.slot === item.slot)
       const items = normalizeSlotOrder(node.data.mediaSlots?.[item.slot] ?? [])
+      if (slotDescriptor?.maxItems !== undefined && items.length >= slotDescriptor.maxItems) {
+        return undefined
+      }
       const insertIndex = Math.min(Math.max(item.order, 0), items.length)
       node.data.mediaSlots = {
         ...(node.data.mediaSlots ?? {}),
@@ -504,7 +500,11 @@ export const workflowYjsCommands = {
 
   updateSlotItem(context: WorkflowYjsCommandContext, nodeId: string, item: NodeMediaSlotItem): void {
     workflowYjsCommands.updateNodeById(context, nodeId, (node) => {
-      if (!isMediaGenerationNode(node) || !isMediaSlotAllowedForNodeType(node.data.nodeType, item.slot)) {
+      if (!isMediaGenerationNode(node)) {
+        return undefined
+      }
+      const capabilities = mediaCapabilitiesForTask(node.data.config.task)
+      if (!isMediaSlotAllowedForNodeType(node.data.nodeType, item.slot, capabilities)) {
         return undefined
       }
       const items = node.data.mediaSlots?.[item.slot] ?? []

@@ -2,13 +2,17 @@ import type { TaskDraftConfig } from '@mina/contracts/modules/tasks'
 
 export type TaskParams = TaskDraftConfig['params']
 
-export interface NodeTaskFormValue {
-  kind: TaskDraftConfig['kind']
+interface NodeTaskFormBaseValue<TKind extends TaskDraftConfig['kind']> {
+  kind: TKind
   model: string
   params: TaskParams
   prompt: string
   provider: string
 }
+
+export type ImageNodeTaskFormValue = NodeTaskFormBaseValue<'image_generation'>
+export type VideoNodeTaskFormValue = NodeTaskFormBaseValue<'video_generation'>
+export type NodeTaskFormValue = ImageNodeTaskFormValue | VideoNodeTaskFormValue
 
 export const taskToFormValue = (task: TaskDraftConfig): NodeTaskFormValue => ({
   kind: task.kind,
