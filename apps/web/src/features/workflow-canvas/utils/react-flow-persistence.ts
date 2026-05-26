@@ -1,5 +1,8 @@
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 
+import { normalizeMediaSlotsForNodeType } from '../domain/media-slot-policy'
+import { resolveClientModel } from '../forms/registry/client-model-registry'
+
 const stableNode = (node: WorkflowCanvasNode): WorkflowCanvasNode => ({
   id: node.id,
   type: node.type,
@@ -8,7 +11,23 @@ const stableNode = (node: WorkflowCanvasNode): WorkflowCanvasNode => ({
   ...(node.extent ? { extent: node.extent } : {}),
   ...(node.width ? { width: node.width } : {}),
   ...(node.height ? { height: node.height } : {}),
-  data: node.data,
+  data:
+    node.data.nodeType === 'image_generation' || node.data.nodeType === 'video_generation'
+      ? {
+          ...node.data,
+          mediaSlots: normalizeMediaSlotsForNodeType(
+            node.data.nodeType,
+            node.data.mediaSlots,
+            node.data.config.task
+              ? resolveClientModel({
+                kind: node.data.config.task.kind,
+                model: node.data.config.task.model,
+                provider: node.data.config.task.provider,
+              })?.mediaCapabilities
+              : undefined,
+          ),
+        }
+      : node.data,
 })
 
 export const sortParentNodesFirst = (nodes: readonly WorkflowCanvasNode[]): WorkflowCanvasNode[] => {
@@ -29,13 +48,25 @@ export const sortParentNodesFirst = (nodes: readonly WorkflowCanvasNode[]): Work
   return [...nodes].map(stableNode).sort((left, right) => depth(left) - depth(right))
 }
 
+const stableEdge = (edge: WorkflowCanvasEdge): WorkflowCanvasEdge => ({
+  id: edge.id,
+  type: edge.type ?? 'media',
+  source: edge.source,
+  target: edge.target,
+  ...(edge.sourceHandle ? { sourceHandle: edge.sourceHandle } : {}),
+  ...(edge.targetHandle ? { targetHandle: edge.targetHandle } : {}),
+  data: edge.data,
+})
+
 export const stableEdges = (edges: readonly WorkflowCanvasEdge[]): WorkflowCanvasEdge[] =>
-  edges.map((edge) => ({
-    id: edge.id,
-    type: edge.type ?? 'media',
-    source: edge.source,
-    target: edge.target,
-    ...(edge.sourceHandle ? { sourceHandle: edge.sourceHandle } : {}),
-    ...(edge.targetHandle ? { targetHandle: edge.targetHandle } : {}),
-    data: edge.data,
-  }))
+  edges.map(stableEdge)
+
+export const stableCanvas = (
+  nodes: readonly WorkflowCanvasNode[],
+  edges: readonly WorkflowCanvasEdge[],
+): { edges: WorkflowCanvasEdge[]; nodes: WorkflowCanvasNode[] } => {
+  return {
+    nodes: sortParentNodesFirst(nodes),
+    edges: stableEdges(edges),
+  }
+}

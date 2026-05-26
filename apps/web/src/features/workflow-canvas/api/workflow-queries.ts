@@ -1,7 +1,5 @@
 import type {
   CreateWorkflowRunInput,
-  UpdateNodeMediaViewInput,
-  UpdateWorkflowInput,
   WorkflowNodeTaskHistoryResponse,
   WorkflowResponse,
   WorkflowRunListResponse,
@@ -21,23 +19,6 @@ import { readJson } from '../../../lib/http'
 
 export const getWorkflow = async (workflowId: string): Promise<WorkflowResponse> => {
   const response = await apiClient.api.workflows[':id'].$get({ param: { id: workflowId } })
-  return readJson(response, WorkflowResponseSchema)
-}
-
-export const saveWorkflow = async (workflowId: string, input: UpdateWorkflowInput): Promise<WorkflowResponse> => {
-  const response = await apiClient.api.workflows[':id'].$put({ json: input, param: { id: workflowId } })
-  return readJson(response, WorkflowResponseSchema)
-}
-
-export const patchNodeMediaView = async (
-  workflowId: string,
-  nodeId: string,
-  input: UpdateNodeMediaViewInput,
-): Promise<WorkflowResponse> => {
-  const response = await apiClient.api.workflows[':id'].nodes[':nodeId']['media-view'].$patch({
-    json: input,
-    param: { id: workflowId, nodeId },
-  })
   return readJson(response, WorkflowResponseSchema)
 }
 

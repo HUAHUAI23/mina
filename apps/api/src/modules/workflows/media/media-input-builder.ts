@@ -2,6 +2,7 @@ import type { MediaSlotName, NodeMediaSlotItem } from '@mina/contracts/modules/m
 import type { MediaInput, NodeOutputResource, ResourceKind, ResourceRole } from '@mina/contracts/modules/tasks'
 
 export const slotToInputRole = (slot: MediaSlotName): ResourceRole => {
+  if (slot === 'inputImages') return 'reference_image'
   if (slot === 'firstFrame') return 'first_frame'
   if (slot === 'lastFrame') return 'last_frame'
   if (slot === 'referenceAudios') return 'reference_audio'

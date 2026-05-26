@@ -11,16 +11,12 @@ import {
   workflowRuns,
 } from '../../../db/schema'
 import {
-  edgeFromDefinitionRow,
-  workflowDefinitionEdgeInsertRows,
-  workflowDefinitionNodeInsertRows,
-  nodeFromDefinitionRow,
-} from './drizzle-workflow-definition.repository'
-import {
-  toDate,
-  toIso,
-  workflowRunDto,
-} from './workflow-mappers'
+  workflowEdgeFromSnapshotRow,
+  workflowEdgeSnapshotRows,
+  workflowNodeFromSnapshotRow,
+  workflowNodeSnapshotRows,
+} from './workflow-snapshot-mappers'
+import { toDate, toIso, workflowRunDto } from './workflow-mappers'
 import type {
   ClaimWorkflowRunByIdInput,
   ClaimWorkflowRunsInput,
@@ -59,36 +55,10 @@ const runRecordFromRow = (row: WorkflowRunRow): WorkflowRunRecord => ({
 })
 
 export const workflowRunNodeFromRow = (row: WorkflowRunNodeRow): WorkflowCanvasNode =>
-  nodeFromDefinitionRow({
-    workflowId: row.workflowRunId,
-    nodeId: row.nodeId,
-    type: row.type,
-    positionX: row.positionX,
-    positionY: row.positionY,
-    parentId: row.parentId,
-    extent: row.extent,
-    width: row.width,
-    height: row.height,
-    data: row.data,
-    sortOrder: row.sortOrder,
-    createdAt: row.createdAt,
-    updatedAt: row.createdAt,
-  })
+  workflowNodeFromSnapshotRow(row)
 
 export const workflowRunEdgeFromRow = (row: WorkflowRunEdgeRow): WorkflowCanvasEdge =>
-  edgeFromDefinitionRow({
-    workflowId: row.workflowRunId,
-    edgeId: row.edgeId,
-    type: row.type,
-    sourceNodeId: row.sourceNodeId,
-    targetNodeId: row.targetNodeId,
-    sourceHandle: row.sourceHandle,
-    targetHandle: row.targetHandle,
-    data: row.data,
-    sortOrder: row.sortOrder,
-    createdAt: row.createdAt,
-    updatedAt: row.createdAt,
-  })
+  workflowEdgeFromSnapshotRow(row)
 
 export const workflowRunNodeStateFromRow = (row: WorkflowRunNodeStateRow): WorkflowRunNodeState => ({
   status: row.status,
@@ -113,38 +83,14 @@ const nodeSnapshotRows = (
   nodes: WorkflowCanvasNode[],
   timestamp: string,
 ): Array<typeof workflowRunNodes.$inferInsert> =>
-  workflowDefinitionNodeInsertRows(workflowRunId, nodes, timestamp).map((node) => ({
-    workflowRunId,
-    nodeId: node.nodeId,
-    type: node.type,
-    positionX: node.positionX,
-    positionY: node.positionY,
-    parentId: node.parentId,
-    extent: node.extent,
-    width: node.width,
-    height: node.height,
-    data: node.data,
-    sortOrder: node.sortOrder,
-    createdAt: new Date(timestamp),
-  }))
+  workflowNodeSnapshotRows(workflowRunId, nodes, timestamp)
 
 const edgeSnapshotRows = (
   workflowRunId: string,
   edges: WorkflowCanvasEdge[],
   timestamp: string,
 ): Array<typeof workflowRunEdges.$inferInsert> =>
-  workflowDefinitionEdgeInsertRows(workflowRunId, edges, timestamp).map((edge) => ({
-    workflowRunId,
-    edgeId: edge.edgeId,
-    type: edge.type,
-    sourceNodeId: edge.sourceNodeId,
-    targetNodeId: edge.targetNodeId,
-    sourceHandle: edge.sourceHandle,
-    targetHandle: edge.targetHandle,
-    data: edge.data,
-    sortOrder: edge.sortOrder,
-    createdAt: new Date(timestamp),
-  }))
+  workflowEdgeSnapshotRows(workflowRunId, edges, timestamp)
 
 export class DrizzleWorkflowRunRepository implements WorkflowRunRepository {
   constructor(private readonly db: MinaDbClient) {}

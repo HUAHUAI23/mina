@@ -1,0 +1,298 @@
+.mina-wc-stage .react-flow {
+  --xy-background-color: transparent;
+  --xy-background-pattern-color: transparent;
+  --xy-edge-stroke: color-mix(
+    in oklch,
+    var(--foreground-tertiary) 48%,
+    transparent
+  );
+  --xy-edge-stroke-width: 2;
+  --xy-handle-background-color: var(--surface-container-lowest);
+  --xy-controls-button-background-color: color-mix(
+    in oklch,
+    var(--surface-container-lowest) 86%,
+    transparent
+  );
+  --xy-controls-button-background-color-hover: var(--surface-container-lowest);
+  --xy-controls-button-color: var(--foreground-tertiary);
+  height: 100%;
+  width: 100%;
+}
+
+.react-flow__node {
+  overflow: visible;
+}
+
+.react-flow__node.selected .mina-wc-node {
+  box-shadow:
+    0 30px 58px -34px
+      color-mix(in oklch, var(--foreground-secondary) 30%, transparent),
+    inset 0 0 0 1.5px
+      color-mix(in oklch, var(--primary) 44%, var(--foreground-secondary));
+}
+
+.react-flow__node.dragging .mina-wc-node,
+.mina-wc-flow-shell[data-connecting] .react-flow__node:hover .mina-wc-node {
+  box-shadow:
+    0 30px 52px -36px
+      color-mix(in oklch, var(--foreground-secondary) 26%, transparent),
+    inset 0 0 0 1px
+      color-mix(in oklch, var(--primary) 34%, var(--foreground-secondary));
+}
+
+.mina-wc-stage .react-flow__handle.mina-wc-handle,
+.mina-wc-flow-shell .react-flow__handle.mina-wc-handle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: color-mix(
+    in oklch,
+    var(--foreground-tertiary) 82%,
+    var(--foreground-secondary)
+  );
+  display: flex;
+  height: var(--mina-handle-anchor-size, 1px);
+  justify-content: center;
+  min-height: var(--mina-handle-anchor-size, 1px);
+  min-width: var(--mina-handle-anchor-size, 1px);
+  pointer-events: all;
+  touch-action: none;
+  width: var(--mina-handle-anchor-size, 1px);
+  z-index: 3;
+}
+
+.mina-wc-stage .react-flow__handle-left.mina-wc-handle-target,
+.mina-wc-flow-shell .react-flow__handle-left.mina-wc-handle-target {
+  left: 0;
+  right: auto;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.mina-wc-stage .react-flow__handle-right.mina-wc-handle-source,
+.mina-wc-flow-shell .react-flow__handle-right.mina-wc-handle-source {
+  left: auto;
+  right: 0;
+  top: 50%;
+  transform: translate(50%, -50%);
+}
+
+.mina-wc-stage .react-flow__handle.mina-wc-handle .mina-wc-handle-hit,
+.mina-wc-flow-shell .react-flow__handle.mina-wc-handle .mina-wc-handle-hit {
+  align-items: center;
+  border-radius: 999px;
+  display: flex;
+  height: var(--mina-handle-hit-size, 72px);
+  justify-content: center;
+  left: 50%;
+  pointer-events: all;
+  position: absolute;
+  top: 50%;
+  touch-action: none;
+  transform: translate(calc(-50% + var(--mina-handle-hit-x, 0px)), -50%);
+  width: var(--mina-handle-hit-size, 72px);
+}
+
+.mina-wc-stage .react-flow__handle.mina-wc-handle .mina-wc-handle-orb,
+.mina-wc-flow-shell .react-flow__handle.mina-wc-handle .mina-wc-handle-orb {
+  align-items: center;
+  background: var(--surface-container-lowest);
+  border: 1.5px solid
+    color-mix(in oklch, var(--foreground-tertiary) 62%, transparent);
+  border-radius: 999px;
+  box-shadow:
+    0 10px 22px -14px color-mix(in oklch, var(--foreground) 42%, transparent),
+    0 0 0 0 color-mix(in oklch, var(--primary) 0%, transparent);
+  display: flex;
+  height: var(--mina-handle-orb-size, 22px);
+  justify-content: center;
+  position: relative;
+  opacity: 1;
+  transform: translate(var(--mina-handle-x, 0px), var(--mina-handle-y, 0px));
+  width: var(--mina-handle-orb-size, 22px);
+}
+
+.mina-wc-stage
+  .react-flow__handle.mina-wc-handle[data-connected="true"]
+  .mina-wc-handle-orb,
+.mina-wc-flow-shell
+  .react-flow__handle.mina-wc-handle[data-connected="true"]
+  .mina-wc-handle-orb {
+  opacity: 0;
+  transform: translate(var(--mina-handle-x, 0px), var(--mina-handle-y, 0px));
+}
+
+.mina-wc-stage .react-flow__handle.mina-wc-handle .mina-wc-handle-orb::before,
+.mina-wc-stage .react-flow__handle.mina-wc-handle .mina-wc-handle-orb::after,
+.mina-wc-flow-shell
+  .react-flow__handle.mina-wc-handle
+  .mina-wc-handle-orb::before,
+.mina-wc-flow-shell
+  .react-flow__handle.mina-wc-handle
+  .mina-wc-handle-orb::after {
+  background: currentColor;
+  border-radius: 999px;
+  content: "";
+  height: 2px;
+  position: absolute;
+  width: 9px;
+}
+
+.mina-wc-stage .react-flow__handle.mina-wc-handle .mina-wc-handle-orb::after,
+.mina-wc-flow-shell
+  .react-flow__handle.mina-wc-handle
+  .mina-wc-handle-orb::after {
+  transform: rotate(90deg);
+}
+
+.mina-wc-stage .react-flow__handle.mina-wc-handle-target .mina-wc-handle-hit,
+.mina-wc-flow-shell
+  .react-flow__handle.mina-wc-handle-target
+  .mina-wc-handle-hit {
+  --mina-handle-hit-x: calc(var(--mina-handle-rest-offset, 18px) * -1);
+}
+
+.mina-wc-stage .react-flow__handle.mina-wc-handle-source .mina-wc-handle-hit,
+.mina-wc-flow-shell
+  .react-flow__handle.mina-wc-handle-source
+  .mina-wc-handle-hit {
+  --mina-handle-hit-x: var(--mina-handle-rest-offset, 18px);
+}
+
+.mina-wc-stage .react-flow__handle.mina-wc-handle:hover .mina-wc-handle-orb,
+.mina-wc-stage
+  .react-flow__handle.mina-wc-handle.connectingto
+  .mina-wc-handle-orb,
+.mina-wc-stage
+  .react-flow__handle.mina-wc-handle.connectingfrom
+  .mina-wc-handle-orb,
+.mina-wc-flow-shell
+  .react-flow__handle.mina-wc-handle:hover
+  .mina-wc-handle-orb,
+.mina-wc-flow-shell
+  .react-flow__handle.mina-wc-handle.connectingto
+  .mina-wc-handle-orb,
+.mina-wc-flow-shell
+  .react-flow__handle.mina-wc-handle.connectingfrom
+  .mina-wc-handle-orb,
+.mina-wc-stage
+  .react-flow__handle.mina-wc-handle
+  .mina-wc-handle-hit:hover
+  .mina-wc-handle-orb,
+.mina-wc-flow-shell
+  .react-flow__handle.mina-wc-handle
+  .mina-wc-handle-hit:hover
+  .mina-wc-handle-orb {
+  background: var(--surface-container-lowest);
+  border-color: color-mix(
+    in oklch,
+    var(--primary) 46%,
+    var(--foreground-secondary)
+  );
+  box-shadow:
+    0 12px 24px -14px
+      color-mix(in oklch, var(--foreground-secondary) 36%, transparent),
+    0 0 0 8px color-mix(in oklch, var(--primary) 12%, transparent);
+  color: var(--foreground-secondary);
+  opacity: 1;
+  transform: translate(var(--mina-handle-x, 0px), var(--mina-handle-y, 0px));
+}
+
+.mina-wc-flow-shell[data-connecting]
+  .react-flow__handle.mina-wc-handle
+  .mina-wc-handle-orb {
+  border-color: color-mix(
+    in oklch,
+    var(--primary) 38%,
+    var(--foreground-tertiary)
+  );
+  box-shadow:
+    0 12px 24px -15px
+      color-mix(in oklch, var(--foreground-secondary) 36%, transparent),
+    0 0 0 9px color-mix(in oklch, var(--primary) 11%, transparent);
+  opacity: 1;
+  transform: translate(var(--mina-handle-x, 0px), var(--mina-handle-y, 0px));
+}
+
+.mina-wc-flow-shell[data-connecting]
+  .react-flow__handle.mina-wc-handle
+  .mina-wc-handle-orb::before {
+  opacity: 0.68;
+}
+
+.mina-wc-media-edge-shell {
+  color: color-mix(in oklch, var(--foreground-secondary) 68%, var(--primary));
+}
+
+.mina-wc-media-edge {
+  stroke: color-mix(in oklch, var(--foreground-secondary) 50%, transparent);
+  stroke-linecap: round;
+  stroke-width: 2.2;
+}
+
+.mina-wc-media-edge-shell[data-media="true"] .mina-wc-media-edge {
+  stroke: color-mix(in oklch, var(--foreground-secondary) 58%, var(--primary));
+}
+
+.mina-wc-media-edge-shell[data-active="true"] .mina-wc-media-edge {
+  stroke: color-mix(in oklch, var(--primary) 64%, var(--foreground-secondary));
+  stroke-width: 2.8;
+}
+
+.mina-wc-media-edge-flow {
+  opacity: 0;
+  pointer-events: none;
+  stroke: color-mix(
+    in oklch,
+    var(--surface-container-lowest) 52%,
+    var(--primary)
+  );
+  stroke-dasharray: 12 30;
+  stroke-dashoffset: 0;
+  stroke-linecap: round;
+  stroke-width: 4;
+}
+
+.mina-wc-media-edge-shell[data-flowing="true"] .mina-wc-media-edge-flow,
+.react-flow__edge.selected .mina-wc-media-edge-flow {
+  opacity: 0.9;
+}
+
+.mina-wc-media-edge-hit {
+  cursor: pointer;
+  pointer-events: stroke;
+  stroke: transparent;
+  stroke-width: var(--mina-edge-hit-stroke-width, 28px);
+}
+
+.mina-wc-connection-line-shadow {
+  stroke: color-mix(in oklch, var(--foreground) 18%, transparent);
+  stroke-linecap: round;
+  stroke-width: 8;
+}
+
+.mina-wc-connection-line-core {
+  stroke: color-mix(in oklch, var(--primary) 72%, var(--foreground-secondary));
+}
+
+.mina-wc-canvas-dock.react-flow__panel {
+  bottom: 34px;
+  left: 50%;
+  margin: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+  z-index: 20;
+}
+
+@media (max-width: 720px) {
+  .mina-wc-canvas-dock.react-flow__panel {
+    bottom: 20px;
+    left: 10px !important;
+    max-width: none;
+    right: 10px !important;
+    transform: none !important;
+    width: auto !important;
+  }
+
+}

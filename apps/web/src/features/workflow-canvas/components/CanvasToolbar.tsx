@@ -1,11 +1,8 @@
-import { Boxes, FileText, Image, Layers, Save, Video } from 'lucide-react'
+import { Boxes, FileText, Image, Layers, Video } from 'lucide-react'
 import type { WorkflowNodeType } from '@mina/contracts/modules/canvas'
 
 interface CanvasToolbarProps {
-  dirty: boolean
   onAddNode(type: WorkflowNodeType): void
-  onSave(): void
-  saving: boolean
 }
 
 const items: Array<{ icon: typeof Image; label: string; type: WorkflowNodeType }> = [
@@ -16,18 +13,17 @@ const items: Array<{ icon: typeof Image; label: string; type: WorkflowNodeType }
   { icon: Layers, label: 'Group', type: 'node_group' },
 ]
 
-export function CanvasToolbar({ dirty, onAddNode, onSave, saving }: CanvasToolbarProps) {
+const toolbarClassName = 'absolute top-5 left-[22px] z-5 flex items-center gap-1.5 rounded-full bg-surface-container-lowest/85 p-[7px] shadow-floating'
+const toolbarButtonClassName = 'flex size-9 items-center justify-center rounded-full border-0 bg-transparent text-foreground-tertiary hover:bg-surface-container-low hover:text-foreground'
+
+export function CanvasToolbar({ onAddNode }: CanvasToolbarProps) {
   return (
-    <div className="mina-wc-toolbar" aria-label="Canvas tools">
+    <div className={toolbarClassName} aria-label="Canvas tools">
       {items.map(({ icon: Icon, label, type }) => (
-        <button aria-label={`Add ${label}`} key={type} onClick={() => onAddNode(type)} title={`Add ${label}`} type="button">
+        <button aria-label={`Add ${label}`} className={toolbarButtonClassName} key={type} onClick={() => onAddNode(type)} title={`Add ${label}`} type="button">
           <Icon aria-hidden="true" size={17} />
         </button>
       ))}
-      <span aria-hidden="true" />
-      <button aria-label="Save workflow" data-dirty={dirty ? 'true' : undefined} disabled={saving} onClick={onSave} title="Save workflow" type="button">
-        <Save aria-hidden="true" size={17} />
-      </button>
     </div>
   )
 }

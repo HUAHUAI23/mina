@@ -1,88 +1,233 @@
-import { memo, useMemo } from 'react'
-import { Background, Controls, ReactFlow, ReactFlowProvider } from '@xyflow/react'
-import type { Edge, EdgeTypes, Node, NodeTypes } from '@xyflow/react'
-import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
+import { Profiler, memo, useCallback, useEffect, useMemo, useRef } from 'react'
+import { Background, ConnectionMode, Controls, ReactFlow, ReactFlowProvider } from '@xyflow/react'
+import type { NodeMouseHandler } from '@xyflow/react'
 
 import { MediaEdge } from './edges/MediaEdge'
+import { WorkflowConnectionLine } from './edges/WorkflowConnectionLine'
 import { FlowGroupNode } from './nodes/FlowGroupNode'
-import { MediaGenerationNode } from './nodes/MediaGenerationNode/MediaGenerationNode'
+import { ImageGenerationNode } from './nodes/MediaGenerationNode/ImageGenerationNode'
+import { VideoGenerationNode } from './nodes/MediaGenerationNode/VideoGenerationNode'
 import { NodeGroupNode } from './nodes/NodeGroupNode'
 import { TextNode } from './nodes/TextNode'
+import { CanvasDock } from './dock/CanvasDock'
+import { useCanvasUiStore } from '../store/canvas-ui-store'
+import { selectWorkflowCanvasNodes } from '../store/canvas-selection-actions'
+import { isIgnoredCanvasTarget, isReactFlowPaneTarget } from '../utils/canvas-dom-scope'
+import { useWorkflowFlowHandlers } from '../react-flow/use-workflow-flow-handlers'
+import { publishLocalSelection } from '../sync/workflow-presence'
+import { recordCanvasProfilerCommit } from '../diagnostics/canvas-profiler-marks'
+import { useFlowRenderStore } from '../render/flow-render-store'
+import { getFlowPerformancePolicy } from '../render/flow-performance-policy'
+import { useWorkflowRuntimeStore } from '../store/workflow-runtime-store'
 import { useCanvasStore } from '../store/canvas-store'
+import { useCanvasEdgeCount, useCanvasMediaNodeCount, useCanvasNodeCount } from '../store/selectors'
+import {
+  WORKFLOW_CANVAS_GEOMETRY_CSS_VARS,
+  WORKFLOW_CONNECTION_GEOMETRY,
+} from '../workflow-canvas-geometry'
+import type {
+  WorkflowFlowEdge,
+  WorkflowFlowNode,
+  WorkflowFlowEdgeTypes,
+  WorkflowFlowNodeTypes,
+} from '../domain/flow-types'
 
 interface WorkflowCanvasProps {
+  onRunNode(nodeId: string): void
   onSelectOutput(nodeId: string, taskId: string, outputResourceId: string, outputIndex: number): void
+  runError?: string | undefined
+  runningNodeId?: string | undefined
 }
 
-const edgeTypes: EdgeTypes = {
+const edgeTypes = {
   media: MediaEdge,
-}
+} satisfies WorkflowFlowEdgeTypes
 
-const toFlowNode = (node: WorkflowCanvasNode): Node => ({
-  id: node.id,
-  type: node.type,
-  position: node.position,
-  data: node.data as unknown as Record<string, unknown>,
-  ...(node.parentId ? { parentId: node.parentId } : {}),
-  ...(node.extent ? { extent: node.extent } : {}),
-  ...(node.width !== undefined ? { width: node.width } : {}),
-  ...(node.height !== undefined ? { height: node.height } : {}),
-})
+const nodeTypes = {
+  image_generation: ImageGenerationNode,
+  video_generation: VideoGenerationNode,
+  text: TextNode,
+  flow_group: FlowGroupNode,
+  node_group: NodeGroupNode,
+} satisfies WorkflowFlowNodeTypes
 
-const toFlowEdge = (edge: WorkflowCanvasEdge): Edge => ({
-  id: edge.id,
-  type: edge.type,
-  source: edge.source,
-  target: edge.target,
-  sourceHandle: edge.sourceHandle ?? null,
-  targetHandle: edge.targetHandle ?? null,
-  data: edge.data as unknown as Record<string, unknown>,
-})
-
-const createMediaNode = (
-  onSelectOutput: WorkflowCanvasProps['onSelectOutput'],
-): NonNullable<NodeTypes[string]> =>
-  function MediaNode(props) {
-    return <MediaGenerationNode {...props} onSelectOutput={onSelectOutput} />
-  }
-
-export function WorkflowCanvas({ onSelectOutput }: WorkflowCanvasProps) {
-  const nodes = useCanvasStore((state) => state.nodes)
-  const edges = useCanvasStore((state) => state.edges)
-  const onNodesChange = useCanvasStore((state) => state.onNodesChange)
-  const onEdgesChange = useCanvasStore((state) => state.onEdgesChange)
-  const onConnect = useCanvasStore((state) => state.onConnect)
-  const nodeTypes = useMemo<NodeTypes>(
-    () => ({
-      image_generation: createMediaNode(onSelectOutput),
-      video_generation: createMediaNode(onSelectOutput),
-      text: TextNode,
-      flow_group: FlowGroupNode,
-      node_group: NodeGroupNode,
-    }),
-    [onSelectOutput],
+export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNodeId }: WorkflowCanvasProps) {
+  useHydrateFlowRender()
+  const flowNodes = useFlowRenderStore((state) => state.flowNodes)
+  const flowEdges = useFlowRenderStore((state) => state.flowEdges)
+  const nodeCount = useCanvasNodeCount()
+  const edgeCount = useCanvasEdgeCount()
+  const mediaNodeCount = useCanvasMediaNodeCount()
+  const setRuntime = useWorkflowRuntimeStore((state) => state.setRuntime)
+  const openNodePanel = useCanvasUiStore((state) => state.openNodePanel)
+  const closeNodePanel = useCanvasUiStore((state) => state.closeNodePanel)
+  const {
+    onConnect,
+    onEdgesChange,
+    isValidConnection,
+    onMove,
+    onMoveEnd,
+    onMoveStart,
+    onNodeDragStart,
+    onNodeDragStop,
+    onNodesChange,
+    onSelectionDragStart,
+    onSelectionDragStop,
+  } = useWorkflowFlowHandlers()
+  const stageRef = useRef<HTMLDivElement | null>(null)
+  const runtimeActions = useMemo(
+    () => ({ onRunNode, onSelectOutput }),
+    [onRunNode, onSelectOutput],
   )
-  const flowNodes = useMemo(() => nodes.map(toFlowNode), [nodes])
-  const flowEdges = useMemo(() => edges.map(toFlowEdge), [edges])
+  const performancePolicy = useMemo(
+    () => getFlowPerformancePolicy({ edgeCount, mediaNodeCount, nodeCount }),
+    [edgeCount, mediaNodeCount, nodeCount],
+  )
+
+  useEffect(() => {
+    setRuntime({ actions: runtimeActions, runError, runningNodeId })
+  }, [runError, runningNodeId, runtimeActions, setRuntime])
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) {
+      return
+    }
+    window.__minaWorkflowCanvasUi = {
+      get activeNodePanel() {
+        return useCanvasUiStore.getState().activeNodePanel
+      },
+      get selectedNodeIds() {
+        return useCanvasUiStore.getState().selectedNodeIds
+      },
+    }
+    return () => {
+      delete window.__minaWorkflowCanvasUi
+    }
+  }, [])
+
+  const handleNodeClick = useCallback<NodeMouseHandler<WorkflowFlowNode>>((event, node) => {
+    if (isIgnoredCanvasTarget(event.target)) {
+      return
+    }
+    if (event.ctrlKey || event.metaKey || event.shiftKey) {
+      return
+    }
+    openNodePanel(node.id, 'config')
+  }, [openNodePanel])
+  const handlePaneClick = useCallback(
+    (event: React.MouseEvent) => {
+      if (isReactFlowPaneTarget(event.target)) {
+        closeNodePanel()
+        selectWorkflowCanvasNodes([])
+      }
+    },
+    [closeNodePanel],
+  )
+  const handleSelectionChange = useCallback(
+    ({ nodes: selectedNodes, edges: selectedEdges }: { nodes: WorkflowFlowNode[]; edges: WorkflowFlowEdge[] }) => {
+      const nodeIds = selectedNodes.map((node) => node.id)
+      selectWorkflowCanvasNodes(nodeIds)
+      publishLocalSelection({
+        edgeIds: selectedEdges.map((edge) => edge.id),
+        nodeIds,
+      })
+    },
+    [],
+  )
+  const handleConnectStart = useCallback(() => {
+    stageRef.current?.setAttribute('data-connecting', '')
+  }, [])
+  const handleConnectEnd = useCallback(() => {
+    stageRef.current?.removeAttribute('data-connecting')
+  }, [])
 
   return (
     <ReactFlowProvider>
-      <ReactFlow
-        edgeTypes={edgeTypes}
-        edges={flowEdges}
-        fitView
-        nodes={flowNodes}
-        nodeTypes={nodeTypes}
-        onConnect={onConnect}
-        onEdgesChange={onEdgesChange}
-        onNodesChange={onNodesChange}
-        onlyRenderVisibleElements
-      >
-        <Background gap={24} size={1} />
-        <Controls showInteractive={false} />
-      </ReactFlow>
+      <Profiler id="WorkflowCanvas" onRender={recordCanvasProfilerCommit}>
+        <div className="mina-wc-flow-shell h-full w-full" ref={stageRef} style={WORKFLOW_CANVAS_GEOMETRY_CSS_VARS}>
+          <ReactFlow<WorkflowFlowNode, WorkflowFlowEdge>
+            connectionLineComponent={WorkflowConnectionLine}
+            connectionMode={ConnectionMode.Loose}
+            connectionRadius={WORKFLOW_CONNECTION_GEOMETRY.radius}
+            edgeTypes={edgeTypes}
+            edges={flowEdges}
+            fitView
+            isValidConnection={isValidConnection}
+            multiSelectionKeyCode="Control"
+            nodes={flowNodes}
+            nodeTypes={nodeTypes}
+            onConnect={onConnect}
+            onConnectEnd={handleConnectEnd}
+            onConnectStart={handleConnectStart}
+            onEdgesChange={onEdgesChange}
+            onMove={onMove}
+            onMoveEnd={onMoveEnd}
+            onMoveStart={onMoveStart}
+            onNodeClick={handleNodeClick}
+            onNodeDragStart={onNodeDragStart}
+            onNodeDragStop={onNodeDragStop}
+            onNodesChange={onNodesChange}
+            onPaneClick={handlePaneClick}
+            onSelectionChange={handleSelectionChange}
+            onSelectionDragStart={onSelectionDragStart}
+            onSelectionDragStop={onSelectionDragStop}
+            onlyRenderVisibleElements={performancePolicy.onlyRenderVisibleElements}
+            selectNodesOnDrag={false}
+          >
+            <Background gap={24} size={1} />
+            <Controls showInteractive={false} />
+            <CanvasDock onRunNode={onRunNode} runError={runError} runningNodeId={runningNodeId} />
+          </ReactFlow>
+        </div>
+      </Profiler>
     </ReactFlowProvider>
   )
 }
 
 export const MemoizedWorkflowCanvas = memo(WorkflowCanvas)
+
+function useHydrateFlowRender(): void {
+  const hydrateRenderFromDocument = useFlowRenderStore((state) => state.hydrateFromDocument)
+
+  useEffect(() => {
+    const hydrate = () => {
+      const canvas = useCanvasStore.getState()
+      const selectedNodeIds = useCanvasUiStore.getState().selectedNodeIds
+      hydrateRenderFromDocument({
+        edges: canvas.edges,
+        nodes: canvas.nodes,
+        selectedNodeIds,
+      })
+    }
+    hydrate()
+    const unsubscribeCanvas = useCanvasStore.subscribe(
+      (state, previousState) => {
+        if (state.nodes === previousState.nodes && state.edges === previousState.edges) {
+          return
+        }
+        hydrate()
+      },
+    )
+    const unsubscribeSelection = useCanvasUiStore.subscribe(
+      (state, previousState) => {
+        if (state.selectedNodeIds === previousState.selectedNodeIds) {
+          return
+        }
+        hydrate()
+      },
+    )
+    return () => {
+      unsubscribeCanvas()
+      unsubscribeSelection()
+    }
+  }, [hydrateRenderFromDocument])
+}
+
+declare global {
+  interface Window {
+    __minaWorkflowCanvasUi?: {
+      activeNodePanel: { nodeId: string; panel: string } | undefined
+      selectedNodeIds: string[]
+    }
+  }
+}

@@ -87,7 +87,7 @@ export const WorkflowCanvasNodeSchema = z.object({
 })
 
 export const WorkflowEdgeDataSchema = z.object({
-  connection: WorkflowMediaLinkConnectionSchema,
+  connection: WorkflowMediaLinkConnectionSchema.optional(),
 })
 
 export const WorkflowCanvasEdgeSchema = z.object({

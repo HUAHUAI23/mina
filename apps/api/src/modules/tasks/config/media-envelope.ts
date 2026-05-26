@@ -26,3 +26,12 @@ export const mediaEnvelopeFromInputsBySlot = (
   referenceAudios: [...(inputsBySlot.referenceAudios ?? [])],
   referenceVideos: [...(inputsBySlot.referenceVideos ?? [])],
 })
+
+export const imageMediaEnvelope = (media: MediaEnvelope): MediaEnvelope => ({
+  inputImages: [...media.inputImages],
+  ...(media.firstFrame ? { firstFrame: media.firstFrame } : {}),
+  ...(media.lastFrame ? { lastFrame: media.lastFrame } : {}),
+  referenceImages: [...media.referenceImages],
+  referenceAudios: [...media.referenceAudios],
+  referenceVideos: [...media.referenceVideos],
+})

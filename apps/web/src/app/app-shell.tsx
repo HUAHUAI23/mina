@@ -3,6 +3,8 @@ import { Archive, Compass, FolderOpen, LayoutGrid, Lightbulb, LogOut } from 'luc
 import type { LucideIcon } from 'lucide-react'
 import { Link, useLocation } from '@tanstack/react-router'
 
+import { cn } from '@mina/ui/lib/utils'
+
 import { useAuth } from '../features/auth/components/auth-provider'
 
 interface NavigationItem {
@@ -35,6 +37,22 @@ const recentProjects = [
   },
 ] as const
 
+const shellClassName = [
+  'mina-app-shell-background grid h-dvh w-screen overflow-hidden text-foreground',
+  'lg:grid-cols-[300px_minmax(0,1fr)] max-lg:grid-rows-[auto_minmax(0,1fr)] max-lg:grid-cols-1',
+].join(' ')
+
+const navIslandClassName = [
+  'min-h-0 overflow-hidden bg-surface-container-lowest shadow-floating',
+  'lg:my-[34px] lg:mr-0 lg:ml-[34px] lg:flex lg:flex-col lg:gap-[34px] lg:rounded-2xl lg:p-7',
+  'max-lg:m-[18px] max-lg:grid max-lg:grid-cols-[auto_minmax(0,1fr)_auto] max-lg:items-center max-lg:gap-4 max-lg:rounded-2xl max-lg:p-[18px]',
+  'max-md:grid-cols-1 max-md:items-stretch',
+].join(' ')
+
+const brandMarkClassName = 'flex size-10 items-center justify-center rounded-[9px] bg-foreground text-primary-foreground'
+const navLinkClassName = 'flex min-h-11 items-center gap-3.5 rounded-lg px-4 text-foreground-tertiary hover:bg-surface-container-low hover:text-foreground'
+const activeNavLinkClassName = 'bg-surface-container-low text-foreground font-[750] shadow-[inset_0_0_0_1px_var(--outline-ghost)]'
+
 export function AppShell({ children }: PropsWithChildren) {
   const { pathname } = useLocation()
   const { logout, user } = useAuth()
@@ -49,79 +67,106 @@ export function AppShell({ children }: PropsWithChildren) {
   const profileLabel = user?.role === 'admin' ? 'Admin' : 'Creative Director'
 
   return (
-    <main className="mina-shell">
-      <aside aria-label="Primary navigation" className="mina-nav-island">
-        <div className="mina-brand">
-          <div className="mina-brand-mark" aria-hidden="true">
-            <span>MINA</span>
+    <main className={shellClassName}>
+      <aside aria-label="Primary navigation" className={navIslandClassName}>
+        <div className="flex items-center gap-3.5 max-md:justify-between">
+          <div className={brandMarkClassName} aria-hidden="true">
+            <span className="font-display text-[0.48rem] font-extrabold tracking-[0.08em]">MINA</span>
           </div>
-          <span className="mina-brand-name">MINA</span>
+          <span className="font-display text-[1.28rem] font-extrabold tracking-normal">MINA</span>
         </div>
 
-        <section className="mina-nav-section">
-          <h2 className="mina-section-label">Navigate</h2>
-          <nav className="mina-nav-list">
+        <section className="grid gap-[17px] max-lg:min-w-0">
+          <h2 className="m-0 text-[0.68rem] font-extrabold uppercase tracking-[0.32em] text-foreground-quaternary max-md:hidden">
+            Navigate
+          </h2>
+          <nav className="grid gap-2 max-lg:flex max-lg:gap-1.5 max-lg:overflow-x-auto">
             {navigationItems.map(({ icon: Icon, label, routeEnabled = false, to }) => {
               const active = routeEnabled && (pathname === to || (to !== '/' && pathname.startsWith(to)))
 
               return (
                 <Link
                   aria-current={active ? 'page' : undefined}
-                  className="mina-nav-link"
-                  data-active={active ? 'true' : undefined}
+                  className={cn(navLinkClassName, 'max-lg:flex-none', active && activeNavLinkClassName)}
                   key={label}
                   to={to}
                 >
                   <Icon aria-hidden="true" size={18} strokeWidth={2.2} />
-                  <span>{label}</span>
+                  <span className="font-display text-[0.94rem]">{label}</span>
                 </Link>
               )
             })}
           </nav>
         </section>
 
-        <section className="mina-nav-section">
-          <h2 className="mina-section-label">Recent Projects</h2>
-          <div className="mina-project-list">
+        <section className="grid gap-[17px] max-lg:hidden">
+          <h2 className="m-0 text-[0.68rem] font-extrabold uppercase tracking-[0.32em] text-foreground-quaternary">
+            Recent Projects
+          </h2>
+          <div className="grid gap-2">
             {recentProjects.map((project) => (
-              <a className="mina-project-link" href="/" key={project.id}>
-                <span className="mina-project-thumb" data-tone={project.tone} aria-hidden="true">
+              <a className="flex min-w-0 items-center gap-3 rounded-md py-1" href="/" key={project.id}>
+                <span
+                  className={cn(
+                    'font-display flex size-10 flex-none items-center justify-center rounded-lg bg-surface-container-low text-[0.38rem] font-extrabold tracking-[0.08em] text-primary-foreground',
+                    project.tone === 'dark' && 'bg-foreground',
+                  )}
+                  aria-hidden="true"
+                >
                   {project.tone === 'dark' ? 'MINA' : null}
                 </span>
-                <span className="mina-project-copy">
-                  <strong>{project.name}</strong>
-                  <span>{project.updatedAt}</span>
+                <span className="group grid min-w-0 gap-0.5">
+                  <strong className="truncate text-[0.78rem] leading-tight text-foreground-secondary group-hover:text-foreground">
+                    {project.name}
+                  </strong>
+                  <span className="truncate text-[0.68rem] text-foreground-quaternary">{project.updatedAt}</span>
                 </span>
               </a>
             ))}
           </div>
         </section>
 
-        <button className="mina-new-project" type="button">
+        <button
+          className="mt-auto min-h-11 rounded-lg border-0 bg-foreground px-4 text-[0.76rem] font-extrabold uppercase tracking-[0.12em] text-primary-foreground hover:bg-foreground-secondary max-lg:m-0 max-lg:px-[18px] max-md:hidden"
+          type="button"
+        >
           New Project
         </button>
       </aside>
 
-      <section className="mina-workspace" aria-label="Creative workspace">
-        <header className="mina-topbar">
+      <section
+        className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-[38px_58px_30px] max-lg:p-[22px] max-md:p-[18px]"
+        aria-label="Creative workspace"
+      >
+        <header className="flex items-center justify-between max-md:justify-end">
           <div aria-hidden="true" />
-          <div className="mina-profile">
-            <div>
-              <strong>{displayName}</strong>
-              <span>{profileLabel}</span>
+          <div className="flex items-center gap-3.5">
+            <div className="grid justify-items-end gap-px max-md:hidden">
+              <strong className="text-[0.82rem] leading-tight">{displayName}</strong>
+              <span className="text-[0.72rem] text-foreground-tertiary">{profileLabel}</span>
             </div>
-            <div className="mina-avatar" aria-hidden="true">
+            <div
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-foreground text-[0.78rem] font-extrabold text-primary-foreground"
+              aria-hidden="true"
+            >
               {initials || 'M'}
             </div>
-            <button className="mina-logout" type="button" aria-label="Sign out" onClick={logout}>
+            <button
+              className="flex size-10 items-center justify-center rounded-full border-0 bg-surface-container-low text-foreground-tertiary hover:bg-foreground hover:text-primary-foreground max-md:hidden"
+              type="button"
+              aria-label="Sign out"
+              onClick={logout}
+            >
               <LogOut aria-hidden="true" size={17} />
             </button>
           </div>
         </header>
 
-        <section className="mina-route-frame">{children}</section>
+        <section className="grid min-h-0 min-w-0 overflow-hidden">{children}</section>
 
-        <footer className="mina-verify-note">Verify production critical details.</footer>
+        <footer className="justify-self-end pr-2.5 text-[0.64rem] font-extrabold uppercase tracking-[0.4em] text-[color-mix(in_oklch,var(--foreground-quaternary)_45%,transparent)] max-md:justify-self-center max-md:p-0 max-md:text-center">
+          Verify production critical details.
+        </footer>
       </section>
     </main>
   )

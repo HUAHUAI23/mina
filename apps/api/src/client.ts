@@ -24,8 +24,6 @@ import type {
   CreateWorkflowInput,
   CreateWorkflowRunInput,
   DeleteWorkflowResponse,
-  UpdateNodeMediaViewInput,
-  UpdateWorkflowInput,
   WorkflowListResponse,
   WorkflowNodeTaskHistoryResponse,
   WorkflowResponse,
@@ -85,11 +83,7 @@ type ClientSchema = {
   }
   '/api/workflows/:id': {
     $get: JsonEndpoint<{ param: { id: string } }, WorkflowResponse>
-    $put: JsonEndpoint<{ json: UpdateWorkflowInput; param: { id: string } }, WorkflowResponse>
     $delete: JsonEndpoint<{ param: { id: string } }, DeleteWorkflowResponse>
-  }
-  '/api/workflows/:id/nodes/:nodeId/media-view': {
-    $patch: JsonEndpoint<{ json: UpdateNodeMediaViewInput; param: { id: string; nodeId: string } }, WorkflowResponse>
   }
   '/api/workflows/:id/nodes/:nodeId/tasks': {
     $get: JsonEndpoint<{ param: { id: string; nodeId: string } }, WorkflowNodeTaskHistoryResponse>

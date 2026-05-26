@@ -1,17 +1,20 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import '@xyflow/react/dist/style.css'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
 
 import { taskKeys, workflowKeys } from '../api/workflow-keys'
-import { createWorkflowRun, getWorkflow, patchNodeMediaView, saveWorkflow } from '../api/workflow-queries'
+import {
+  createWorkflowRun,
+  getWorkflow,
+} from '../api/workflow-queries'
 import { getWorkflowClientId, parseWorkflowEvent, workflowEventUrl } from '../api/workflow-ws'
-import { getCanvasSnapshot, useCanvasStore } from '../store/canvas-store'
-import { sortParentNodesFirst, stableEdges } from '../utils/react-flow-persistence'
-import { BottomNodeDock } from './panels/BottomNodeDock'
+import { useCanvasStore } from '../store/canvas-store'
+import { incrementCanvasPerfCounter } from '../diagnostics/canvas-performance-marks'
+import { useCanvasUiStore } from '../store/canvas-ui-store'
+import { useWorkflowYjsSync } from '../sync/yjs/yjs-sync'
 import { CanvasToolbar } from './CanvasToolbar'
-import { RemoteUpdateBanner } from './RemoteUpdateBanner'
 import { SaveStatusPill } from './SaveStatusPill'
 import { WorkflowCanvas } from './WorkflowCanvas'
 
@@ -19,42 +22,62 @@ interface WorkflowCanvasPageProps {
   workflowId: string
 }
 
+const pageShellClassName = 'grid h-dvh w-screen min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-surface text-foreground'
+const loadingShellClassName = `${pageShellClassName} place-items-center`
+const loadingClassName = 'p-2.5 text-[0.74rem] font-bold text-foreground-quaternary'
+const headerClassName = 'relative z-8 flex min-h-[66px] min-w-0 items-center justify-between gap-[18px] bg-surface-container-lowest/80 px-[clamp(18px,3dvw,34px)] py-2.5'
+const titleGroupClassName = 'flex min-w-0 items-center gap-3'
+const headerActionsClassName = 'flex min-w-0 flex-none items-center justify-end gap-3'
+const backLinkClassName = 'flex size-10.5 flex-none items-center justify-center rounded-full bg-surface-container-lowest text-foreground-tertiary shadow-[inset_0_0_0_1px_var(--outline-ghost)] hover:bg-foreground hover:text-primary-foreground'
+const titleCopyClassName = 'grid min-w-0 gap-0.5'
+const titleEyebrowClassName = 'text-[0.62rem] leading-none font-black tracking-[0.24em] text-foreground-quaternary uppercase'
+const titleClassName = 'm-0 truncate font-display text-base leading-[1.15] font-black tracking-normal'
+const stageClassName = 'relative min-h-0 min-w-0 overflow-hidden bg-surface-container-low [background-image:radial-gradient(circle,var(--canvas-dot)_1px,transparent_1.2px)] bg-[length:30px_30px]'
+
 export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
   const queryClient = useQueryClient()
   const [runError, setRunError] = useState<string>()
+  const [runningNodeId, setRunningNodeId] = useState<string>()
   const workflowQuery = useQuery({
     queryFn: () => getWorkflow(workflowId),
     queryKey: workflowKeys.detail(workflowId),
   })
-  const nodes = useCanvasStore((state) => state.nodes)
-  const dirty = useCanvasStore((state) => state.dirty)
-  const saving = useCanvasStore((state) => state.saving)
   const version = useCanvasStore((state) => state.version)
-  const remoteUpdatePending = useCanvasStore((state) => state.remoteUpdatePending)
-  const remoteVersion = useCanvasStore((state) => state.remoteVersion)
+  const yjsConnectionStatus = useCanvasStore((state) => state.yjsConnectionStatus)
+  const hydratedWorkflowId = useCanvasStore((state) => state.hydratedWorkflowId)
   const addNode = useCanvasStore((state) => state.addNode)
-  const initialize = useCanvasStore((state) => state.initialize)
-  const markClean = useCanvasStore((state) => state.markClean)
-  const selectedNodeIds = useCanvasStore((state) => state.selectedNodeIds)
-  const setRemoteUpdate = useCanvasStore((state) => state.setRemoteUpdate)
-  const applyRemoteMediaView = useCanvasStore((state) => state.applyRemoteMediaView)
-  const setSaving = useCanvasStore((state) => state.setSaving)
-  const selectedNode = nodes.find((node) => node.id === selectedNodeIds[0])
+  const hydrateFromServer = useCanvasStore((state) => state.hydrateFromServer)
+  const setNodeMediaView = useCanvasStore((state) => state.setNodeMediaView)
+  const selectedNodeIds = useCanvasUiStore((state) => state.selectedNodeIds)
+  const eventRuntimeRef = useRef({
+    selectedNodeId: selectedNodeIds[0],
+    version,
+  })
+  eventRuntimeRef.current = {
+    selectedNodeId: selectedNodeIds[0],
+    version,
+  }
+  useWorkflowYjsSync(workflowId)
 
   useEffect(() => {
-    if (workflowQuery.data && !dirty) {
-      initialize({
-        workflowId: workflowQuery.data.item.id,
-        version: workflowQuery.data.item.version,
-        name: workflowQuery.data.item.name,
-        nodes: workflowQuery.data.item.nodes,
-        edges: workflowQuery.data.item.edges,
+    const workflow = workflowQuery.data?.item
+    if (!workflow) {
+      return
+    }
+    if (!hydratedWorkflowId || hydratedWorkflowId !== workflow.id || workflow.version > version) {
+      hydrateFromServer({
+        workflowId: workflow.id,
+        version: workflow.version,
+        name: workflow.name,
+        nodes: workflow.nodes,
+        edges: workflow.edges,
       })
     }
-  }, [dirty, initialize, workflowQuery.data])
+  }, [hydrateFromServer, hydratedWorkflowId, version, workflowQuery.data])
 
   useEffect(() => {
     const clientId = getWorkflowClientId()
+    incrementCanvasPerfCounter('websocketReconnects')
     const socket = new WebSocket(workflowEventUrl(workflowId))
     socket.onmessage = (message) => {
       if (typeof message.data !== 'string') {
@@ -64,58 +87,35 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
       if (!event || event.workflowId !== workflowId || event.sourceClientId === clientId) {
         return
       }
-      if (dirty) {
-        setRemoteUpdate(event.version ?? version)
+      const { selectedNodeId } = eventRuntimeRef.current
+      if (event.type === 'workflow.definition.updated') {
         return
       }
-      if (event.type === 'workflow.node.mediaView.updated') {
-        applyRemoteMediaView(event.payload.nodeId, event.payload.mediaView, event.version ?? version)
-      }
       void queryClient.invalidateQueries({ queryKey: workflowKeys.detail(workflowId) })
-      if (event.type === 'workflow.node.task.updated' && selectedNodeIds[0] === event.payload.nodeId) {
+      if (event.type === 'workflow.node.task.updated' && selectedNodeId === event.payload.nodeId) {
         void queryClient.invalidateQueries({ queryKey: workflowKeys.nodeTasks(workflowId, event.payload.nodeId) })
       }
       if (event.type === 'workflow.run.updated') {
         void queryClient.invalidateQueries({ queryKey: workflowKeys.runs(workflowId) })
       }
     }
-    return () => socket.close()
-  }, [applyRemoteMediaView, dirty, queryClient, selectedNodeIds, setRemoteUpdate, version, workflowId])
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      const snapshot = getCanvasSnapshot()
-      const response = await saveWorkflow(workflowId, {
-        name: snapshot.name || workflowQuery.data?.item.name,
-        version: snapshot.version,
-        nodes: sortParentNodesFirst(snapshot.nodes),
-        edges: stableEdges(snapshot.edges),
-      })
-      return response
-    },
-    onMutate: () => setSaving(true),
-    onSettled: () => setSaving(false),
-    onSuccess: (response) => {
-      markClean({
-        name: response.item.name,
-        version: response.item.version,
-        nodes: response.item.nodes,
-        edges: response.item.edges,
-      })
-      queryClient.setQueryData(workflowKeys.detail(workflowId), response)
-    },
-    onError: (error) => setRunError(error instanceof Error ? error.message : 'Save failed.'),
-  })
+    return () => {
+      socket.onmessage = null
+      if (socket.readyState === WebSocket.CONNECTING) {
+        socket.addEventListener('open', () => socket.close(), { once: true })
+        return
+      }
+      socket.close()
+    }
+  }, [queryClient, workflowId])
 
   const runMutation = useMutation({
-    mutationFn: async (nodeId: string) => {
-      let currentVersion = getCanvasSnapshot().version
-      if (getCanvasSnapshot().dirty) {
-        const saved = await saveMutation.mutateAsync()
-        currentVersion = saved.item.version
-      }
-      return createWorkflowRun(workflowId, { selectedNodeId: nodeId, expectedWorkflowVersion: currentVersion })
+    mutationFn: async (nodeId: string) => createWorkflowRun(workflowId, { selectedNodeId: nodeId }),
+    onMutate: (nodeId) => {
+      setRunError(undefined)
+      setRunningNodeId(nodeId)
     },
+    onSettled: () => setRunningNodeId(undefined),
     onSuccess: (response) => {
       setRunError(undefined)
       void queryClient.invalidateQueries({ queryKey: workflowKeys.runs(workflowId) })
@@ -126,85 +126,55 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
     onError: (error) => setRunError(error instanceof Error ? error.message : 'Run failed.'),
   })
 
-  const mediaViewMutation = useMutation({
-    mutationFn: (input: { nodeId: string; outputIndex: number; outputResourceId: string; taskId: string }) =>
-      patchNodeMediaView(workflowId, input.nodeId, {
-        expectedWorkflowVersion: getCanvasSnapshot().version,
-        mediaView: {
-          taskId: input.taskId,
-          outputResourceId: input.outputResourceId,
-          outputIndex: input.outputIndex,
-        },
-      }),
-    onSuccess: (response, input) => {
-      const updated = response.item.nodes.find((node) => node.id === input.nodeId)
-      if (updated?.data.nodeType === 'image_generation' || updated?.data.nodeType === 'video_generation') {
-        applyRemoteMediaView(input.nodeId, updated.data.mediaView, response.item.version)
-      }
-      queryClient.setQueryData(workflowKeys.detail(workflowId), response)
-      void queryClient.invalidateQueries({ queryKey: taskKeys.detail(input.taskId) })
-    },
-  })
-
-  const runSelected = useCallback(() => {
-    if (selectedNode) {
-      runMutation.mutate(selectedNode.id)
-    }
-  }, [runMutation, selectedNode])
+  const runNode = useCallback((nodeId: string) => runMutation.mutate(nodeId), [runMutation])
 
   const selectOutput = useCallback(
     (nodeId: string, taskId: string, outputResourceId: string, outputIndex: number) => {
-      mediaViewMutation.mutate({ nodeId, taskId, outputResourceId, outputIndex })
+      setNodeMediaView(nodeId, {
+        taskId,
+        outputResourceId,
+        outputIndex,
+      })
+      void queryClient.invalidateQueries({ queryKey: taskKeys.detail(taskId) })
     },
-    [mediaViewMutation.mutate],
+    [queryClient, setNodeMediaView],
   )
 
   if (workflowQuery.isLoading) {
-    return <div className="mina-wc-page"><div className="mina-wc-loading">Loading workflow</div></div>
+    return <div className={loadingShellClassName}><div className={loadingClassName}>Loading workflow</div></div>
   }
 
   if (workflowQuery.isError || !workflowQuery.data) {
-    return <div className="mina-wc-page"><div className="mina-wc-loading">Workflow unavailable</div></div>
+    return <div className={loadingShellClassName}><div className={loadingClassName}>Workflow unavailable</div></div>
   }
 
   const workflow = workflowQuery.data.item
 
   return (
-    <div className="mina-wc-page">
-      <header className="mina-wc-header">
-        <div className="mina-wc-title-group">
-          <Link aria-label="Back to canvas list" className="mina-wc-back" to="/canvas">
+    <div className={pageShellClassName}>
+      <header className={headerClassName}>
+        <div className={titleGroupClassName}>
+          <Link aria-label="Back to canvas list" className={backLinkClassName} to="/canvas">
             <ArrowLeft aria-hidden="true" size={17} />
           </Link>
-          <div className="mina-wc-title-copy">
-            <span>Canvas</span>
-            <h1>{workflow.name}</h1>
+          <div className={titleCopyClassName}>
+            <span className={titleEyebrowClassName}>Canvas</span>
+            <h1 className={titleClassName}>{workflow.name}</h1>
           </div>
         </div>
-        <div className="mina-wc-header-actions">
-          {remoteUpdatePending ? (
-            <RemoteUpdateBanner
-              version={remoteVersion}
-              onRefresh={() => {
-                void queryClient.invalidateQueries({ queryKey: workflowKeys.detail(workflowId) })
-              }}
-            />
-          ) : null}
-          <SaveStatusPill dirty={dirty} saving={saving} />
+        <div className={headerActionsClassName}>
+          <SaveStatusPill yjsConnectionStatus={yjsConnectionStatus} />
         </div>
       </header>
 
-      <section className="mina-wc-stage" aria-label="Workflow canvas">
-        <WorkflowCanvas onSelectOutput={selectOutput} />
-        <CanvasToolbar dirty={dirty} onAddNode={addNode} onSave={() => saveMutation.mutate()} saving={saving} />
-        <BottomNodeDock
-          node={selectedNode}
-          nodes={nodes}
-          onRun={runSelected}
+      <section className={stageClassName} aria-label="Workflow canvas">
+        <WorkflowCanvas
+          onRunNode={runNode}
+          onSelectOutput={selectOutput}
           runError={runError}
-          running={runMutation.isPending}
-          workflowId={workflowId}
+          runningNodeId={runningNodeId}
         />
+        <CanvasToolbar onAddNode={addNode} />
       </section>
     </div>
   )

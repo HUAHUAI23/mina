@@ -55,6 +55,13 @@ All repository-facing project text should remain in English:
 5. Do not place large inline style objects in React components.
 6. Import shared shadcn/ui primitives through `@mina/ui/components/*`.
 7. Keep Tailwind theme tokens and shadcn global styles in `packages/ui/src/styles/globals.css`.
+8. Use Tailwind utilities as the default styling mechanism for ordinary `apps/web` UI: layout, spacing, typography, colors, radius, sizing, responsive rules, and local hover/focus/disabled states.
+9. Add handwritten CSS only for explicit escape hatches: global reset/theme rules, third-party generated DOM overrides, SVG/path styling, pseudo-elements, CSS custom-property geometry, or cross-component state selectors that would be less maintainable as Tailwind arbitrary variants.
+10. Do not add new feature-level style dumps to `apps/web/src/app/styles.css`; keep feature-owned CSS small and justified, and prefer colocated Tailwind classes or reusable UI components.
+11. When a frontend task introduces a new styling convention or broad CSS exception, document the rule in project standards or a design guidance document so future work does not regress to all-handwritten CSS.
+12. Prefer Tailwind's named scale and modern shorthand over arbitrary values: use classes such as `space-y-px`, `mt-px`, `rounded-sm`, `bg-linear-to-t`, and `border-(--token)` when they express the value cleanly. Arbitrary values are acceptable for project-specific geometry, CSS functions, third-party variables, or exact design values that do not fit the scale.
+13. Keep Tailwind class names statically discoverable. For variants selected by data or props, map complete class strings instead of constructing class fragments dynamically.
+14. Avoid high-cost GPU/compositing effects in app UI: do not use `backdrop-blur`, `filter: blur()`, `drop-shadow()`, `mix-blend-mode`, `mask-image`, or decorative opacity-plus-transform animations. Use flat color, borders, rings, and static shadows instead. React Flow transforms required for pan/zoom, node positioning, edge labels, and drag geometry are allowed as runtime interaction mechanics.
 
 ## Environment Rules
 

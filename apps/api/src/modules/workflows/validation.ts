@@ -140,7 +140,7 @@ const validateMediaSlotEdges = (
         if (edge.source !== source.nodeId || edge.target !== node.id) {
           return false
         }
-        return edge.data.connection.targetSlotItemId === item.id
+        return edge.data.connection?.targetSlotItemId === item.id
       })
       if (!matchingEdge) {
         throw new HttpError(
@@ -160,6 +160,9 @@ const validateMediaSlotEdges = (
   }
 
   for (const edge of edges) {
+    if (!edge.data.connection) {
+      continue
+    }
     const target = nodeMap.get(edge.target)
     if (!target) {
       continue

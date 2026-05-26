@@ -110,36 +110,6 @@ const createTestSchema = async (sql: SqlClient): Promise<void> => {
       "created_at" timestamp with time zone DEFAULT now() NOT NULL,
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
     )`,
-    `CREATE TABLE "workflow_nodes" (
-      "workflow_id" text NOT NULL REFERENCES "workflows"("id"),
-      "node_id" text NOT NULL,
-      "type" text NOT NULL,
-      "position_x" numeric(14, 3) NOT NULL,
-      "position_y" numeric(14, 3) NOT NULL,
-      "parent_id" text,
-      "extent" text,
-      "width" numeric(14, 3),
-      "height" numeric(14, 3),
-      "data" jsonb NOT NULL,
-      "sort_order" integer NOT NULL,
-      "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-      "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-      PRIMARY KEY ("workflow_id", "node_id")
-    )`,
-    `CREATE TABLE "workflow_edges" (
-      "workflow_id" text NOT NULL REFERENCES "workflows"("id"),
-      "edge_id" text NOT NULL,
-      "type" text DEFAULT 'media' NOT NULL,
-      "source_node_id" text NOT NULL,
-      "target_node_id" text NOT NULL,
-      "source_handle" text,
-      "target_handle" text,
-      "data" jsonb NOT NULL,
-      "sort_order" integer NOT NULL,
-      "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-      "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-      PRIMARY KEY ("workflow_id", "edge_id")
-    )`,
     `CREATE TABLE "workflow_runs" (
       "id" text PRIMARY KEY NOT NULL,
       "workflow_id" text NOT NULL REFERENCES "workflows"("id"),
@@ -246,8 +216,6 @@ const resetRows = async (sql: SqlClient): Promise<void> => {
     "workflow_run_edges",
     "workflow_run_nodes",
     "workflow_runs",
-    "workflow_edges",
-    "workflow_nodes",
     "workflows",
     "task_resources",
     "tasks",
@@ -343,8 +311,6 @@ if (!databaseUrl) {
         accountId: 'account_drizzle_workflow_test',
         name: input.runId,
         version: 1,
-        nodes,
-        edges: [],
         timestamp,
       })
       return runs.createRunWithSnapshot({

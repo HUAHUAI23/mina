@@ -326,6 +326,38 @@ describe('mina api', () => {
     expect(completed.item.status).toBe('ready')
   })
 
+  test('media object routes require admin role for public library uploads', async () => {
+    const { auth } = await registerAndAuthHeaders('public_library_user')
+    const authHeaders = { Authorization: `Bearer ${auth.session.token}` }
+    const formData = new FormData()
+    formData.set('file', new File([new TextEncoder().encode('image-bytes')], 'public.png', { type: 'image/png' }))
+    formData.set('purpose', 'public_library')
+    formData.set('retention', 'library')
+
+    const createResponse = await app.request('/api/media-objects', {
+      method: 'POST',
+      headers: authHeaders,
+      body: formData,
+    })
+    const createPayload = (await createResponse.json()) as ApiError
+    expect(createResponse.status).toBe(403)
+    expect(createPayload.error.code).toBe('ADMIN_REQUIRED')
+
+    const presignedResponse = await app.request('/api/media-objects/presigned-upload', {
+      method: 'POST',
+      headers: { ...authHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'image',
+        mimeType: 'image/png',
+        purpose: 'public_library',
+        retention: 'library',
+      }),
+    })
+    const presignedPayload = (await presignedResponse.json()) as ApiError
+    expect(presignedResponse.status).toBe(403)
+    expect(presignedPayload.error.code).toBe('ADMIN_REQUIRED')
+  })
+
   test('Hono RPC client uploads media objects with object form fields', async () => {
     const { headers } = await registerAndAuthHeaders('rpc_upload_user')
     const client = hc<AppType>('http://localhost', {
@@ -387,10 +419,7 @@ describe('mina api', () => {
     const runResponse = await app.request(`/api/workflows/${workflowPayload.item.id}/runs`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        selectedNodeId: 'image',
-        expectedWorkflowVersion: workflowPayload.item.version,
-      }),
+      body: JSON.stringify({ selectedNodeId: 'image' }),
     })
     const runPayload = (await runResponse.json()) as WorkflowRunResponse
 
@@ -400,7 +429,7 @@ describe('mina api', () => {
   })
 
   test(
-    'workflow routes expose CRUD, node tasks, runs, run detail, and cancellation payloads',
+    'workflow routes expose create/list/detail, node tasks, runs, run detail, and cancellation payloads',
     async () => {
       const { headers } = await registerAndAuthHeaders()
       const createResponse = await app.request('/api/workflows', {
@@ -446,53 +475,24 @@ describe('mina api', () => {
       expect(detailResponse.status).toBe(200)
       expect(detailPayload.item.id).toBe(workflowPayload.item.id)
 
-      const updateResponse = await app.request(`/api/workflows/${workflowPayload.item.id}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({
-          name: 'Updated route coverage workflow',
-          version: workflowPayload.item.version,
-          nodes: workflowPayload.item.nodes,
-          edges: workflowPayload.item.edges,
-        }),
-      })
-      const updatedPayload = (await updateResponse.json()) as WorkflowResponse
-      expect(updateResponse.status).toBe(200)
-      expect(updatedPayload.item.version).toBe(workflowPayload.item.version + 1)
-
-      const mediaViewResponse = await app.request(
-        `/api/workflows/${updatedPayload.item.id}/nodes/image/media-view`,
-        {
-          method: 'PATCH',
-          headers,
-          body: JSON.stringify({ expectedWorkflowVersion: updatedPayload.item.version }),
-        },
-      )
-      const mediaViewPayload = (await mediaViewResponse.json()) as WorkflowResponse
-      expect(mediaViewResponse.status).toBe(200)
-      expect(mediaViewPayload.item.version).toBe(updatedPayload.item.version + 1)
-
-      const nodeTasksResponse = await app.request(`/api/workflows/${updatedPayload.item.id}/nodes/image/tasks`, { headers })
+      const nodeTasksResponse = await app.request(`/api/workflows/${workflowPayload.item.id}/nodes/image/tasks`, { headers })
       const nodeTasksPayload = (await nodeTasksResponse.json()) as WorkflowNodeTaskHistoryResponse
       expect(nodeTasksResponse.status).toBe(200)
       expect(nodeTasksPayload.items).toEqual([])
 
-      const runListBeforeResponse = await app.request(`/api/workflows/${updatedPayload.item.id}/runs`, { headers })
+      const runListBeforeResponse = await app.request(`/api/workflows/${workflowPayload.item.id}/runs`, { headers })
       const runListBeforePayload = (await runListBeforeResponse.json()) as WorkflowRunListResponse
       expect(runListBeforeResponse.status).toBe(200)
       expect(runListBeforePayload.items).toEqual([])
 
-      const runResponse = await app.request(`/api/workflows/${updatedPayload.item.id}/runs`, {
+      const runResponse = await app.request(`/api/workflows/${workflowPayload.item.id}/runs`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          selectedNodeId: 'image',
-          expectedWorkflowVersion: mediaViewPayload.item.version,
-        }),
+        body: JSON.stringify({ selectedNodeId: 'image' }),
       })
       const runPayload = (await runResponse.json()) as WorkflowRunResponse
       expect(runResponse.status).toBe(201)
-      expect(runPayload.item.workflowId).toBe(updatedPayload.item.id)
+      expect(runPayload.item.workflowId).toBe(workflowPayload.item.id)
 
       const runDetailResponse = await app.request(`/api/workflow-runs/${runPayload.item.id}`, { headers })
       const runDetailPayload = (await runDetailResponse.json()) as WorkflowRunResponse
@@ -507,7 +507,7 @@ describe('mina api', () => {
       expect(cancelRunResponse.status).toBe(200)
       expect(cancelRunPayload.success).toBe(true)
 
-      const deleteResponse = await app.request(`/api/workflows/${updatedPayload.item.id}`, {
+      const deleteResponse = await app.request(`/api/workflows/${workflowPayload.item.id}`, {
         method: 'DELETE',
         headers,
       })
@@ -556,10 +556,7 @@ describe('mina api', () => {
     const runResponse = await app.request(`/api/workflows/${workflowPayload.item.id}/runs`, {
       method: 'POST',
       headers: owner.headers,
-      body: JSON.stringify({
-        selectedNodeId: 'image',
-        expectedWorkflowVersion: workflowPayload.item.version,
-      }),
+      body: JSON.stringify({ selectedNodeId: 'image' }),
     })
     const runPayload = (await runResponse.json()) as WorkflowRunResponse
 

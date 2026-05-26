@@ -2,7 +2,7 @@ import type { Account, AuthSession, User } from '@mina/contracts/modules/account
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import type { PricingRule } from '@mina/contracts/modules/pricing'
 import type { Task, TaskResource } from '@mina/contracts/modules/tasks'
-import type { Workflow, WorkflowRun, WorkflowRunNodeState } from '@mina/contracts/modules/workflows'
+import type { WorkflowRun, WorkflowRunNodeState, WorkflowSummary } from '@mina/contracts/modules/workflows'
 
 import type {
   CreatePresignedGetUrlInput,
@@ -30,8 +30,11 @@ import type { TaskEventInput, TaskEventLog } from '../modules/tasks/task-events'
 import type { TaskCreateResult, TaskRepository } from '../modules/tasks/tasks.repository'
 import type { WorkflowRunEventInput, WorkflowRunEventLog } from '../modules/workflows/workflow-events'
 import type {
-  ReplaceWorkflowDefinitionInput,
-  UpdateNodeMediaViewPersistenceInput,
+  WorkflowYjsRepository,
+  WorkflowYjsSnapshotRecord,
+  WorkflowYjsUpdateRecord,
+} from '../modules/workflows/collaboration/workflow-yjs-repository'
+import type {
   WorkflowDefinitionCreate,
   WorkflowDefinitionRepository,
 } from '../modules/workflows/repositories/workflow-definition.repository'
@@ -57,10 +60,10 @@ import type {
 import type { WorkflowNodeTaskLink, WorkflowNodeTaskRepository } from '../modules/workflows/repositories/workflow-node-task.repository'
 import {
   cloneRun,
-  cloneWorkflow,
+  cloneWorkflowSummary,
   normalizeWorkflowEdge,
   normalizeWorkflowNode,
-  workflowDto,
+  workflowSummaryDto,
   workflowRunDto,
 } from '../modules/workflows/repositories/workflow-mappers'
 import type {
@@ -446,99 +449,115 @@ export class FakeWorkflowRunEventLog implements WorkflowRunEventLog {
   }
 }
 
-export class FakeWorkflowDefinitionRepository implements WorkflowDefinitionRepository {
-  readonly #workflows = new Map<string, Workflow>()
+export class FakeWorkflowYjsRepository implements WorkflowYjsRepository {
+  readonly #snapshots = new Map<string, WorkflowYjsSnapshotRecord>()
+  readonly #updates = new Map<string, WorkflowYjsUpdateRecord[]>()
 
-  async create(input: WorkflowDefinitionCreate): Promise<Workflow> {
-    const workflow = workflowDto({
+  async appendUpdate(input: { id: string; updateBin: Uint8Array; workflowId: string }): Promise<void> {
+    const updates = this.#updates.get(input.workflowId) ?? []
+    updates.push({
+      createdAt: new Date().toISOString(),
+      id: input.id,
+      updateBin: new Uint8Array(input.updateBin),
+      workflowId: input.workflowId,
+    })
+    this.#updates.set(input.workflowId, updates)
+  }
+
+  async deleteUpdates(workflowId: string, through?: Date): Promise<void> {
+    if (!through) {
+      this.#updates.delete(workflowId)
+      return
+    }
+    this.#updates.set(
+      workflowId,
+      (this.#updates.get(workflowId) ?? []).filter((update) => new Date(update.createdAt) > through),
+    )
+  }
+
+  async getSnapshot(workflowId: string): Promise<WorkflowYjsSnapshotRecord | undefined> {
+    const snapshot = this.#snapshots.get(workflowId)
+    return snapshot
+      ? {
+          snapshotBin: new Uint8Array(snapshot.snapshotBin),
+          stateVector: new Uint8Array(snapshot.stateVector),
+          version: snapshot.version,
+          workflowId: snapshot.workflowId,
+        }
+      : undefined
+  }
+
+  async listUpdates(workflowId: string, after?: Date): Promise<WorkflowYjsUpdateRecord[]> {
+    return (this.#updates.get(workflowId) ?? [])
+      .filter((update) => !after || new Date(update.createdAt) > after)
+      .map((update) => ({
+        createdAt: update.createdAt,
+        id: update.id,
+        updateBin: new Uint8Array(update.updateBin),
+        workflowId: update.workflowId,
+      }))
+  }
+
+  async saveSnapshot(input: WorkflowYjsSnapshotRecord): Promise<void> {
+    this.#snapshots.set(input.workflowId, {
+      snapshotBin: new Uint8Array(input.snapshotBin),
+      stateVector: new Uint8Array(input.stateVector),
+      version: input.version,
+      workflowId: input.workflowId,
+    })
+  }
+}
+
+export class FakeWorkflowDefinitionRepository implements WorkflowDefinitionRepository {
+  readonly #workflows = new Map<string, WorkflowSummary>()
+
+  async create(input: WorkflowDefinitionCreate): Promise<WorkflowSummary> {
+    const workflow = workflowSummaryDto({
       accountId: input.accountId,
       createdAt: input.timestamp,
-      edges: input.edges,
       id: input.id,
       name: input.name,
-      nodes: input.nodes,
       updatedAt: input.timestamp,
       version: input.version,
     })
-    this.#workflows.set(workflow.id, cloneWorkflow(workflow))
-    return cloneWorkflow(workflow)
+    this.#workflows.set(workflow.id, cloneWorkflowSummary(workflow))
+    return cloneWorkflowSummary(workflow)
   }
 
   async delete(id: string): Promise<boolean> {
     return this.#workflows.delete(id)
   }
 
-  async findById(id: string): Promise<Workflow | undefined> {
+  async findById(id: string): Promise<WorkflowSummary | undefined> {
     const workflow = this.#workflows.get(id)
-    return workflow ? cloneWorkflow(workflow) : undefined
+    return workflow ? cloneWorkflowSummary(workflow) : undefined
   }
 
-  async list(accountId?: string): Promise<Workflow[]> {
+  async list(accountId?: string): Promise<WorkflowSummary[]> {
     return [...this.#workflows.values()]
       .filter((workflow) => !accountId || workflow.accountId === accountId)
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-      .map(cloneWorkflow)
+      .map(cloneWorkflowSummary)
   }
 
-  async replaceDefinition(input: ReplaceWorkflowDefinitionInput): Promise<Workflow> {
-    const existing = this.#workflows.get(input.id)
+  async touch(id: string, timestamp: string, version: number): Promise<WorkflowSummary> {
+    const existing = this.#workflows.get(id)
     if (!existing) {
       throw new Error('Workflow not found.')
     }
 
-    const workflow = workflowDto({
+    const workflow = workflowSummaryDto({
       accountId: existing.accountId,
       createdAt: existing.createdAt,
-      edges: input.edges,
       id: existing.id,
-      name: input.name,
-      nodes: input.nodes,
-      updatedAt: input.timestamp,
-      version: input.version,
+      name: existing.name,
+      updatedAt: timestamp,
+      version,
     })
-    this.#workflows.set(workflow.id, cloneWorkflow(workflow))
-    return cloneWorkflow(workflow)
+    this.#workflows.set(workflow.id, cloneWorkflowSummary(workflow))
+    return cloneWorkflowSummary(workflow)
   }
 
-  async updateNodeMediaView(input: UpdateNodeMediaViewPersistenceInput): Promise<Workflow> {
-    const workflow = this.#workflows.get(input.workflowId)
-    if (!workflow) {
-      throw new Error('Workflow not found.')
-    }
-    if (workflow.version !== input.expectedWorkflowVersion) {
-      throw new Error('WORKFLOW_VERSION_CONFLICT')
-    }
-
-    const nodes = workflow.nodes.map((node) => {
-      if (node.id !== input.nodeId) {
-        return normalizeWorkflowNode(node)
-      }
-      if (node.data.nodeType !== 'image_generation' && node.data.nodeType !== 'video_generation') {
-        return normalizeWorkflowNode(node)
-      }
-
-      const { mediaView: _mediaView, ...dataWithoutMediaView } = node.data
-      return normalizeWorkflowNode({
-        ...node,
-        data: input.mediaView
-          ? {
-              ...node.data,
-              mediaView: input.mediaView,
-            }
-          : dataWithoutMediaView,
-      })
-    })
-
-    const updated = workflowDto({
-      ...workflow,
-      edges: workflow.edges.map(normalizeWorkflowEdge),
-      nodes,
-      updatedAt: input.timestamp,
-      version: workflow.version + 1,
-    })
-    this.#workflows.set(workflow.id, cloneWorkflow(updated))
-    return cloneWorkflow(updated)
-  }
 }
 
 const isoDateOrUndefined = (value: string | undefined): Date | undefined => (value ? new Date(value) : undefined)

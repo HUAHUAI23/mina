@@ -1,7 +1,11 @@
-import { z } from 'zod'
 import type { MediaInput, TaskConfig } from '@mina/contracts/modules/tasks'
+import {
+  VolcengineSeedreamParamsSchema,
+  type VolcengineSeedreamParams,
+} from '@mina/contracts/modules/tasks/image-model-params'
 
 import { apiEnv } from '../../../../../config/env'
+import { imageMediaEnvelope } from '../../../config/media-envelope'
 import {
   assertMediaLimit,
   assertNoMediaItem,
@@ -17,19 +21,6 @@ import type { ProviderPollResult, ProviderStartResult } from '../../provider'
 import { VolcengineProviderClient } from '../common/client'
 import { parseJsonStringMap, resolveAlias } from '../common/model-aliases'
 import { buildVolcengineSeedreamRequest, type VolcengineGeneratedImage, volcengineSeedreamOutputFromImages } from './seedream.mapper'
-
-export const VolcengineSeedreamParamsSchema = z.object({
-  count: z.number().int().min(1).max(16).default(1),
-  maxImages: z.number().int().min(1).max(16).optional(),
-  optimizePrompt: z.boolean().default(false),
-  outputFormat: z.enum(['png', 'jpeg']).optional(),
-  sequentialImageGeneration: z.enum(['auto', 'disabled']).optional(),
-  size: z.string().min(1).default('2048x2048'),
-  watermark: z.boolean().optional(),
-  webSearch: z.boolean().default(false),
-})
-
-export type VolcengineSeedreamParams = z.infer<typeof VolcengineSeedreamParamsSchema>
 
 const outputFormatSupport = new Map<string, readonly string[]>([
   ['doubao-seedream-5-0-260128', ['png', 'jpeg']],
@@ -48,7 +39,6 @@ export class VolcengineSeedreamSpec implements ModelSpec<VolcengineSeedreamParam
   readonly capabilities = {
     media: {
       inputImages: { max: 16 },
-      referenceImages: { max: 16 },
     },
     output: {
       images: true,
@@ -72,19 +62,22 @@ export class VolcengineSeedreamSpec implements ModelSpec<VolcengineSeedreamParam
 
   prepareConfig(input: PrepareConfigInput): TaskConfig {
     const params = parseParams(this.paramsSchema, input.draft.params)
-    assertNoMediaItem('Volcengine Seedream firstFrame', input.media.firstFrame)
-    assertNoMediaItem('Volcengine Seedream lastFrame', input.media.lastFrame)
-    assertNoMediaItems('Volcengine Seedream referenceAudios', input.media.referenceAudios)
-    assertNoMediaItems('Volcengine Seedream referenceVideos', input.media.referenceVideos)
-    assertMediaLimit('Volcengine Seedream inputImages', input.media.inputImages, undefined, 16)
-    assertMediaLimit('Volcengine Seedream referenceImages', input.media.referenceImages, undefined, 16)
+    const media = imageMediaEnvelope(input.media)
+    assertNoMediaItem('Volcengine Seedream firstFrame', media.firstFrame)
+    assertNoMediaItem('Volcengine Seedream lastFrame', media.lastFrame)
+    assertNoMediaItems('Volcengine Seedream referenceImages', media.referenceImages)
+    assertNoMediaItems('Volcengine Seedream referenceAudios', media.referenceAudios)
+    assertNoMediaItems('Volcengine Seedream referenceVideos', media.referenceVideos)
+    assertMediaLimit('Volcengine Seedream inputImages', media.inputImages, undefined, 16)
+    const outputFormat = params.outputFormat
+    const size = params.size
     const formats = outputFormatSupport.get(this.key.model)
-    if (params.outputFormat && formats && !formats.includes(params.outputFormat)) {
-      throw new TaskConfigValidationError(`Volcengine Seedream model ${this.key.model} does not support ${params.outputFormat}.`)
+    if (outputFormat && formats && !formats.includes(outputFormat)) {
+      throw new TaskConfigValidationError(`Volcengine Seedream model ${this.key.model} does not support ${outputFormat}.`)
     }
     const sizeLabels = sizeLabelSupport.get(this.key.model)
-    if (sizeLabels && !/^\d+x\d+$/.test(params.size) && !sizeLabels.includes(params.size)) {
-      throw new TaskConfigValidationError(`Volcengine Seedream model ${this.key.model} does not support size ${params.size}.`)
+    if (sizeLabels && !/^\d+x\d+$/.test(size) && !sizeLabels.includes(size)) {
+      throw new TaskConfigValidationError(`Volcengine Seedream model ${this.key.model} does not support size ${size}.`)
     }
     if (params.webSearch && this.key.model !== 'doubao-seedream-5-0-260128') {
       throw new TaskConfigValidationError(`Volcengine Seedream model ${this.key.model} does not support webSearch.`)
@@ -94,7 +87,7 @@ export class VolcengineSeedreamSpec implements ModelSpec<VolcengineSeedreamParam
       provider: this.key.provider,
       model: this.key.model,
       prompt: input.draft.prompt,
-      media: mediaConfigFromEnvelope(input.media),
+      media: mediaConfigFromEnvelope(media),
       params,
     }
   }
@@ -129,7 +122,7 @@ export class VolcengineSeedreamSpec implements ModelSpec<VolcengineSeedreamParam
   }
 
   collectInputResources(config: ParsedTaskConfig<VolcengineSeedreamParams>): MediaInput[] {
-    return [...config.media.inputImages, ...config.media.referenceImages]
+    return config.media.inputImages
   }
 
   async start(task: ParsedTask<VolcengineSeedreamParams>): Promise<ProviderStartResult> {

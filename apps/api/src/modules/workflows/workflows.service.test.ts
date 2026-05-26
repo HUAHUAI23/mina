@@ -26,8 +26,10 @@ import {
   FakeWorkflowNodeTaskRepository,
   FakeWorkflowRunEventLog,
   FakeWorkflowRunRepository,
+  FakeWorkflowYjsRepository,
 } from '../../test/fakes'
 import { WorkflowsService } from './workflows.service'
+import { WorkflowYjsRoomService } from './collaboration/workflow-yjs-room.service'
 
 const createWorkflowRepositories = () => {
   const runs = new FakeWorkflowRunRepository()
@@ -63,11 +65,22 @@ const createServices = (taskProvider?: TaskProvider) => {
       new DeterministicVideoFrameGenerator(mediaObjectService),
     ),
   )
+  const workflowRepositories = createWorkflowRepositories()
+  const workflowYjsRoomService = new WorkflowYjsRoomService(
+    new FakeWorkflowYjsRepository(),
+    undefined,
+    {
+      onSnapshotSaved: async ({ timestamp, version, workflowId }) => {
+        await workflowRepositories.definitions.touch(workflowId, timestamp, version)
+      },
+    },
+  )
   const workflowsService = new WorkflowsService(
-    createWorkflowRepositories(),
+    workflowRepositories,
     tasksService,
     taskConfigAssembler,
     new WorkflowMediaResolver(mediaObjectService, tasksService),
+    workflowYjsRoomService,
     workflowRunEventLog,
     new InMemoryWorkflowEventBus(),
   )
@@ -76,9 +89,21 @@ const createServices = (taskProvider?: TaskProvider) => {
     mediaObjectService,
     taskRepository,
     tasksService,
+    workflowRepositories,
     workflowRunEventLog,
+    workflowYjsRoomService,
     workflowsService,
   }
+}
+
+const updateWorkflowSnapshot = async (
+  services: Pick<ReturnType<typeof createServices>, 'workflowYjsRoomService' | 'workflowsService'>,
+  workflowId: string,
+  input: { edges: WorkflowCanvasEdge[]; nodes: WorkflowCanvasNode[] },
+) => {
+  const current = await services.workflowsService.getWorkflow(workflowId, DEFAULT_ACCOUNT_ID)
+  await services.workflowYjsRoomService.replaceSnapshotForWorkflow(current, input, 'test_update')
+  return services.workflowsService.getWorkflow(workflowId, DEFAULT_ACCOUNT_ID)
 }
 
 const runBackgroundCycle = async (
@@ -245,7 +270,8 @@ const nodeOutputSlot = (
 
 describe('WorkflowsService execution semantics', () => {
   test('ordinary canvas uses the source node MediaView and does not run upstream nodes', async () => {
-    const { taskRepository, tasksService, workflowsService } = createServices()
+    const services = createServices()
+    const { taskRepository, tasksService, workflowsService } = services
     const workflow = await workflowsService.createWorkflow({
       name: 'ordinary media view',
       nodes: [
@@ -259,10 +285,7 @@ describe('WorkflowsService execution semantics', () => {
       ],
     }, DEFAULT_ACCOUNT_ID)
 
-    const sourceRun = await workflowsService.createRun(workflow.id, {
-      selectedNodeId: 'a',
-      expectedWorkflowVersion: workflow.version,
-    }, DEFAULT_ACCOUNT_ID)
+    const sourceRun = await workflowsService.createRun(workflow.id, { selectedNodeId: 'a' }, DEFAULT_ACCOUNT_ID)
     const sourceTaskId = sourceRun.nodeStates.a?.taskId
     expect(sourceRun.status).toBe('running')
     expect(typeof sourceTaskId).toBe('string')
@@ -282,24 +305,26 @@ describe('WorkflowsService execution semantics', () => {
       throw new Error('Selected output was not created.')
     }
 
-    const updatedWorkflow = await workflowsService.updateNodeMediaView(
-      workflow.id,
-      'a',
-      {
-        expectedWorkflowVersion: workflow.version,
-        mediaView: {
-          taskId: sourceTask.id,
-          outputResourceId: selectedOutput.id,
-          outputIndex: 1,
-        },
-      },
-      DEFAULT_ACCOUNT_ID,
-    )
+    const updatedWorkflow = await updateWorkflowSnapshot(services, workflow.id, {
+      nodes: workflow.nodes.map((node) =>
+        node.id === 'a' && node.data.nodeType === 'image_generation'
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                mediaView: {
+                  taskId: sourceTask.id,
+                  outputResourceId: selectedOutput.id,
+                  outputIndex: 1,
+                },
+              },
+            }
+          : node,
+      ),
+      edges: workflow.edges,
+    })
 
-    const targetRun = await workflowsService.createRun(updatedWorkflow.id, {
-      selectedNodeId: 'b',
-      expectedWorkflowVersion: updatedWorkflow.version,
-    }, DEFAULT_ACCOUNT_ID)
+    const targetRun = await workflowsService.createRun(updatedWorkflow.id, { selectedNodeId: 'b' }, DEFAULT_ACCOUNT_ID)
     const targetTaskId = targetRun.nodeStates.b?.taskId
     expect(targetRun.status).toBe('running')
     expect(typeof targetTaskId).toBe('string')
@@ -359,10 +384,7 @@ describe('WorkflowsService execution semantics', () => {
       edges: [],
     }, DEFAULT_ACCOUNT_ID)
 
-    const run = await workflowsService.createRun(workflow.id, {
-      selectedNodeId: 'image',
-      expectedWorkflowVersion: workflow.version,
-    }, DEFAULT_ACCOUNT_ID)
+    const run = await workflowsService.createRun(workflow.id, { selectedNodeId: 'image' }, DEFAULT_ACCOUNT_ID)
     const taskId = run.nodeStates.image?.taskId
     expect(typeof taskId).toBe('string')
     if (!taskId) {
@@ -432,10 +454,7 @@ describe('WorkflowsService execution semantics', () => {
       edges: [],
     }, DEFAULT_ACCOUNT_ID)
 
-    const run = await workflowsService.createRun(workflow.id, {
-      selectedNodeId: 'image',
-      expectedWorkflowVersion: workflow.version,
-    }, DEFAULT_ACCOUNT_ID)
+    const run = await workflowsService.createRun(workflow.id, { selectedNodeId: 'image' }, DEFAULT_ACCOUNT_ID)
     const taskId = run.nodeStates.image?.taskId
     expect(typeof taskId).toBe('string')
     if (!taskId) {
@@ -484,8 +503,8 @@ describe('WorkflowsService execution semantics', () => {
         }
       },
     }
-    const { mediaObjectService, taskRepository, tasksService, workflowsService } =
-      createServices(taskProvider)
+    const services = createServices(taskProvider)
+    const { mediaObjectService, taskRepository, tasksService, workflowsService } = services
     const local = await mediaObjectService.createFromBuffer({
       accountId: DEFAULT_ACCOUNT_ID,
       body: new TextEncoder().encode('local'),
@@ -523,27 +542,31 @@ describe('WorkflowsService execution semantics', () => {
       nodes: [baseA, baseB],
       edges: [],
     }, DEFAULT_ACCOUNT_ID)
-    const runA = await workflowsService.createRun(sourceWorkflow.id, {
-      selectedNodeId: 'a',
-      expectedWorkflowVersion: sourceWorkflow.version,
-    }, DEFAULT_ACCOUNT_ID)
+    const runA = await workflowsService.createRun(sourceWorkflow.id, { selectedNodeId: 'a' }, DEFAULT_ACCOUNT_ID)
     await tasksService.startQueuedTasks()
     await workflowsService.reconcileRunningRuns()
     const taskAId = runA.nodeStates.a?.taskId
     if (!taskAId) {
       throw new Error('Task A id was not created.')
     }
-    const workflowWithA = await workflowsService.updateNodeMediaView(sourceWorkflow.id, 'a', {
-      expectedWorkflowVersion: sourceWorkflow.version,
-      mediaView: {
-        taskId: taskAId,
-        outputIndex: 0,
-      },
-    }, DEFAULT_ACCOUNT_ID)
-    const runB = await workflowsService.createRun(sourceWorkflow.id, {
-      selectedNodeId: 'b',
-      expectedWorkflowVersion: workflowWithA.version,
-    }, DEFAULT_ACCOUNT_ID)
+    const workflowWithA = await updateWorkflowSnapshot(services, sourceWorkflow.id, {
+      nodes: sourceWorkflow.nodes.map((node) =>
+        node.id === 'a' && node.data.nodeType === 'image_generation'
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                mediaView: {
+                  taskId: taskAId,
+                  outputIndex: 0,
+                },
+              },
+            }
+          : node,
+      ),
+      edges: sourceWorkflow.edges,
+    })
+    const runB = await workflowsService.createRun(sourceWorkflow.id, { selectedNodeId: 'b' }, DEFAULT_ACCOUNT_ID)
     await tasksService.startQueuedTasks()
     await workflowsService.reconcileRunningRuns()
     const taskBId = runB.nodeStates.b?.taskId
@@ -576,15 +599,24 @@ describe('WorkflowsService execution semantics', () => {
         },
       ],
     })
-    const workflowWithB = await workflowsService.updateNodeMediaView(sourceWorkflow.id, 'b', {
-      expectedWorkflowVersion: workflowWithA.version,
-      mediaView: {
-        taskId: taskBId,
-        outputIndex: 0,
-      },
-    }, DEFAULT_ACCOUNT_ID)
-    const workflow = await workflowsService.updateWorkflow(sourceWorkflow.id, {
-      version: workflowWithB.version,
+    const workflowWithB = await updateWorkflowSnapshot(services, sourceWorkflow.id, {
+      nodes: workflowWithA.nodes.map((node) =>
+        node.id === 'b' && node.data.nodeType === 'image_generation'
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                mediaView: {
+                  taskId: taskBId,
+                  outputIndex: 0,
+                },
+              },
+            }
+          : node,
+      ),
+      edges: workflowWithA.edges,
+    })
+    const workflow = await updateWorkflowSnapshot(services, sourceWorkflow.id, {
       nodes: [
         workflowWithB.nodes[0] ?? baseA,
         workflowWithB.nodes[1] ?? baseB,
@@ -618,12 +650,9 @@ describe('WorkflowsService execution semantics', () => {
           },
         },
       ],
-    }, DEFAULT_ACCOUNT_ID)
+    })
 
-    const targetRun = await workflowsService.createRun(workflow.id, {
-      selectedNodeId: 'target',
-      expectedWorkflowVersion: workflow.version,
-    }, DEFAULT_ACCOUNT_ID)
+    const targetRun = await workflowsService.createRun(workflow.id, { selectedNodeId: 'target' }, DEFAULT_ACCOUNT_ID)
     const targetTaskId = targetRun.nodeStates.target?.taskId
     if (!targetTaskId) {
       throw new Error('Target task id was not created.')
@@ -677,10 +706,7 @@ describe('WorkflowsService execution semantics', () => {
       ],
     }, DEFAULT_ACCOUNT_ID)
 
-    const run = await workflowsService.createRun(workflow.id, {
-      selectedNodeId: 'target',
-      expectedWorkflowVersion: workflow.version,
-    }, DEFAULT_ACCOUNT_ID)
+    const run = await workflowsService.createRun(workflow.id, { selectedNodeId: 'target' }, DEFAULT_ACCOUNT_ID)
     const taskId = run.nodeStates.target?.taskId
     if (!taskId) {
       throw new Error('Task id was not created.')
@@ -760,10 +786,7 @@ describe('WorkflowsService execution semantics', () => {
     }, DEFAULT_ACCOUNT_ID)
 
     await expect(
-      workflowsService.createRun(workflow.id, {
-        selectedNodeId: 'b',
-        expectedWorkflowVersion: workflow.version,
-      }, DEFAULT_ACCOUNT_ID),
+      workflowsService.createRun(workflow.id, { selectedNodeId: 'b' }, DEFAULT_ACCOUNT_ID),
     ).rejects.toMatchObject({
       code: 'WORKFLOW_UPSTREAM_OUTPUT_MISSING',
       status: 422,
@@ -795,10 +818,7 @@ describe('WorkflowsService execution semantics', () => {
       edges: [],
     }, DEFAULT_ACCOUNT_ID)
 
-    const run = await workflowsService.createRun(workflow.id, {
-      selectedNodeId: 'image',
-      expectedWorkflowVersion: workflow.version,
-    }, DEFAULT_ACCOUNT_ID)
+    const run = await workflowsService.createRun(workflow.id, { selectedNodeId: 'image' }, DEFAULT_ACCOUNT_ID)
 
     expect(run.status).toBe('failed')
     expect(run.error).toContain('task kind does not match node type')
@@ -838,10 +858,7 @@ describe('WorkflowsService execution semantics', () => {
       ],
     }, DEFAULT_ACCOUNT_ID)
 
-    const run = await workflowsService.createRun(workflow.id, {
-      selectedNodeId: 'b',
-      expectedWorkflowVersion: workflow.version,
-    }, DEFAULT_ACCOUNT_ID)
+    const run = await workflowsService.createRun(workflow.id, { selectedNodeId: 'b' }, DEFAULT_ACCOUNT_ID)
     expect(run.status).toBe('running')
     expect(run.nodeStates.a?.status).toBe('running')
     expect(run.nodeStates.c?.status).toBe('running')
@@ -897,10 +914,7 @@ describe('WorkflowsService execution semantics', () => {
       edges: [],
     }, DEFAULT_ACCOUNT_ID)
 
-    const run = await workflowsService.createRun(workflow.id, {
-      selectedNodeId: 'image',
-      expectedWorkflowVersion: workflow.version,
-    }, DEFAULT_ACCOUNT_ID)
+    const run = await workflowsService.createRun(workflow.id, { selectedNodeId: 'image' }, DEFAULT_ACCOUNT_ID)
     const taskId = run.nodeStates.image?.taskId
     if (!taskId) {
       throw new Error('Task id was not created.')
@@ -929,10 +943,7 @@ describe('WorkflowsService execution semantics', () => {
       edges: [],
     }, DEFAULT_ACCOUNT_ID)
 
-    const run = await workflowsService.createRun(workflow.id, {
-      selectedNodeId: 'group',
-      expectedWorkflowVersion: workflow.version,
-    }, DEFAULT_ACCOUNT_ID)
+    const run = await workflowsService.createRun(workflow.id, { selectedNodeId: 'group' }, DEFAULT_ACCOUNT_ID)
     expect(run.nodeStates.a?.status).toBe('running')
     expect(run.nodeStates.b?.status).toBe('running')
 
@@ -956,10 +967,7 @@ describe('WorkflowsService execution semantics', () => {
       edges: [],
     }, DEFAULT_ACCOUNT_ID)
 
-    const run = await workflowsService.createRun(workflow.id, {
-      selectedNodeId: 'video',
-      expectedWorkflowVersion: workflow.version,
-    }, DEFAULT_ACCOUNT_ID)
+    const run = await workflowsService.createRun(workflow.id, { selectedNodeId: 'video' }, DEFAULT_ACCOUNT_ID)
 
     const taskId = run.nodeStates.video?.taskId
     expect(typeof taskId).toBe('string')
@@ -971,29 +979,6 @@ describe('WorkflowsService execution semantics', () => {
     const links = await workflowsService.getNodeTasks(workflow.id, 'video', DEFAULT_ACCOUNT_ID)
     expect(links).toHaveLength(1)
     expect(links[0]?.task.id).toBe(taskId)
-  })
-
-  test('mediaView update rejects stale workflow versions', async () => {
-    const { workflowsService } = createServices()
-    const workflow = await workflowsService.createWorkflow({
-      name: 'stale media view',
-      nodes: [imageNode('image', 1)],
-      edges: [],
-    }, DEFAULT_ACCOUNT_ID)
-
-    const updated = await workflowsService.updateNodeMediaView(workflow.id, 'image', {
-      expectedWorkflowVersion: workflow.version,
-    }, DEFAULT_ACCOUNT_ID)
-    expect(updated.version).toBe(workflow.version + 1)
-
-    await expect(
-      workflowsService.updateNodeMediaView(workflow.id, 'image', {
-        expectedWorkflowVersion: workflow.version,
-      }, DEFAULT_ACCOUNT_ID),
-    ).rejects.toMatchObject({
-      code: 'WORKFLOW_VERSION_CONFLICT',
-      status: 409,
-    })
   })
 
   test('reconcileRun preserves not-found error semantics', async () => {
@@ -1016,10 +1001,7 @@ describe('WorkflowsService execution semantics', () => {
       edges: [],
     }, DEFAULT_ACCOUNT_ID)
 
-    const run = await workflowsService.createRun(workflow.id, {
-      selectedNodeId: 'image',
-      expectedWorkflowVersion: workflow.version,
-    }, DEFAULT_ACCOUNT_ID)
+    const run = await workflowsService.createRun(workflow.id, { selectedNodeId: 'image' }, DEFAULT_ACCOUNT_ID)
 
     await runBackgroundCycle({ tasksService, workflowsService })
     const events = await workflowRunEventLog.listEvents(run.id)
@@ -1073,11 +1055,22 @@ describe('WorkflowsService execution semantics', () => {
         new DeterministicVideoFrameGenerator(mediaObjectService),
       ),
     )
+    const workflowRepositories = createWorkflowRepositories()
+    const workflowYjsRoomService = new WorkflowYjsRoomService(
+      new FakeWorkflowYjsRepository(),
+      undefined,
+      {
+        onSnapshotSaved: async ({ timestamp, version, workflowId }) => {
+          await workflowRepositories.definitions.touch(workflowId, timestamp, version)
+        },
+      },
+    )
     const workflowsService = new WorkflowsService(
-      createWorkflowRepositories(),
+      workflowRepositories,
       tasksService,
       taskConfigAssembler,
       new WorkflowMediaResolver(mediaObjectService, tasksService),
+      workflowYjsRoomService,
       workflowRunEventLog,
       new InMemoryWorkflowEventBus(),
     )
@@ -1087,10 +1080,7 @@ describe('WorkflowsService execution semantics', () => {
       edges: [],
     }, DEFAULT_ACCOUNT_ID)
 
-    const run = await workflowsService.createRun(workflow.id, {
-      selectedNodeId: 'image',
-      expectedWorkflowVersion: workflow.version,
-    }, DEFAULT_ACCOUNT_ID)
+    const run = await workflowsService.createRun(workflow.id, { selectedNodeId: 'image' }, DEFAULT_ACCOUNT_ID)
     expect(run.status).toBe('running')
 
     await tasksService.startQueuedTasks()

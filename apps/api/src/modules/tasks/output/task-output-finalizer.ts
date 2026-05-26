@@ -22,8 +22,25 @@ const mimeTypeFromExtension = (extension: string, kind: ResourceKind): string | 
   return undefined
 }
 
-const deterministicBodyForDevOutput = (task: Task, resource: NodeOutputResource): Uint8Array =>
-  new TextEncoder().encode(`${task.id}:${resource.id}:${resource.kind}:${resource.index}`)
+const transparentPng = Uint8Array.from(Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+  'base64',
+))
+
+const tinyMp4 = Uint8Array.from(Buffer.from(
+  'AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAGbW9vdg==',
+  'base64',
+))
+
+const deterministicBodyForDevOutput = (task: Task, resource: NodeOutputResource): Uint8Array => {
+  if (resource.kind === 'image') {
+    return transparentPng
+  }
+  if (resource.kind === 'video') {
+    return tinyMp4
+  }
+  return new TextEncoder().encode(`${task.id}:${resource.id}:${resource.kind}:${resource.index}`)
+}
 
 const decodeDataUrl = (url: string): { body: Uint8Array; mimeType?: string } => {
   const match = DATA_URL_PATTERN.exec(url)
