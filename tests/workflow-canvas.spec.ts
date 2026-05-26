@@ -532,7 +532,7 @@ test('workflow canvas drag/sync/reload keeps document commits bounded and Yjs pa
   expect(nodeAfterReload.position).toEqual(nodeAfterSync.position)
 })
 
-test('workflow canvas keeps a newly added image node after Yjs sync and reload', async ({ page, request }) => {
+test('workflow canvas does not render the manual add toolbar', async ({ page, request }) => {
   const auth = await register(request)
   const workflow = await createWorkflow(request, auth.session.token, 20)
   await installAuthSession(page, auth)
@@ -542,24 +542,8 @@ test('workflow canvas keeps a newly added image node after Yjs sync and reload',
   await expect(page.locator('.react-flow__node')).toHaveCount(20)
   await waitForYjsParity(page)
 
-  await page.getByRole('button', { name: 'Add Image' }).click()
-  await expect(page.locator('.react-flow__node')).toHaveCount(21)
-  await waitForYjsParity(page)
-  await expect(page.locator('.react-flow__node')).toHaveCount(21)
-
-  await expect
-    .poll(async () => {
-      const persisted = await getWorkflowDetail(request, auth.session.token, workflow.item.id)
-      return (
-        persisted.item.nodes.length === 21 &&
-        persisted.item.nodes.some((node) => node.data.nodeType === 'image_generation' && node.data.title === 'Image Node')
-      )
-    })
-    .toBe(true)
-
-  await page.reload()
-  await page.locator('.react-flow').waitFor()
-  await expect(page.locator('.react-flow__node')).toHaveCount(21)
+  await expect(page.locator('[aria-label="Canvas tools"]')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^Add (Image|Video|Text|Flow|Group)$/ })).toHaveCount(0)
 })
 
 test('workflow canvas opens the config card when a node is clicked', async ({ page, request }) => {

@@ -115,11 +115,15 @@ export const TaskDraftConfigSchema = z.object({
   kind: TaskKindSchema,
   provider: z.string().min(1),
   model: z.string().min(1),
-  prompt: z.string().min(1),
+  prompt: z.string(),
   params: z.record(z.string(), z.unknown()).default({}),
 })
 
-export const TaskConfigSchema = TaskDraftConfigSchema.extend({
+export const RunnableTaskDraftConfigSchema = TaskDraftConfigSchema.extend({
+  prompt: z.string().min(1),
+})
+
+export const TaskConfigSchema = RunnableTaskDraftConfigSchema.extend({
   media: TaskMediaConfigSchema,
 })
 
@@ -221,6 +225,7 @@ export type Task = z.infer<typeof TaskSchema>
 export type TaskConfig = z.infer<typeof TaskConfigSchema>
 export type TaskDraftConfig = z.infer<typeof TaskDraftConfigSchema>
 export type TaskMediaConfig = z.infer<typeof TaskMediaConfigSchema>
+export type RunnableTaskDraftConfig = z.infer<typeof RunnableTaskDraftConfigSchema>
 export type TaskKind = z.infer<typeof TaskKindSchema>
 export type TaskListResponse = z.infer<typeof TaskListResponseSchema>
 export type TaskMode = z.infer<typeof TaskModeSchema>

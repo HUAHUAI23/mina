@@ -4,7 +4,7 @@ import type { ComponentType, ReactNode } from 'react'
 import { cn } from '@mina/ui/lib/utils'
 
 import type { NodeTaskFormValue } from './model-form-utils'
-import type { validateNodeTaskFormValue } from './validation'
+import type { validateNodeTaskFormSubmitValue } from './validation'
 import { PromptField } from './shared/PromptField'
 
 const {
@@ -279,7 +279,7 @@ type NodeTaskFormComponents = {
   SubmitButton: typeof SubmitButton
 }
 
-type NodeTaskFormValidator = typeof validateNodeTaskFormValue
+type NodeTaskFormValidator = typeof validateNodeTaskFormSubmitValue
 
 export type NodeTaskFormApi = AppFieldExtendedReactFormApi<
   NodeTaskFormValue,

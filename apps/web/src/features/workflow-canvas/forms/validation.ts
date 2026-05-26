@@ -8,12 +8,19 @@ const NodeTaskFormValueSchema = z.object({
   kind: z.enum(['image_generation', 'video_generation']),
   model: z.string().min(1, 'Model is required.'),
   params: z.record(z.string(), z.unknown()),
-  prompt: z.string().min(1, 'Prompt is required.'),
+  prompt: z.string(),
   provider: z.string().min(1, 'Provider is required.'),
 })
 
-export const validateNodeTaskFormValue = ({ value }: { value: unknown }) => {
-  const base = NodeTaskFormValueSchema.safeParse(value)
+const RunnableNodeTaskFormValueSchema = NodeTaskFormValueSchema.extend({
+  prompt: z.string().trim().min(1, 'Prompt is required.'),
+})
+
+const validateNodeTaskFormValueWithSchema = (
+  value: unknown,
+  schema: typeof NodeTaskFormValueSchema,
+) => {
+  const base = schema.safeParse(value)
   const fieldErrors: Partial<Record<keyof NodeTaskFormValue | 'params', string>> = {}
 
   if (!base.success) {
@@ -45,3 +52,9 @@ export const validateNodeTaskFormValue = ({ value }: { value: unknown }) => {
 
   return Object.keys(fieldErrors).length ? { fields: fieldErrors } : undefined
 }
+
+export const validateNodeTaskFormDraftValue = ({ value }: { value: unknown }) =>
+  validateNodeTaskFormValueWithSchema(value, NodeTaskFormValueSchema)
+
+export const validateNodeTaskFormSubmitValue = ({ value }: { value: unknown }) =>
+  validateNodeTaskFormValueWithSchema(value, RunnableNodeTaskFormValueSchema)

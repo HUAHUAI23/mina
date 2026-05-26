@@ -25,7 +25,10 @@ import {
 } from '../forms/model-compatibility'
 import { formValueToTask, taskToFormValue, type NodeTaskFormValue } from '../forms/model-form-utils'
 import { resolveClientModel } from '../forms/registry/client-model-registry'
-import { validateNodeTaskFormValue } from '../forms/validation'
+import {
+  validateNodeTaskFormDraftValue,
+  validateNodeTaskFormSubmitValue,
+} from '../forms/validation'
 import { useCanvasStore } from '../store/canvas-store'
 import type { ComposerDraftState } from '../store/canvas-ui-store'
 import { useCanvasUiStore } from '../store/canvas-ui-store'
@@ -98,8 +101,8 @@ const cloneTaskValue = (value: NodeTaskFormValue): NodeTaskFormValue => ({
 const cloneMediaSlots = (slots: NodeMediaSlots): NodeMediaSlots => structuredClone(slots)
 
 const nodeTaskValidators = {
-  onChange: validateNodeTaskFormValue,
-  onSubmit: validateNodeTaskFormValue,
+  onChange: validateNodeTaskFormDraftValue,
+  onSubmit: validateNodeTaskFormSubmitValue,
 } satisfies {
   onChange: FormValidateOrFn<NodeTaskFormValue>
   onSubmit: FormValidateOrFn<NodeTaskFormValue>

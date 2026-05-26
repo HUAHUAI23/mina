@@ -14,7 +14,6 @@ import { useCanvasStore } from '../store/canvas-store'
 import { incrementCanvasPerfCounter } from '../diagnostics/canvas-performance-marks'
 import { useCanvasUiStore } from '../store/canvas-ui-store'
 import { useWorkflowYjsSync } from '../sync/yjs/yjs-sync'
-import { CanvasToolbar } from './CanvasToolbar'
 import { SaveStatusPill } from './SaveStatusPill'
 import { WorkflowCanvas } from './WorkflowCanvas'
 
@@ -45,7 +44,6 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
   const version = useCanvasStore((state) => state.version)
   const yjsConnectionStatus = useCanvasStore((state) => state.yjsConnectionStatus)
   const hydratedWorkflowId = useCanvasStore((state) => state.hydratedWorkflowId)
-  const addNode = useCanvasStore((state) => state.addNode)
   const hydrateFromServer = useCanvasStore((state) => state.hydrateFromServer)
   const setNodeMediaView = useCanvasStore((state) => state.setNodeMediaView)
   const selectedNodeIds = useCanvasUiStore((state) => state.selectedNodeIds)
@@ -174,7 +172,6 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
           runError={runError}
           runningNodeId={runningNodeId}
         />
-        <CanvasToolbar onAddNode={addNode} />
       </section>
     </div>
   )
