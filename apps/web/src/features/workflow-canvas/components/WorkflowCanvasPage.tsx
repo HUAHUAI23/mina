@@ -21,17 +21,17 @@ interface WorkflowCanvasPageProps {
   workflowId: string
 }
 
-const pageShellClassName = 'grid h-dvh w-screen min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-surface text-foreground'
-const loadingShellClassName = `${pageShellClassName} place-items-center`
+const pageShellClassName = 'relative h-dvh w-screen min-w-0 overflow-hidden bg-surface text-foreground'
+const loadingShellClassName = 'grid h-dvh w-screen place-items-center overflow-hidden bg-surface text-foreground'
 const loadingClassName = 'p-2.5 text-[0.74rem] font-bold text-foreground-quaternary'
-const headerClassName = 'relative z-8 flex min-h-[66px] min-w-0 items-center justify-between gap-[18px] bg-surface-container-lowest/80 px-[clamp(18px,3dvw,34px)] py-2.5'
-const titleGroupClassName = 'flex min-w-0 items-center gap-3'
-const headerActionsClassName = 'flex min-w-0 flex-none items-center justify-end gap-3'
+const headerClassName = 'pointer-events-none absolute inset-x-0 top-0 z-30 flex min-w-0 items-start justify-between gap-3 bg-linear-to-b from-surface/90 via-surface/45 to-transparent px-[clamp(16px,3dvw,34px)] pt-4 pb-12'
+const titleGroupClassName = 'pointer-events-auto flex max-w-[min(72vw,560px)] min-w-0 items-center gap-3 rounded-full bg-surface-container-lowest/90 p-1.5 pr-5 shadow-[0_20px_40px_-24px_color-mix(in_oklch,var(--foreground)_18%,transparent),inset_0_0_0_1px_var(--outline-ghost)]'
+const headerActionsClassName = 'pointer-events-auto flex min-w-0 flex-none items-center justify-end gap-3'
 const backLinkClassName = 'flex size-10.5 flex-none items-center justify-center rounded-full bg-surface-container-lowest text-foreground-tertiary shadow-[inset_0_0_0_1px_var(--outline-ghost)] hover:bg-foreground hover:text-primary-foreground'
 const titleCopyClassName = 'grid min-w-0 gap-0.5'
 const titleEyebrowClassName = 'text-[0.62rem] leading-none font-black tracking-[0.24em] text-foreground-quaternary uppercase'
 const titleClassName = 'm-0 truncate font-display text-base leading-[1.15] font-black tracking-normal'
-const stageClassName = 'relative min-h-0 min-w-0 overflow-hidden bg-surface-container-low [background-image:radial-gradient(circle,var(--canvas-dot)_1px,transparent_1.2px)] bg-[length:30px_30px]'
+const stageClassName = 'absolute inset-0 min-w-0 overflow-hidden bg-surface-container-low'
 
 export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
   const queryClient = useQueryClient()
@@ -150,6 +150,15 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
 
   return (
     <div className={pageShellClassName}>
+      <section className={stageClassName} aria-label="Workflow canvas">
+        <WorkflowCanvas
+          onRunNode={runNode}
+          onSelectOutput={selectOutput}
+          runError={runError}
+          runningNodeId={runningNodeId}
+        />
+      </section>
+
       <header className={headerClassName}>
         <div className={titleGroupClassName}>
           <Link aria-label="Back to canvas list" className={backLinkClassName} to="/canvas">
@@ -164,15 +173,6 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
           <SaveStatusPill yjsConnectionStatus={yjsConnectionStatus} />
         </div>
       </header>
-
-      <section className={stageClassName} aria-label="Workflow canvas">
-        <WorkflowCanvas
-          onRunNode={runNode}
-          onSelectOutput={selectOutput}
-          runError={runError}
-          runningNodeId={runningNodeId}
-        />
-      </section>
     </div>
   )
 }

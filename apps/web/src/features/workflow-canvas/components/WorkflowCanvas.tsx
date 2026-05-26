@@ -1,5 +1,14 @@
 import { Profiler, memo, useCallback, useEffect, useMemo, useRef } from 'react'
-import { Background, ConnectionMode, Controls, ReactFlow, ReactFlowProvider } from '@xyflow/react'
+import {
+  Background,
+  BackgroundVariant,
+  ConnectionMode,
+  Controls,
+  MiniMap,
+  Panel,
+  ReactFlow,
+  ReactFlowProvider,
+} from '@xyflow/react'
 import type { NodeMouseHandler } from '@xyflow/react'
 
 import { MediaEdge } from './edges/MediaEdge'
@@ -51,6 +60,26 @@ const nodeTypes = {
   node_group: NodeGroupNode,
 } satisfies WorkflowFlowNodeTypes
 
+const MINIMAP_INTERACTION_DISABLED_NODE_THRESHOLD = 3_000
+const MINIMAP_FALLBACK_NODE_THRESHOLD = 5_000
+
+const getMiniMapNodeColor = (node: WorkflowFlowNode): string => {
+  switch (node.type) {
+    case 'image_generation':
+      return 'oklch(0.62 0.055 210)'
+    case 'video_generation':
+      return 'oklch(0.58 0.05 286)'
+    case 'text':
+      return 'oklch(0.72 0.018 247)'
+    case 'flow_group':
+      return 'oklch(0.64 0.035 155)'
+    case 'node_group':
+      return 'oklch(0.68 0.026 80)'
+    default:
+      return 'var(--foreground-quaternary)'
+  }
+}
+
 export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNodeId }: WorkflowCanvasProps) {
   useHydrateFlowRender()
   const flowNodes = useFlowRenderStore((state) => state.flowNodes)
@@ -75,6 +104,7 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
     onSelectionDragStop,
   } = useWorkflowFlowHandlers()
   const stageRef = useRef<HTMLDivElement | null>(null)
+  const pointerFrameRef = useRef<number | undefined>(undefined)
   const runtimeActions = useMemo(
     () => ({ onRunNode, onSelectOutput }),
     [onRunNode, onSelectOutput],
@@ -83,10 +113,21 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
     () => getFlowPerformancePolicy({ edgeCount, mediaNodeCount, nodeCount }),
     [edgeCount, mediaNodeCount, nodeCount],
   )
+  const shouldRenderMiniMapFallback = nodeCount >= MINIMAP_FALLBACK_NODE_THRESHOLD
+  const isMiniMapInteractive = nodeCount < MINIMAP_INTERACTION_DISABLED_NODE_THRESHOLD
 
   useEffect(() => {
     setRuntime({ actions: runtimeActions, runError, runningNodeId })
   }, [runError, runningNodeId, runtimeActions, setRuntime])
+
+  useEffect(
+    () => () => {
+      if (pointerFrameRef.current !== undefined) {
+        window.cancelAnimationFrame(pointerFrameRef.current)
+      }
+    },
+    [],
+  )
 
   useEffect(() => {
     if (!import.meta.env.DEV) {
@@ -140,11 +181,42 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
   const handleConnectEnd = useCallback(() => {
     stageRef.current?.removeAttribute('data-connecting')
   }, [])
+  const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const stage = event.currentTarget
+    const rect = stage.getBoundingClientRect()
+    const pointerX = event.clientX - rect.left
+    const pointerY = event.clientY - rect.top
+
+    if (pointerFrameRef.current !== undefined) {
+      window.cancelAnimationFrame(pointerFrameRef.current)
+    }
+
+    pointerFrameRef.current = window.requestAnimationFrame(() => {
+      stage.style.setProperty('--mina-canvas-pointer-x', `${pointerX}px`)
+      stage.style.setProperty('--mina-canvas-pointer-y', `${pointerY}px`)
+      stage.setAttribute('data-pointer-active', 'true')
+      pointerFrameRef.current = undefined
+    })
+  }, [])
+  const handlePointerLeave = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (pointerFrameRef.current !== undefined) {
+      window.cancelAnimationFrame(pointerFrameRef.current)
+      pointerFrameRef.current = undefined
+    }
+    event.currentTarget.removeAttribute('data-pointer-active')
+  }, [])
 
   return (
     <ReactFlowProvider>
       <Profiler id="WorkflowCanvas" onRender={recordCanvasProfilerCommit}>
-        <div className="mina-wc-flow-shell h-full w-full" ref={stageRef} style={WORKFLOW_CANVAS_GEOMETRY_CSS_VARS}>
+        <div
+          className="mina-wc-flow-shell h-full w-full"
+          onPointerLeave={handlePointerLeave}
+          onPointerMove={handlePointerMove}
+          ref={stageRef}
+          style={WORKFLOW_CANVAS_GEOMETRY_CSS_VARS}
+        >
+          <div aria-hidden="true" className="mina-wc-canvas-background" />
           <ReactFlow<WorkflowFlowNode, WorkflowFlowEdge>
             connectionLineComponent={WorkflowConnectionLine}
             connectionMode={ConnectionMode.Loose}
@@ -174,8 +246,34 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
             onlyRenderVisibleElements={performancePolicy.onlyRenderVisibleElements}
             selectNodesOnDrag={false}
           >
-            <Background gap={24} size={1} />
-            <Controls showInteractive={false} />
+            <Background
+              className="mina-wc-react-flow-background"
+              color="var(--canvas-dot)"
+              gap={24}
+              size={1.2}
+              variant={BackgroundVariant.Dots}
+            />
+            <Controls className="mina-wc-controls" position="bottom-right" showInteractive={false} />
+            {shouldRenderMiniMapFallback ? (
+              <Panel className="mina-wc-minimap-fallback-panel" position="bottom-right">
+                <div className="mina-wc-minimap-frame">
+                  <div className="mina-wc-minimap-fallback" role="status">
+                    <span className="mina-wc-minimap-fallback-label">MiniMap suspended</span>
+                    <strong>{nodeCount.toLocaleString()}</strong>
+                    <span>Nodes</span>
+                  </div>
+                </div>
+              </Panel>
+            ) : (
+              <MiniMap
+                className="mina-wc-minimap"
+                maskColor="color-mix(in oklch, var(--surface-container-lowest) 72%, transparent)"
+                nodeColor={getMiniMapNodeColor}
+                pannable={isMiniMapInteractive}
+                position="bottom-right"
+                zoomable={isMiniMapInteractive}
+              />
+            )}
             <CanvasDock onRunNode={onRunNode} runError={runError} runningNodeId={runningNodeId} />
           </ReactFlow>
         </div>

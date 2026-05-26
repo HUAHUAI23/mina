@@ -1,4 +1,5 @@
-.mina-wc-stage .react-flow {
+.mina-wc-stage .react-flow,
+.mina-wc-flow-shell .react-flow {
   --xy-background-color: transparent;
   --xy-background-pattern-color: transparent;
   --xy-edge-stroke: color-mix(
@@ -17,6 +18,54 @@
   --xy-controls-button-color: var(--foreground-tertiary);
   height: 100%;
   width: 100%;
+}
+
+.mina-wc-flow-shell {
+  --mina-canvas-pointer-x: 50%;
+  --mina-canvas-pointer-y: 50%;
+  background: var(--surface-container-low);
+  overflow: hidden;
+  position: relative;
+}
+
+.mina-wc-canvas-background {
+  background:
+    radial-gradient(
+      circle at var(--mina-canvas-pointer-x) var(--mina-canvas-pointer-y),
+      color-mix(in oklch, var(--primary) 0%, transparent) 0,
+      transparent 240px
+    ),
+    radial-gradient(circle, var(--canvas-dot) 1px, transparent 1.25px),
+    linear-gradient(180deg, var(--surface) 0%, var(--surface-container-low) 100%);
+  background-size:
+    auto,
+    24px 24px,
+    auto;
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 0;
+}
+
+.mina-wc-flow-shell[data-pointer-active="true"] .mina-wc-canvas-background {
+  background:
+    radial-gradient(
+      circle at var(--mina-canvas-pointer-x) var(--mina-canvas-pointer-y),
+      color-mix(in oklch, var(--primary) 16%, transparent) 0,
+      color-mix(in oklch, var(--primary) 7%, transparent) 92px,
+      transparent 260px
+    ),
+    radial-gradient(circle, var(--canvas-dot) 1px, transparent 1.25px),
+    linear-gradient(180deg, var(--surface) 0%, var(--surface-container-low) 100%);
+  background-size:
+    auto,
+    24px 24px,
+    auto;
+}
+
+.mina-wc-flow-shell .react-flow {
+  position: relative;
+  z-index: 1;
 }
 
 .react-flow__node {
@@ -276,6 +325,131 @@
   stroke: color-mix(in oklch, var(--primary) 72%, var(--foreground-secondary));
 }
 
+.mina-wc-controls.react-flow__controls {
+  background: color-mix(
+    in oklch,
+    var(--surface-container-lowest) 90%,
+    transparent
+  );
+  border-radius: 999px;
+  bottom: 188px;
+  box-shadow:
+    0 20px 40px -24px color-mix(in oklch, var(--foreground) 18%, transparent),
+    inset 0 0 0 1px var(--outline-ghost);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  overflow: hidden;
+  padding: 4px;
+  right: 18px;
+}
+
+.mina-wc-controls.react-flow__controls button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--foreground-tertiary);
+  display: flex;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+  width: 32px;
+}
+
+.mina-wc-controls.react-flow__controls button:hover {
+  background: var(--surface-container-low);
+  color: var(--foreground);
+}
+
+.mina-wc-controls.react-flow__controls button svg {
+  fill: currentColor;
+  height: 14px;
+  width: 14px;
+}
+
+.mina-wc-minimap.react-flow__minimap,
+.mina-wc-minimap-fallback-panel.react-flow__panel {
+  background: color-mix(
+    in oklch,
+    var(--surface-container-lowest) 92%,
+    transparent
+  );
+  border-radius: 24px;
+  bottom: 18px;
+  box-shadow:
+    0 24px 54px -34px color-mix(in oklch, var(--foreground) 22%, transparent),
+    inset 0 0 0 1px var(--outline-ghost);
+  margin: 0;
+  padding: 6px;
+  right: 18px;
+  z-index: 18;
+}
+
+.mina-wc-minimap-frame {
+  background: color-mix(
+    in oklch,
+    var(--surface-container-lowest) 92%,
+    transparent
+  );
+  border-radius: 24px;
+  box-shadow:
+    0 24px 54px -34px color-mix(in oklch, var(--foreground) 22%, transparent),
+    inset 0 0 0 1px var(--outline-ghost);
+  padding: 6px;
+}
+
+.mina-wc-minimap.react-flow__minimap {
+  background: color-mix(
+    in oklch,
+    var(--surface-container-lowest) 92%,
+    transparent
+  );
+  border-radius: 18px;
+  height: 140px;
+  margin: 0;
+  overflow: hidden;
+  width: 220px;
+}
+
+.mina-wc-minimap.react-flow__minimap svg {
+  background:
+    radial-gradient(circle, var(--canvas-dot) 1px, transparent 1.25px),
+    var(--surface-container-low);
+  background-size: 20px 20px, auto;
+  border-radius: 18px;
+}
+
+.mina-wc-minimap-fallback {
+  background:
+    radial-gradient(circle, var(--canvas-dot) 1px, transparent 1.25px),
+    var(--surface-container-low);
+  background-size: 20px 20px, auto;
+  border-radius: 18px;
+  color: var(--foreground-tertiary);
+  display: grid;
+  height: 140px;
+  padding: 16px;
+  width: 220px;
+}
+
+.mina-wc-minimap-fallback-label,
+.mina-wc-minimap-fallback span:last-child {
+  font-size: 0.62rem;
+  font-weight: 850;
+  letter-spacing: 0.22em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.mina-wc-minimap-fallback strong {
+  align-self: end;
+  color: var(--foreground-secondary);
+  font-size: 1.65rem;
+  line-height: 1;
+}
+
 .mina-wc-canvas-dock.react-flow__panel {
   bottom: 34px;
   left: 50%;
@@ -295,4 +469,14 @@
     width: auto !important;
   }
 
+  .mina-wc-minimap.react-flow__minimap,
+  .mina-wc-minimap-fallback-panel.react-flow__panel {
+    display: none;
+  }
+
+  .mina-wc-controls.react-flow__controls {
+    bottom: auto;
+    right: 10px;
+    top: 92px;
+  }
 }

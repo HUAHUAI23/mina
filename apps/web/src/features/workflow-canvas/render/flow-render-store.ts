@@ -106,6 +106,9 @@ const emptyInteraction = (): FlowRenderInteraction => ({
   viewportMoving: false,
 })
 
+const hasRenderableNodeChange = (changes: readonly NodeChange<WorkflowFlowNode>[]): boolean =>
+  changes.some((change) => change.type !== 'select')
+
 export const useFlowRenderStore = create<FlowRenderStore>((set, get) => ({
   flowEdges: [],
   flowEdgesById: {},
@@ -129,7 +132,9 @@ export const useFlowRenderStore = create<FlowRenderStore>((set, get) => ({
     if (changes.length === 0) {
       return
     }
-    incrementCanvasPerfCounter('nodesChangeEvents')
+    if (hasRenderableNodeChange(changes)) {
+      incrementCanvasPerfCounter('nodesChangeEvents')
+    }
     incrementCanvasPerfCounter('renderStateWrites')
     set((state) => {
       const flowNodes = applyNodeChanges(changes, state.flowNodes)
