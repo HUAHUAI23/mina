@@ -1,4 +1,151 @@
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100;
+  font-display: swap;
+  src: url("/fonts/Geist-Thin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 200;
+  font-display: swap;
+  src: url("/fonts/Geist-ExtraLight.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/fonts/Geist-Light.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/Geist-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/Geist-Medium.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/Geist-SemiBold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/Geist-Bold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("/fonts/Geist-ExtraBold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("/fonts/Geist-Black.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100;
+  font-display: swap;
+  src: url("/fonts/GeistMono-Thin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 200;
+  font-display: swap;
+  src: url("/fonts/GeistMono-ExtraLight.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/fonts/GeistMono-Light.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/GeistMono-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/GeistMono-Medium.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/GeistMono-SemiBold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/GeistMono-Bold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("/fonts/GeistMono-ExtraBold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("/fonts/GeistMono-Black.woff2") format("woff2");
+}
+
 :root {
+  --font-display: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
   color: var(--foreground);
   font-family: var(--font-sans);
   line-height: 1.5;
@@ -45,12 +192,49 @@ a {
 }
 
 .mina-app-shell-background {
+  --mina-canvas-pointer-x: 50%;
+  --mina-canvas-pointer-y: 50%;
   background:
-    radial-gradient(var(--canvas-dot) 1px, transparent 1px),
+    radial-gradient(circle, rgba(24, 24, 27, 0.22) 1px, transparent 1.15px),
     linear-gradient(180deg, var(--surface) 0%, var(--surface-container-low) 100%);
   background-size:
-    24px 24px,
+    20px 20px,
     auto;
+}
+
+.mina-app-shell-background::after {
+  background: radial-gradient(circle, rgba(24, 24, 27, 0.62) 1px, transparent 1.15px);
+  background-size: 20px 20px;
+  content: "";
+  inset: 0;
+  -webkit-mask-image:
+    radial-gradient(
+      circle at var(--mina-canvas-pointer-x) var(--mina-canvas-pointer-y),
+      black 0,
+      black var(--mina-canvas-highlight-radius, 70px),
+      transparent var(--mina-canvas-highlight-soft-edge, 145px)
+    );
+  mask-image:
+    radial-gradient(
+      circle at var(--mina-canvas-pointer-x) var(--mina-canvas-pointer-y),
+      black 0,
+      black var(--mina-canvas-highlight-radius, 70px),
+      transparent var(--mina-canvas-highlight-soft-edge, 145px)
+    );
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity 180ms ease-out;
+  z-index: 0;
+}
+
+.mina-app-shell-background[data-pointer-active="true"]::after {
+  opacity: 0.82;
+}
+
+.mina-app-shell-background > * {
+  position: relative;
+  z-index: 1;
 }
 
 .sr-only {

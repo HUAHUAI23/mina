@@ -1,5 +1,10 @@
 import type { CSSProperties } from 'react'
 
+import {
+  POINTER_BACKGROUND_CSS_VARS,
+  POINTER_BACKGROUND_GEOMETRY,
+} from '../../app/pointer-background-geometry'
+
 export const WORKFLOW_HANDLE_GEOMETRY = {
   // React Flow measures the handle element for edge endpoints. Keep this tiny
   // and put the generous pointer target on a child so edge anchors stay on the card.
@@ -15,6 +20,8 @@ export const WORKFLOW_HANDLE_GEOMETRY = {
 export const WORKFLOW_CONNECTION_GEOMETRY = {
   radius: 46,
 } as const
+
+export const WORKFLOW_BACKGROUND_GEOMETRY = POINTER_BACKGROUND_GEOMETRY
 
 export const WORKFLOW_EDGE_GEOMETRY = {
   buttonHideDelayMs: 70,
@@ -34,4 +41,5 @@ export const WORKFLOW_CANVAS_GEOMETRY_CSS_VARS = {
   '--mina-handle-hit-size': `${WORKFLOW_HANDLE_GEOMETRY.hitSize}px`,
   '--mina-handle-orb-size': `${WORKFLOW_HANDLE_GEOMETRY.orbSize}px`,
   '--mina-handle-rest-offset': `${WORKFLOW_HANDLE_GEOMETRY.orbRestOffset}px`,
+  ...POINTER_BACKGROUND_CSS_VARS,
 } as CSSProperties

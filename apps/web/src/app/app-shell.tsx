@@ -8,6 +8,8 @@ import { cn } from '@mina/ui/lib/utils'
 import { useAuth } from '../features/auth/components/auth-provider'
 import { useMessages } from './i18n-provider'
 import { LocaleSwitcher } from './locale-switcher'
+import { POINTER_BACKGROUND_CSS_VARS } from './pointer-background-geometry'
+import { usePointerBackground } from './use-pointer-background'
 import type { WebMessages } from '../lib/i18n-messages'
 
 interface NavigationItem {
@@ -41,7 +43,7 @@ const recentProjects = [
 ] as const
 
 const shellClassName = [
-  'mina-app-shell-background grid h-dvh w-screen overflow-hidden text-foreground',
+  'mina-app-shell-background relative grid h-dvh w-screen overflow-hidden text-foreground',
   'lg:grid-cols-[300px_minmax(0,1fr)] max-lg:grid-rows-[auto_minmax(0,1fr)] max-lg:grid-cols-1',
 ].join(' ')
 
@@ -60,6 +62,7 @@ export function AppShell({ children }: PropsWithChildren) {
   const m = useMessages()
   const { pathname } = useLocation()
   const { logout, user } = useAuth()
+  const pointerBackgroundHandlers = usePointerBackground()
   const displayName = user?.displayName || user?.username || user?.email || 'MINA User'
   const initials = displayName
     .split(/\s+/)
@@ -71,7 +74,12 @@ export function AppShell({ children }: PropsWithChildren) {
   const profileLabel = user?.role === 'admin' ? m.app_profile_admin() : m.app_profile_creative_director()
 
   return (
-    <main className={shellClassName}>
+    <main
+      className={shellClassName}
+      onPointerLeave={pointerBackgroundHandlers.onPointerLeave}
+      onPointerMove={pointerBackgroundHandlers.onPointerMove}
+      style={POINTER_BACKGROUND_CSS_VARS}
+    >
       <aside aria-label={m.app_nav_label()} className={navIslandClassName}>
         <div className="flex items-center gap-3.5 max-md:justify-between">
           <div className={brandMarkClassName} aria-hidden="true">
@@ -140,7 +148,7 @@ export function AppShell({ children }: PropsWithChildren) {
       </aside>
 
       <section
-        className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-[38px_58px_30px] max-lg:p-[22px] max-md:p-[18px]"
+        className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-[38px_58px_30px] max-lg:p-[22px] max-md:p-[18px]"
         aria-label={m.app_workspace_label()}
       >
         <header className="flex items-center justify-between max-md:justify-end">
@@ -169,10 +177,6 @@ export function AppShell({ children }: PropsWithChildren) {
         </header>
 
         <section className="grid min-h-0 min-w-0 overflow-hidden">{children}</section>
-
-        <footer className="justify-self-end pr-2.5 text-[0.64rem] font-extrabold uppercase tracking-[0.4em] text-[color-mix(in_oklch,var(--foreground-quaternary)_45%,transparent)] max-md:justify-self-center max-md:p-0 max-md:text-center">
-          {m.app_footer_notice()}
-        </footer>
       </section>
     </main>
   )

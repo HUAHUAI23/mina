@@ -1,7 +1,7 @@
 .mina-wc-stage .react-flow,
 .mina-wc-flow-shell .react-flow {
   --xy-background-color: transparent;
-  --xy-background-pattern-color: transparent;
+  --xy-background-pattern-color: rgba(24, 24, 27, 0.22);
   --xy-edge-stroke: color-mix(
     in oklch,
     var(--foreground-tertiary) 48%,
@@ -23,44 +23,36 @@
 .mina-wc-flow-shell {
   --mina-canvas-pointer-x: 50%;
   --mina-canvas-pointer-y: 50%;
-  background: var(--surface-container-low);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-container-low) 100%);
   overflow: hidden;
   position: relative;
 }
 
-.mina-wc-canvas-background {
-  background:
-    radial-gradient(
-      circle at var(--mina-canvas-pointer-x) var(--mina-canvas-pointer-y),
-      color-mix(in oklch, var(--primary) 0%, transparent) 0,
-      transparent 240px
-    ),
-    radial-gradient(circle, var(--canvas-dot) 1px, transparent 1.25px),
-    linear-gradient(180deg, var(--surface) 0%, var(--surface-container-low) 100%);
-  background-size:
-    auto,
-    24px 24px,
-    auto;
-  inset: 0;
-  pointer-events: none;
-  position: absolute;
-  z-index: 0;
+.mina-wc-react-flow-background {
+  opacity: 1;
 }
 
-.mina-wc-flow-shell[data-pointer-active="true"] .mina-wc-canvas-background {
-  background:
+.mina-wc-react-flow-background-highlight {
+  -webkit-mask-image:
     radial-gradient(
       circle at var(--mina-canvas-pointer-x) var(--mina-canvas-pointer-y),
-      color-mix(in oklch, var(--primary) 16%, transparent) 0,
-      color-mix(in oklch, var(--primary) 7%, transparent) 92px,
-      transparent 260px
-    ),
-    radial-gradient(circle, var(--canvas-dot) 1px, transparent 1.25px),
-    linear-gradient(180deg, var(--surface) 0%, var(--surface-container-low) 100%);
-  background-size:
-    auto,
-    24px 24px,
-    auto;
+      black 0,
+      black var(--mina-canvas-highlight-radius, 190px),
+      transparent var(--mina-canvas-highlight-soft-edge, 300px)
+    );
+  mask-image:
+    radial-gradient(
+      circle at var(--mina-canvas-pointer-x) var(--mina-canvas-pointer-y),
+      black 0,
+      black var(--mina-canvas-highlight-radius, 190px),
+      transparent var(--mina-canvas-highlight-soft-edge, 300px)
+    );
+  opacity: 0;
+  transition: opacity 180ms ease-out;
+}
+
+.mina-wc-flow-shell[data-pointer-active="true"] .mina-wc-react-flow-background-highlight {
+  opacity: 0.82;
 }
 
 .mina-wc-flow-shell .react-flow {

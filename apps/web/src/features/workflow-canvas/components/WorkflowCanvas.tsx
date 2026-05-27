@@ -13,6 +13,7 @@ import type { NodeMouseHandler } from '@xyflow/react'
 import { formatNumber } from '@mina/i18n'
 
 import { useI18n, useMessages } from '../../../app/i18n-provider'
+import { usePointerBackground } from '../../../app/use-pointer-background'
 import { MediaEdge } from './edges/MediaEdge'
 import { WorkflowConnectionLine } from './edges/WorkflowConnectionLine'
 import { FlowGroupNode } from './nodes/FlowGroupNode'
@@ -33,6 +34,7 @@ import { useWorkflowRuntimeStore } from '../store/workflow-runtime-store'
 import { useCanvasStore } from '../store/canvas-store'
 import { useCanvasEdgeCount, useCanvasMediaNodeCount, useCanvasNodeCount } from '../store/selectors'
 import {
+  WORKFLOW_BACKGROUND_GEOMETRY,
   WORKFLOW_CANVAS_GEOMETRY_CSS_VARS,
   WORKFLOW_CONNECTION_GEOMETRY,
 } from '../workflow-canvas-geometry'
@@ -108,7 +110,7 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
     onSelectionDragStop,
   } = useWorkflowFlowHandlers()
   const stageRef = useRef<HTMLDivElement | null>(null)
-  const pointerFrameRef = useRef<number | undefined>(undefined)
+  const pointerBackgroundHandlers = usePointerBackground()
   const runtimeActions = useMemo(
     () => ({ onRunNode, onSelectOutput }),
     [onRunNode, onSelectOutput],
@@ -123,15 +125,6 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
   useEffect(() => {
     setRuntime({ actions: runtimeActions, runError, runningNodeId })
   }, [runError, runningNodeId, runtimeActions, setRuntime])
-
-  useEffect(
-    () => () => {
-      if (pointerFrameRef.current !== undefined) {
-        window.cancelAnimationFrame(pointerFrameRef.current)
-      }
-    },
-    [],
-  )
 
   useEffect(() => {
     if (!import.meta.env.DEV) {
@@ -185,42 +178,16 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
   const handleConnectEnd = useCallback(() => {
     stageRef.current?.removeAttribute('data-connecting')
   }, [])
-  const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    const stage = event.currentTarget
-    const rect = stage.getBoundingClientRect()
-    const pointerX = event.clientX - rect.left
-    const pointerY = event.clientY - rect.top
-
-    if (pointerFrameRef.current !== undefined) {
-      window.cancelAnimationFrame(pointerFrameRef.current)
-    }
-
-    pointerFrameRef.current = window.requestAnimationFrame(() => {
-      stage.style.setProperty('--mina-canvas-pointer-x', `${pointerX}px`)
-      stage.style.setProperty('--mina-canvas-pointer-y', `${pointerY}px`)
-      stage.setAttribute('data-pointer-active', 'true')
-      pointerFrameRef.current = undefined
-    })
-  }, [])
-  const handlePointerLeave = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (pointerFrameRef.current !== undefined) {
-      window.cancelAnimationFrame(pointerFrameRef.current)
-      pointerFrameRef.current = undefined
-    }
-    event.currentTarget.removeAttribute('data-pointer-active')
-  }, [])
-
   return (
     <ReactFlowProvider>
       <Profiler id="WorkflowCanvas" onRender={recordCanvasProfilerCommit}>
         <div
           className="mina-wc-flow-shell h-full w-full"
-          onPointerLeave={handlePointerLeave}
-          onPointerMove={handlePointerMove}
+          onPointerLeave={pointerBackgroundHandlers.onPointerLeave}
+          onPointerMove={pointerBackgroundHandlers.onPointerMove}
           ref={stageRef}
           style={WORKFLOW_CANVAS_GEOMETRY_CSS_VARS}
         >
-          <div aria-hidden="true" className="mina-wc-canvas-background" />
           <ReactFlow<WorkflowFlowNode, WorkflowFlowEdge>
             connectionLineComponent={WorkflowConnectionLine}
             connectionMode={ConnectionMode.Loose}
@@ -251,10 +218,19 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
             selectNodesOnDrag={false}
           >
             <Background
+              id="base"
               className="mina-wc-react-flow-background"
-              color="var(--canvas-dot)"
-              gap={24}
-              size={1.2}
+              color="rgba(24, 24, 27, 0.22)"
+              gap={WORKFLOW_BACKGROUND_GEOMETRY.dotGap}
+              size={WORKFLOW_BACKGROUND_GEOMETRY.dotSize}
+              variant={BackgroundVariant.Dots}
+            />
+            <Background
+              id="pointer-highlight"
+              className="mina-wc-react-flow-background-highlight"
+              color="rgba(24, 24, 27, 0.62)"
+              gap={WORKFLOW_BACKGROUND_GEOMETRY.dotGap}
+              size={WORKFLOW_BACKGROUND_GEOMETRY.dotSize}
               variant={BackgroundVariant.Dots}
             />
             <Controls className="mina-wc-controls" position="bottom-right" showInteractive={false} />
