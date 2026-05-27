@@ -2,6 +2,7 @@ import { memo, useEffect, useState } from 'react'
 import { Play } from 'lucide-react'
 import type { NodeOutputResource } from '@mina/contracts/modules/tasks'
 
+import { useMessages } from '../../../../../app/i18n-provider'
 import { previewUrlForMedia } from '../../../utils/media-url'
 
 interface VideoPosterPreviewProps {
@@ -16,6 +17,7 @@ const posterImageClassName = 'size-full object-cover'
 const playBadgeClassName = 'absolute flex size-10.5 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--foreground)_72%,transparent)] text-primary-foreground'
 
 export const VideoPosterPreview = memo(function VideoPosterPreview({ poster, resource }: VideoPosterPreviewProps) {
+  const m = useMessages()
   const [mounted, setMounted] = useState(false)
   const [mountedResourceKey, setMountedResourceKey] = useState<string | undefined>()
   const resourceKey = resource?.id ?? resource?.url
@@ -24,15 +26,15 @@ export const VideoPosterPreview = memo(function VideoPosterPreview({ poster, res
   }, [resourceKey])
 
   if (!resource) {
-    return <div className={placeholderClassName}>No poster selected</div>
+    return <div className={placeholderClassName}>{m.workflow_canvas_no_poster_selected()}</div>
   }
   const videoUrl = previewUrlForMedia(resource)
   if (!videoUrl) {
-    return <div className={placeholderClassName}>Preview unavailable</div>
+    return <div className={placeholderClassName}>{m.workflow_canvas_preview_unavailable()}</div>
   }
   const posterUrl = previewUrlForMedia(poster)
   if (!posterUrl) {
-    return <div className={placeholderClassName}>Preview unavailable</div>
+    return <div className={placeholderClassName}>{m.workflow_canvas_preview_unavailable()}</div>
   }
   if (mounted && mountedResourceKey === resourceKey) {
     return (
@@ -50,7 +52,7 @@ export const VideoPosterPreview = memo(function VideoPosterPreview({ poster, res
   return (
     <button
       className={videoPosterClassName}
-      aria-label="Play video"
+      aria-label={m.workflow_canvas_play_video()}
       onClick={() => {
         setMountedResourceKey(resourceKey)
         setMounted(true)

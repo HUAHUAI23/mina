@@ -2,6 +2,7 @@ import { BaseEdge, EdgeLabelRenderer, type EdgeProps } from '@xyflow/react'
 import { Scissors } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { useMessages } from '../../../../app/i18n-provider'
 import type { WorkflowFlowEdge } from '../../domain/flow-types'
 import { useCanvasStore } from '../../store/canvas-store'
 import { useCanvasUiStore } from '../../store/canvas-ui-store'
@@ -25,6 +26,7 @@ export const MediaEdge = memo(function MediaEdge({
   data,
   markerEnd,
 }: EdgeProps<WorkflowFlowEdge>) {
+  const m = useMessages()
   const removeGraphEdges = useCanvasStore((state) => state.removeGraphEdges)
   const targetNodeSelected = useCanvasUiStore((state) =>
     state.selectedNodeIds.includes(target),
@@ -48,6 +50,7 @@ export const MediaEdge = memo(function MediaEdge({
   const hovered = Boolean(isHovered || isButtonHovered)
   const active = Boolean(selected || targetNodeSelected || hovered)
   const flowing = Boolean(targetNodeSelected || selected)
+  const cutConnectionLabel = m.workflow_canvas_cut_connection()
 
   const clearLeaveTimer = useCallback(() => {
     if (leaveTimerRef.current) {
@@ -132,12 +135,12 @@ export const MediaEdge = memo(function MediaEdge({
             }}
           >
             <button
-              aria-label="Cut connection"
+              aria-label={cutConnectionLabel}
               className={edgeActionButtonClassName}
               onClick={handleDelete}
               onMouseEnter={handleButtonMouseEnter}
               onMouseLeave={handleButtonMouseLeave}
-              title="Cut connection"
+              title={cutConnectionLabel}
               type="button"
             >
               <Scissors aria-hidden="true" size={13} />

@@ -1,6 +1,8 @@
 import { useCallback, useMemo, type ReactNode } from 'react'
 import { Panel, useReactFlow } from '@xyflow/react'
+import { cn } from '@mina/ui/lib/utils'
 
+import { useMessages } from '../../../../app/i18n-provider'
 import { composerContextFromSelection } from '../../composer/context'
 import { submitComposerDraft } from '../../composer/draft-submit'
 import { MediaTaskFormProvider } from '../../composer/media-task-form'
@@ -24,12 +26,12 @@ interface CanvasDockProps {
 }
 
 const dockFrameBaseClassName = 'mina-wc-dock-shell mina-wc-config-card grid min-h-0 gap-4 overflow-visible bg-[linear-gradient(180deg,color-mix(in_oklch,var(--surface-container-lowest)_96%,transparent),color-mix(in_oklch,var(--surface-container-lowest)_91%,transparent))] text-foreground shadow-[0_30px_66px_-38px_color-mix(in_oklch,var(--foreground)_22%,transparent),inset_0_0_0_1px_color-mix(in_oklch,var(--foreground-quaternary)_7%,transparent)] pointer-events-auto max-h-[min(62dvh,720px)] max-[720px]:max-h-[min(56dvh,520px)]'
-const defaultDockFrameClassName = `${dockFrameBaseClassName} w-full rounded-2xl px-[26px] pt-6 pb-[18px] max-[720px]:p-3.5`
-const nodeDockFrameClassName = `${dockFrameBaseClassName} w-full rounded-2xl px-4 pt-3.5 pb-4 max-[720px]:p-3.5`
-const emptyExpandedDockFrameClassName = `${dockFrameBaseClassName} w-[min(820px,calc(100vw_-_48px))] rounded-[26px] p-3 max-[720px]:p-[7px]`
-const emptyCollapsedDockFrameClassName = `${dockFrameBaseClassName} w-[min(680px,calc(100vw_-_48px))] rounded-[26px] p-3 max-[720px]:p-[7px]`
-const passiveDockFrameClassName = ' opacity-30'
-const hiddenDockFrameClassName = ' opacity-30 pointer-events-none'
+const defaultDockFrameClassName = cn(dockFrameBaseClassName, 'w-full rounded-2xl px-[26px] pt-6 pb-[18px] max-[720px]:p-3.5')
+const nodeDockFrameClassName = cn(dockFrameBaseClassName, 'w-full rounded-2xl px-4 pt-3.5 pb-4 max-[720px]:p-3.5')
+const emptyExpandedDockFrameClassName = cn(dockFrameBaseClassName, 'w-[min(820px,calc(100vw_-_48px))] rounded-[26px] p-3 max-[720px]:p-[7px]')
+const emptyCollapsedDockFrameClassName = cn(dockFrameBaseClassName, 'w-[min(680px,calc(100vw_-_48px))] rounded-[26px] p-3 max-[720px]:p-[7px]')
+const passiveDockFrameClassName = 'opacity-30'
+const hiddenDockFrameClassName = 'opacity-30 pointer-events-none'
 const dockBlockClassName = 'mina-wc-dock-block min-w-0'
 type AddMediaGenerationNode = CanvasStore['addMediaGenerationNode']
 type MediaNodeType = Parameters<AddMediaGenerationNode>[0]['nodeType']
@@ -38,6 +40,7 @@ const nodeSizeEstimate = (nodeType: MediaNodeType): { height: number; width: num
   nodeType === 'video_generation' ? { height: 180, width: 260 } : { height: 170, width: 240 }
 
 export function CanvasDock({ onRunNode, runError, runningNodeId }: CanvasDockProps) {
+  const m = useMessages()
   const activePanel = useCanvasUiStore((state) => state.activeNodePanel)
   const composerDraft = useCanvasUiStore((state) => state.composerDraft)
   const resetComposerDraft = useCanvasUiStore((state) => state.resetComposerDraft)
@@ -99,20 +102,25 @@ export function CanvasDock({ onRunNode, runError, runningNodeId }: CanvasDockPro
   }, [reactFlow])
   const submitDraft = useCallback(
     (snapshot: ComposerDraftState) =>
-      submitComposerDraft(snapshot, {
-        addMediaGenerationNode,
-        focusNode,
-        getNewNodePosition,
-        onRunNode,
-        openNodePanel,
-        resetComposerDraft,
-        setDraftError,
-        setDraftExpanded,
-      }),
+      submitComposerDraft(
+        snapshot,
+        {
+          addMediaGenerationNode,
+          focusNode,
+          getNewNodePosition,
+          onRunNode,
+          openNodePanel,
+          resetComposerDraft,
+          setDraftError,
+          setDraftExpanded,
+        },
+        m,
+      ),
     [
       addMediaGenerationNode,
       focusNode,
       getNewNodePosition,
+      m,
       onRunNode,
       openNodePanel,
       resetComposerDraft,
@@ -173,15 +181,15 @@ function DockFrame({
   }
 
   if (kind === 'node') {
-    return <section className={`${nodeDockFrameClassName}${stateClassName}`} {...dataProps}>{children}</section>
+    return <section className={cn(nodeDockFrameClassName, stateClassName)} {...dataProps}>{children}</section>
   }
 
   if (kind === 'empty') {
     const className = draftExpanded ? emptyExpandedDockFrameClassName : emptyCollapsedDockFrameClassName
-    return <section className={`${className}${stateClassName}`} {...dataProps}>{children}</section>
+    return <section className={cn(className, stateClassName)} {...dataProps}>{children}</section>
   }
 
-  return <section className={`${defaultDockFrameClassName}${stateClassName}`} {...dataProps}>{children}</section>
+  return <section className={cn(defaultDockFrameClassName, stateClassName)} {...dataProps}>{children}</section>
 }
 
 function renderDockContent(

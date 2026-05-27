@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
+import { formatDateTime } from '@mina/i18n'
 
 import { cn } from '@mina/ui/lib/utils'
 
+import { useI18n, useMessages } from '../../../app/i18n-provider'
 import { createWorkflow, listWorkflows } from '../api/workflow-list.client'
 import { workflowKeys } from '../../workflow-canvas/api/workflow-keys'
 import '../canvas-page.css'
@@ -15,9 +17,11 @@ const newCanvasCardClassName = 'flex min-h-[252px] min-w-0 flex-col items-center
 export function CanvasPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { locale } = useI18n()
+  const m = useMessages()
   const workflowsQuery = useQuery({ queryFn: listWorkflows, queryKey: workflowKeys.list() })
   const createMutation = useMutation({
-    mutationFn: () => createWorkflow({ name: 'Untitled Workflow', nodes: [], edges: [] }),
+    mutationFn: () => createWorkflow({ name: m.canvas_untitled_workflow(), nodes: [], edges: [] }),
     onSuccess: (response) => {
       void queryClient.invalidateQueries({ queryKey: workflowKeys.list() })
       void navigate({ to: '/canvas/$workflowId', params: { workflowId: response.item.id } })
@@ -26,7 +30,7 @@ export function CanvasPage() {
 
   return (
     <div className={pageClassName}>
-      <section className="grid gap-5" aria-label="Canvases">
+      <section className="grid gap-5" aria-label={m.canvas_section_label()}>
         <div className={gridClassName}>
           {workflowsQuery.data?.items.map((workflow) => (
             <Link
@@ -38,7 +42,7 @@ export function CanvasPage() {
               <div className="mina-canvas-list-preview relative min-h-[158px] overflow-hidden" />
               <div className="p-4">
                 <h3 className="font-display m-0 text-[0.96rem] leading-[1.18] text-foreground">{workflow.name}</h3>
-                <p className="mt-2 text-[0.66rem] uppercase text-foreground-tertiary">{new Date(workflow.updatedAt).toLocaleString()}</p>
+                <p className="mt-2 text-[0.66rem] uppercase text-foreground-tertiary">{formatDateTime(workflow.updatedAt, locale)}</p>
               </div>
             </Link>
           ))}
@@ -55,7 +59,7 @@ export function CanvasPage() {
             <span className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-container-lowest">
               <Plus aria-hidden="true" size={24} />
             </span>
-            New Canvas
+            {m.canvas_create_new()}
           </button>
         </div>
       </section>

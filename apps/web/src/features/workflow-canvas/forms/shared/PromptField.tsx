@@ -1,6 +1,8 @@
 import { useLayoutEffect, useRef } from 'react'
 import { cn } from '@mina/ui/lib/utils'
 
+import { useMessages } from '../../../../app/i18n-provider'
+
 interface PromptFieldProps {
   error?: string | undefined
   label?: string | undefined
@@ -17,14 +19,17 @@ const errorClassName = 'text-[0.72rem] not-italic text-destructive'
 
 export function PromptField({
   error,
-  label = 'Prompt',
   onBlur,
   onChange,
-  placeholder = 'Describe the frame you want to generate, use / for commands, @ for assets',
+  label,
+  placeholder,
   textareaClassName: textareaClassNameProp,
   value,
 }: PromptFieldProps) {
+  const m = useMessages()
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const resolvedLabel = label ?? m.workflow_canvas_prompt()
+  const resolvedPlaceholder = placeholder ?? m.workflow_canvas_prompt_placeholder_full()
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current
@@ -38,12 +43,12 @@ export function PromptField({
 
   return (
     <label className={fieldClassName}>
-      <span className="sr-only">{label}</span>
+      <span className="sr-only">{resolvedLabel}</span>
       <textarea
         ref={textareaRef}
         className={cn(textareaClassName, textareaClassNameProp)}
         value={value}
-        placeholder={placeholder}
+        placeholder={resolvedPlaceholder}
         onBlur={onBlur}
         onChange={(event) => onChange(event.target.value)}
       />

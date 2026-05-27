@@ -13,6 +13,7 @@ import {
   type VolcengineSeedanceParams,
 } from '@mina/contracts/modules/tasks/video-model-params'
 
+import { useMessages } from '../../../../app/i18n-provider'
 import type { ClientModelSpec } from './client-model-registry'
 import { withNodeTaskFieldGroup } from '../form-context'
 
@@ -25,34 +26,39 @@ const googlePersonGenerationOptions = GOOGLE_VIDEO_PERSON_GENERATION.map(option)
 const googleResolutionOptions = GOOGLE_VIDEO_RESOLUTIONS.map(option)
 const volcengineRatioOptions = VOLCENGINE_VIDEO_RATIOS.map(option)
 const volcengineResolutionOptions = VOLCENGINE_VIDEO_RESOLUTIONS.map(option)
-const volcengineServiceTierOptions = [{ label: 'Default', value: '' }, ...VOLCENGINE_VIDEO_SERVICE_TIERS.map(option)]
 
 const GoogleVeoBasicFields = withNodeTaskFieldGroup<Partial<GoogleVeoParams>, unknown>({
   defaultValues: {},
-  render: ({ group }) => (
-    <>
-      <group.AppField name="aspectRatio">
-        {(field) => <field.SelectField ariaLabel="Aspect ratio" icon={ImageIcon} options={googleAspectRatioOptions} />}
-      </group.AppField>
-      <group.AppField name="durationSeconds">
-        {(field) => <field.SelectField ariaLabel="Duration" icon={Clock} options={googleDurationOptions} valueKind="number" />}
-      </group.AppField>
-      <group.AppField name="resolution">
-        {(field) => <field.SelectField ariaLabel="Resolution" icon={MonitorPlay} options={googleResolutionOptions} />}
-      </group.AppField>
-    </>
-  ),
+  render: ({ group }) => {
+    const m = useMessages()
+    return (
+      <>
+        <group.AppField name="aspectRatio">
+          {(field) => <field.SelectField ariaLabel={m.workflow_canvas_aspect_ratio()} icon={ImageIcon} options={googleAspectRatioOptions} />}
+        </group.AppField>
+        <group.AppField name="durationSeconds">
+          {(field) => <field.SelectField ariaLabel={m.workflow_canvas_duration()} icon={Clock} options={googleDurationOptions} valueKind="number" />}
+        </group.AppField>
+        <group.AppField name="resolution">
+          {(field) => <field.SelectField ariaLabel={m.workflow_canvas_resolution()} icon={MonitorPlay} options={googleResolutionOptions} />}
+        </group.AppField>
+      </>
+    )
+  },
 })
 
 const GoogleVeoAdvancedFields = withNodeTaskFieldGroup<Partial<GoogleVeoParams>, unknown>({
   defaultValues: {},
-  render: ({ group }) => (
-    <>
-      <group.AppField name="personGeneration">
-        {(field) => <field.SelectField label="Person generation" options={googlePersonGenerationOptions} />}
-      </group.AppField>
-    </>
-  ),
+  render: ({ group }) => {
+    const m = useMessages()
+    return (
+      <>
+        <group.AppField name="personGeneration">
+          {(field) => <field.SelectField label={m.workflow_canvas_person_generation()} options={googlePersonGenerationOptions} />}
+        </group.AppField>
+      </>
+    )
+  },
 })
 
 const SeedanceBasicFields = withNodeTaskFieldGroup<Partial<VolcengineSeedanceParams>, unknown, {
@@ -61,25 +67,28 @@ const SeedanceBasicFields = withNodeTaskFieldGroup<Partial<VolcengineSeedancePar
   supports1080p: boolean
 }>({
   defaultValues: {},
-  render: ({ group, maxDuration, minDuration, supports1080p }) => (
-    <>
-      <group.AppField name="ratio">
-        {(field) => <field.SelectField ariaLabel="Ratio" icon={ImageIcon} options={volcengineRatioOptions} />}
-      </group.AppField>
-      <group.AppField name="durationSeconds">
-        {(field) => <field.NumberField ariaLabel="Duration" icon={Clock} max={maxDuration} min={minDuration} step={1} />}
-      </group.AppField>
-      <group.AppField name="resolution">
-        {(field) => (
-          <field.SelectField
-            ariaLabel="Resolution"
-            icon={MonitorPlay}
-            options={volcengineResolutionOptions.filter((item) => supports1080p || item.value !== '1080p')}
-          />
-        )}
-      </group.AppField>
-    </>
-  ),
+  render: ({ group, maxDuration, minDuration, supports1080p }) => {
+    const m = useMessages()
+    return (
+      <>
+        <group.AppField name="ratio">
+          {(field) => <field.SelectField ariaLabel={m.workflow_canvas_ratio()} icon={ImageIcon} options={volcengineRatioOptions} />}
+        </group.AppField>
+        <group.AppField name="durationSeconds">
+          {(field) => <field.NumberField ariaLabel={m.workflow_canvas_duration()} icon={Clock} max={maxDuration} min={minDuration} step={1} />}
+        </group.AppField>
+        <group.AppField name="resolution">
+          {(field) => (
+            <field.SelectField
+              ariaLabel={m.workflow_canvas_resolution()}
+              icon={MonitorPlay}
+              options={volcengineResolutionOptions.filter((item) => supports1080p || item.value !== '1080p')}
+            />
+          )}
+        </group.AppField>
+      </>
+    )
+  },
 })
 
 const SeedanceAdvancedFields = withNodeTaskFieldGroup<Partial<VolcengineSeedanceParams>, unknown, {
@@ -97,35 +106,39 @@ const SeedanceAdvancedFields = withNodeTaskFieldGroup<Partial<VolcengineSeedance
     supportsReturnLastFrame,
     supportsServiceTier,
     supportsWebSearch,
-  }) => (
-    <>
-      {supportsGenerateAudio ? (
-        <group.AppField name="generateAudio">
-          {(field) => <field.SwitchField label="Generate audio" />}
-        </group.AppField>
-      ) : null}
-      {supportsCameraFixed ? (
-        <group.AppField name="cameraFixed">
-          {(field) => <field.SwitchField label="Fixed camera" />}
-        </group.AppField>
-      ) : null}
-      {supportsReturnLastFrame ? (
-        <group.AppField name="returnLastFrame">
-          {(field) => <field.SwitchField label="Return last frame" />}
-        </group.AppField>
-      ) : null}
-      {supportsServiceTier ? (
-        <group.AppField name="serviceTier">
-          {(field) => <field.SelectField label="Service tier" options={volcengineServiceTierOptions} />}
-        </group.AppField>
-      ) : null}
-      {supportsWebSearch ? (
-        <group.AppField name="webSearch">
-          {(field) => <field.SwitchField label="Web search" />}
-        </group.AppField>
-      ) : null}
-    </>
-  ),
+  }) => {
+    const m = useMessages()
+    const volcengineServiceTierOptions = [{ label: m.workflow_canvas_option_default(), value: '' }, ...VOLCENGINE_VIDEO_SERVICE_TIERS.map(option)]
+    return (
+      <>
+        {supportsGenerateAudio ? (
+          <group.AppField name="generateAudio">
+            {(field) => <field.SwitchField label={m.workflow_canvas_generate_audio()} />}
+          </group.AppField>
+        ) : null}
+        {supportsCameraFixed ? (
+          <group.AppField name="cameraFixed">
+            {(field) => <field.SwitchField label={m.workflow_canvas_fixed_camera()} />}
+          </group.AppField>
+        ) : null}
+        {supportsReturnLastFrame ? (
+          <group.AppField name="returnLastFrame">
+            {(field) => <field.SwitchField label={m.workflow_canvas_return_last_frame()} />}
+          </group.AppField>
+        ) : null}
+        {supportsServiceTier ? (
+          <group.AppField name="serviceTier">
+            {(field) => <field.SelectField label={m.workflow_canvas_service_tier()} options={volcengineServiceTierOptions} />}
+          </group.AppField>
+        ) : null}
+        {supportsWebSearch ? (
+          <group.AppField name="webSearch">
+            {(field) => <field.SwitchField label={m.workflow_canvas_web_search()} />}
+          </group.AppField>
+        ) : null}
+      </>
+    )
+  },
 })
 
 export const videoClientModelSpecs: ClientModelSpec[] = [

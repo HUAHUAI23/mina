@@ -7,6 +7,7 @@ import type {
 } from '@mina/contracts/modules/media'
 import type { ResourceKind } from '@mina/contracts/modules/tasks'
 
+import { baseMessages, type WebMessages } from '../../../lib/i18n-messages'
 import type { ClientModelMediaCapabilities, ImageInputLimit } from '../forms/registry/client-model-registry'
 
 export interface MediaSlotDescriptor {
@@ -17,45 +18,47 @@ export interface MediaSlotDescriptor {
   slot: MediaSlotName
 }
 
-const imageInputSlot: MediaSlotDescriptor = {
+const imageInputSlot = (m: WebMessages): MediaSlotDescriptor => ({
   accept: 'image/*',
   kind: 'image',
-  label: 'Input media',
+  label: m.workflow_canvas_input_media(),
   slot: 'inputImages',
-}
+})
 
-const videoSlotPolicy: MediaSlotDescriptor[] = [
+const videoSlotPolicy = (m: WebMessages): MediaSlotDescriptor[] => [
   {
     accept: 'image/*',
     kind: 'image',
-    label: 'First frame',
+    label: m.workflow_canvas_first_frame(),
     slot: 'firstFrame',
   },
   {
     accept: 'image/*',
     kind: 'image',
-    label: 'Last frame',
+    label: m.workflow_canvas_last_frame(),
     slot: 'lastFrame',
   },
   {
     accept: 'image/*',
     kind: 'image',
-    label: 'Reference image',
+    label: m.workflow_canvas_reference_image(),
     slot: 'referenceImages',
   },
   {
     accept: 'video/*',
     kind: 'video',
-    label: 'Reference video',
+    label: m.workflow_canvas_reference_video(),
     slot: 'referenceVideos',
   },
   {
     accept: 'audio/*',
     kind: 'audio',
-    label: 'Reference audio',
+    label: m.workflow_canvas_reference_audio(),
     slot: 'referenceAudios',
   },
 ]
+
+const resolveSlotMessages = (messages: WebMessages | undefined): WebMessages => messages ?? baseMessages
 
 const capabilityForSlot = (
   capabilities: ClientModelMediaCapabilities,
@@ -104,12 +107,18 @@ const withCapabilities = (
 export const mediaSlotsForNodeType = (
   nodeType: WorkflowNodeType,
   capabilities?: ClientModelMediaCapabilities | undefined,
+  messages?: WebMessages | undefined,
 ): MediaSlotDescriptor[] => {
+  const m = resolveSlotMessages(messages)
+  const descriptors = {
+    imageInputSlot: imageInputSlot(m),
+    videoSlotPolicy: videoSlotPolicy(m),
+  }
   if (nodeType === 'image_generation') {
-    return withCapabilities([imageInputSlot], capabilities)
+    return withCapabilities([descriptors.imageInputSlot], capabilities)
   }
   if (nodeType === 'video_generation') {
-    return withCapabilities(videoSlotPolicy, capabilities)
+    return withCapabilities(descriptors.videoSlotPolicy, capabilities)
   }
   return []
 }
@@ -118,44 +127,49 @@ export const isMediaSlotAllowedForNodeType = (
   nodeType: WorkflowNodeType,
   slot: MediaSlotName,
   capabilities?: ClientModelMediaCapabilities | undefined,
+  messages?: WebMessages | undefined,
 ): boolean =>
-  mediaSlotsForNodeType(nodeType, capabilities).some((descriptor) => descriptor.slot === slot)
+  mediaSlotsForNodeType(nodeType, capabilities, messages).some((descriptor) => descriptor.slot === slot)
 
 export const parseMediaSlotForNodeType = (
   nodeType: WorkflowNodeType,
   value: string | null | undefined,
   capabilities?: ClientModelMediaCapabilities | undefined,
+  messages?: WebMessages | undefined,
 ): MediaSlotName | undefined => {
   if (!value) {
     return undefined
   }
-  return mediaSlotsForNodeType(nodeType, capabilities).find((descriptor) => descriptor.slot === value)?.slot
+  return mediaSlotsForNodeType(nodeType, capabilities, messages).find((descriptor) => descriptor.slot === value)?.slot
 }
 
 export const defaultMediaSlotForNodeType = (
   nodeType: WorkflowNodeType,
   capabilities?: ClientModelMediaCapabilities | undefined,
-): MediaSlotName | undefined => mediaSlotsForNodeType(nodeType, capabilities)[0]?.slot
+  messages?: WebMessages | undefined,
+): MediaSlotName | undefined => mediaSlotsForNodeType(nodeType, capabilities, messages)[0]?.slot
 
 export const coerceMediaSlotForNodeType = (
   nodeType: WorkflowNodeType,
   requestedSlot: MediaSlotName | undefined,
   capabilities?: ClientModelMediaCapabilities | undefined,
+  messages?: WebMessages | undefined,
 ): MediaSlotName | undefined => {
-  if (requestedSlot && isMediaSlotAllowedForNodeType(nodeType, requestedSlot, capabilities)) {
+  if (requestedSlot && isMediaSlotAllowedForNodeType(nodeType, requestedSlot, capabilities, messages)) {
     return requestedSlot
   }
-  return defaultMediaSlotForNodeType(nodeType, capabilities)
+  return defaultMediaSlotForNodeType(nodeType, capabilities, messages)
 }
 
 export const normalizeMediaSlotsForNodeType = (
   nodeType: WorkflowNodeType,
   mediaSlots: NodeMediaSlots | undefined,
   capabilities?: ClientModelMediaCapabilities | undefined,
+  messages?: WebMessages | undefined,
 ): NodeMediaSlots => {
   const next: NodeMediaSlots = {}
 
-  const descriptorsBySlot = new Map(mediaSlotsForNodeType(nodeType, capabilities).map((descriptor) => [descriptor.slot, descriptor]))
+  const descriptorsBySlot = new Map(mediaSlotsForNodeType(nodeType, capabilities, messages).map((descriptor) => [descriptor.slot, descriptor]))
   for (const [slot, descriptor] of descriptorsBySlot) {
     const items = mediaSlots?.[slot]?.filter((item) => item.slot === slot)
     const limitedItems = descriptor.maxItems === undefined ? items : items?.slice(0, descriptor.maxItems)
@@ -186,7 +200,8 @@ export const slotItemsForNodeType = (
   nodeType: WorkflowNodeType,
   mediaSlots: NodeMediaSlots | undefined,
   capabilities?: ClientModelMediaCapabilities | undefined,
+  messages?: WebMessages | undefined,
 ): NodeMediaSlotItem[] =>
-  mediaSlotsForNodeType(nodeType, capabilities).flatMap(
+  mediaSlotsForNodeType(nodeType, capabilities, messages).flatMap(
     ({ slot }) => mediaSlots?.[slot] ?? [],
   )

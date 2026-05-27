@@ -36,5 +36,11 @@ describe('authorization policies', () => {
 
   test('keeps public share request flow explicitly unimplemented', () => {
     expect(() => assertCanRequestPublicShare(userActor)).toThrow('Public share requests are not implemented yet.')
+    try {
+      assertCanRequestPublicShare(userActor)
+    } catch (error) {
+      expect(error).toBeInstanceOf(HttpError)
+      expect((error as HttpError).messageKey).toBe('api_error_public_share_request_not_implemented')
+    }
   })
 })

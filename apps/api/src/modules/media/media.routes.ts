@@ -1,4 +1,3 @@
-import { sValidator } from '@hono/standard-validator'
 import {
   CompletePresignedMediaUploadSchema,
   CreateMediaObjectSchema,
@@ -13,6 +12,7 @@ import { Hono } from 'hono'
 
 import { apiEnv } from '../../config/env'
 import { HttpError } from '../../lib/http/http-error'
+import { apiValidator } from '../../lib/http/validation'
 import { requireAuthActor } from '../accounts/auth-middleware'
 import { assertCanManagePublicResource } from '../accounts/authorization'
 import type { AccountsService } from '../accounts/accounts.service'
@@ -39,16 +39,25 @@ export const createMediaRoutes = (mediaObjectService: MediaObjectService, accoun
       const form = await c.req.formData()
       const file = form.get('file')
       if (!(file instanceof File)) {
-        throw new HttpError(422, 'MEDIA_FILE_REQUIRED', 'A file field is required.')
+        throw new HttpError(422, 'MEDIA_FILE_REQUIRED', {
+          fallbackMessage: 'A file field is required.',
+          messageKey: 'api_error_media_file_required',
+        })
       }
       if (file.size > apiEnv.mediaUploadMaxBytes) {
-        throw new HttpError(413, 'MEDIA_UPLOAD_TOO_LARGE', 'Media upload is too large.')
+        throw new HttpError(413, 'MEDIA_UPLOAD_TOO_LARGE', {
+          fallbackMessage: 'Media upload is too large.',
+          messageKey: 'api_error_media_upload_too_large',
+        })
       }
 
       const declaredKind = CreateMediaObjectSchema.shape.kind.parse(formValue(form.get('kind')))
       const kind = declaredKind ?? resourceKindFromMimeType(file.type)
       if (!kind) {
-        throw new HttpError(415, 'MEDIA_TYPE_UNSUPPORTED', 'Media MIME type is not supported.')
+        throw new HttpError(415, 'MEDIA_TYPE_UNSUPPORTED', {
+          fallbackMessage: 'Media MIME type is not supported.',
+          messageKey: 'api_error_media_type_unsupported',
+        })
       }
 
       const mediaObject = await mediaObjectService.createFromBuffer({
@@ -68,19 +77,19 @@ export const createMediaRoutes = (mediaObjectService: MediaObjectService, accoun
       })
       return c.json(MediaObjectResponseSchema.parse({ item: mediaObject }), 201)
     })
-    .get('/media-objects/:id', sValidator('param', MediaObjectParamsSchema), async (c) => {
+    .get('/media-objects/:id', apiValidator('param', MediaObjectParamsSchema), async (c) => {
       const actor = await requireAuthActor(c, accountsService)
       const { id } = c.req.valid('param')
       return c.json(GetMediaObjectResponseSchema.parse({ item: await mediaObjectService.getMediaObject(actor.accountId, id) }))
     })
-    .get('/media-objects/:id/content', sValidator('param', MediaObjectParamsSchema), async (c) => {
+    .get('/media-objects/:id/content', apiValidator('param', MediaObjectParamsSchema), async (c) => {
       const actor = await requireAuthActor(c, accountsService)
       const { id } = c.req.valid('param')
       return c.redirect(await mediaObjectService.createReadUrl(actor.accountId, id), 302)
     })
     .post(
       '/media-objects/presigned-upload',
-      sValidator('json', CreatePresignedMediaUploadSchema),
+      apiValidator('json', CreatePresignedMediaUploadSchema),
       async (c) => {
         const actor = await requireAuthActor(c, accountsService)
         const payload = c.req.valid('json')
@@ -108,8 +117,8 @@ export const createMediaRoutes = (mediaObjectService: MediaObjectService, accoun
     )
     .post(
       '/media-objects/:id/complete-upload',
-      sValidator('param', MediaObjectParamsSchema),
-      sValidator('json', CompletePresignedMediaUploadSchema),
+      apiValidator('param', MediaObjectParamsSchema),
+      apiValidator('json', CompletePresignedMediaUploadSchema),
       async (c) => {
         const actor = await requireAuthActor(c, accountsService)
         const { id } = c.req.valid('param')

@@ -4,9 +4,11 @@ import type {
   TaskResource,
 } from '@mina/contracts/modules/tasks'
 import type { TaskConfig } from '@mina/contracts/modules/tasks'
+import type { MinaLocale } from '@mina/i18n'
 
 import { apiEnv } from '../../config/env'
 import { HttpError } from '../../lib/http/http-error'
+import { localizeErrorDetails } from '../../lib/http/localized-error'
 import type { PricingService } from '../pricing/pricing.service'
 import { TaskLifecycle } from './lifecycle'
 import type { ModelRegistry } from './models/model-registry'
@@ -115,7 +117,10 @@ export class TasksService {
   async getTask(id: string): Promise<Task> {
     const task = await this.taskRepository.findById(id)
     if (!task) {
-      throw new HttpError(404, 'TASK_NOT_FOUND', 'Task not found.')
+      throw new HttpError(404, 'TASK_NOT_FOUND', {
+        fallbackMessage: 'Task not found.',
+        messageKey: 'api_error_task_not_found',
+      })
     }
 
     return task
@@ -125,6 +130,10 @@ export class TasksService {
     const task = await this.getTask(id)
     this.assertTaskAccount(task, accountId)
     return task
+  }
+
+  async getTaskForAccountLocalized(accountId: string, id: string, locale: MinaLocale): Promise<Task> {
+    return this.localizeTask(await this.getTaskForAccount(accountId, id), locale)
   }
 
   async getTaskOutput(id: string): Promise<NodeExecutionOutput | undefined> {
@@ -139,6 +148,10 @@ export class TasksService {
     return this.taskRepository.list(accountId)
   }
 
+  async listTasksLocalized(accountId: string, locale: MinaLocale): Promise<Task[]> {
+    return (await this.listTasks(accountId)).map((task) => this.localizeTask(task, locale))
+  }
+
   async listTaskResources(taskId: string): Promise<TaskResource[]> {
     return this.taskRepository.listResources(taskId)
   }
@@ -146,6 +159,15 @@ export class TasksService {
   async listTaskResourcesForAccount(accountId: string, taskId: string): Promise<TaskResource[]> {
     await this.getTaskForAccount(accountId, taskId)
     return this.listTaskResources(taskId)
+  }
+
+  localizeTask(task: Task, locale: MinaLocale): Task {
+    return task.error
+      ? {
+          ...task,
+          error: localizeErrorDetails(task.error, locale),
+        }
+      : task
   }
 
   async runTask(id: string): Promise<Task> {
@@ -188,7 +210,10 @@ export class TasksService {
   async cancelTask(accountId: string, id: string): Promise<void> {
     const task = await this.getTaskForAccount(accountId, id)
     if (task.status !== 'queued' && task.status !== 'running') {
-      throw new HttpError(409, 'TASK_NOT_CANCELLABLE', 'Only queued or running tasks can be cancelled.')
+      throw new HttpError(409, 'TASK_NOT_CANCELLABLE', {
+        fallbackMessage: 'Only queued or running tasks can be cancelled.',
+        messageKey: 'api_error_task_not_cancellable',
+      })
     }
 
     await this.lifecycle.cancelTask(task)
@@ -196,7 +221,10 @@ export class TasksService {
 
   private assertTaskAccount(task: Task, accountId: string): void {
     if (task.accountId !== accountId) {
-      throw new HttpError(404, 'TASK_NOT_FOUND', 'Task not found.')
+      throw new HttpError(404, 'TASK_NOT_FOUND', {
+        fallbackMessage: 'Task not found.',
+        messageKey: 'api_error_task_not_found',
+      })
     }
   }
 

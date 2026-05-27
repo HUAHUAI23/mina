@@ -25,7 +25,10 @@ export const validateCanvas = (
       throw new HttpError(
         422,
         'WORKFLOW_NODE_TYPE_MISMATCH',
-        'Workflow node type must match node data type.',
+        {
+          fallbackMessage: 'Workflow node type must match node data type.',
+          messageKey: 'api_error_workflow_validation_failed',
+        },
       )
     }
     if (node.parentId) {
@@ -34,7 +37,10 @@ export const validateCanvas = (
         throw new HttpError(
           422,
           'WORKFLOW_PARENT_NOT_FOUND',
-          'Workflow node parent must be a group node.',
+          {
+            fallbackMessage: 'Workflow node parent must be a group node.',
+            messageKey: 'api_error_workflow_validation_failed',
+          },
         )
       }
     }
@@ -45,7 +51,10 @@ export const validateCanvas = (
       throw new HttpError(
         422,
         'WORKFLOW_EDGE_NODE_NOT_FOUND',
-        'Workflow edge source and target must exist.',
+        {
+          fallbackMessage: 'Workflow edge source and target must exist.',
+          messageKey: 'api_error_workflow_validation_failed',
+        },
       )
     }
   }
@@ -72,7 +81,10 @@ export const validateFlowGroup = (
       throw new HttpError(
         422,
         'WORKFLOW_CROSS_FLOW_EDGE',
-        'Flow group execution does not support cross-scope edges.',
+        {
+          fallbackMessage: 'Flow group execution does not support cross-scope edges.',
+          messageKey: 'api_error_workflow_validation_failed',
+        },
       )
     }
   }
@@ -119,7 +131,10 @@ export const validateFlowGroup = (
     throw new HttpError(
       422,
       'WORKFLOW_FLOW_CYCLE',
-      'Flow group execution graph must be acyclic.',
+      {
+        fallbackMessage: 'Flow group execution graph must be acyclic.',
+        messageKey: 'api_error_workflow_validation_failed',
+      },
     )
   }
 }
@@ -146,14 +161,20 @@ const validateMediaSlotEdges = (
         throw new HttpError(
           422,
           'WORKFLOW_MEDIA_SLOT_EDGE_MISSING',
-          'Node output media slot must have a matching edge.',
+          {
+            fallbackMessage: 'Node output media slot must have a matching edge.',
+            messageKey: 'api_error_workflow_validation_failed',
+          },
         )
       }
       if (!nodeMap.has(source.nodeId)) {
         throw new HttpError(
           422,
           'WORKFLOW_MEDIA_SLOT_NODE_NOT_FOUND',
-          'Media slot source node must exist.',
+          {
+            fallbackMessage: 'Media slot source node must exist.',
+            messageKey: 'api_error_workflow_validation_failed',
+          },
         )
       }
     }
@@ -178,7 +199,10 @@ const validateMediaSlotEdges = (
       throw new HttpError(
         422,
         'WORKFLOW_MEDIA_EDGE_SLOT_MISSING',
-        'Media edge must point to a matching media slot item.',
+        {
+          fallbackMessage: 'Media edge must point to a matching media slot item.',
+          messageKey: 'api_error_workflow_validation_failed',
+        },
       )
     }
   }

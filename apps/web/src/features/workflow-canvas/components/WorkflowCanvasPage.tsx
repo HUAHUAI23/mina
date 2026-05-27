@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
 
+import { useMessages } from '../../../app/i18n-provider'
 import { taskKeys, workflowKeys } from '../api/workflow-keys'
 import {
   createWorkflowRun,
@@ -34,6 +35,7 @@ const titleClassName = 'm-0 truncate font-display text-base leading-[1.15] font-
 const stageClassName = 'absolute inset-0 min-w-0 overflow-hidden bg-surface-container-low'
 
 export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
+  const m = useMessages()
   const queryClient = useQueryClient()
   const [runError, setRunError] = useState<string>()
   const [runningNodeId, setRunningNodeId] = useState<string>()
@@ -121,7 +123,7 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
         void queryClient.invalidateQueries({ queryKey: workflowKeys.nodeTasks(workflowId, nodeId) })
       }
     },
-    onError: (error) => setRunError(error instanceof Error ? error.message : 'Run failed.'),
+    onError: (error) => setRunError(error instanceof Error ? error.message : m.workflow_canvas_run_failed()),
   })
 
   const runNode = useCallback((nodeId: string) => runMutation.mutate(nodeId), [runMutation])
@@ -139,18 +141,18 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
   )
 
   if (workflowQuery.isLoading) {
-    return <div className={loadingShellClassName}><div className={loadingClassName}>Loading workflow</div></div>
+    return <div className={loadingShellClassName}><div className={loadingClassName}>{m.workflow_canvas_loading()}</div></div>
   }
 
   if (workflowQuery.isError || !workflowQuery.data) {
-    return <div className={loadingShellClassName}><div className={loadingClassName}>Workflow unavailable</div></div>
+    return <div className={loadingShellClassName}><div className={loadingClassName}>{m.workflow_canvas_unavailable()}</div></div>
   }
 
   const workflow = workflowQuery.data.item
 
   return (
     <div className={pageShellClassName}>
-      <section className={stageClassName} aria-label="Workflow canvas">
+      <section className={stageClassName} aria-label={m.workflow_canvas_label()}>
         <WorkflowCanvas
           onRunNode={runNode}
           onSelectOutput={selectOutput}
@@ -161,11 +163,11 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
 
       <header className={headerClassName}>
         <div className={titleGroupClassName}>
-          <Link aria-label="Back to canvas list" className={backLinkClassName} to="/canvas">
+          <Link aria-label={m.workflow_canvas_back_to_list()} className={backLinkClassName} to="/canvas">
             <ArrowLeft aria-hidden="true" size={17} />
           </Link>
           <div className={titleCopyClassName}>
-            <span className={titleEyebrowClassName}>Canvas</span>
+            <span className={titleEyebrowClassName}>{m.workflow_canvas_eyebrow()}</span>
             <h1 className={titleClassName}>{workflow.name}</h1>
           </div>
         </div>

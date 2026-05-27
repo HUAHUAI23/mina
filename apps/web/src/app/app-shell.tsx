@@ -6,20 +6,23 @@ import { Link, useLocation } from '@tanstack/react-router'
 import { cn } from '@mina/ui/lib/utils'
 
 import { useAuth } from '../features/auth/components/auth-provider'
+import { useMessages } from './i18n-provider'
+import { LocaleSwitcher } from './locale-switcher'
+import type { WebMessages } from '../lib/i18n-messages'
 
 interface NavigationItem {
   icon: LucideIcon
-  label: string
+  label(messages: WebMessages): string
   to: string
   routeEnabled?: boolean
 }
 
 const navigationItems: NavigationItem[] = [
-  { icon: Compass, label: 'Plaza', routeEnabled: true, to: '/' },
-  { icon: Lightbulb, label: 'Ideas', to: '/' },
-  { icon: FolderOpen, label: 'Projects', routeEnabled: true, to: '/projects' },
-  { icon: LayoutGrid, label: 'Canvas', routeEnabled: true, to: '/canvas' },
-  { icon: Archive, label: 'Asset Hub', to: '/' },
+  { icon: Compass, label: (m) => m.app_nav_plaza(), routeEnabled: true, to: '/' },
+  { icon: Lightbulb, label: (m) => m.app_nav_ideas(), to: '/' },
+  { icon: FolderOpen, label: (m) => m.app_nav_projects(), routeEnabled: true, to: '/projects' },
+  { icon: LayoutGrid, label: (m) => m.app_nav_canvas(), routeEnabled: true, to: '/canvas' },
+  { icon: Archive, label: (m) => m.app_nav_asset_hub(), to: '/' },
 ]
 
 const recentProjects = [
@@ -54,6 +57,7 @@ const navLinkClassName = 'flex min-h-11 items-center gap-3.5 rounded-lg px-4 tex
 const activeNavLinkClassName = 'bg-surface-container-low text-foreground font-[750] shadow-[inset_0_0_0_1px_var(--outline-ghost)]'
 
 export function AppShell({ children }: PropsWithChildren) {
+  const m = useMessages()
   const { pathname } = useLocation()
   const { logout, user } = useAuth()
   const displayName = user?.displayName || user?.username || user?.email || 'MINA User'
@@ -64,11 +68,11 @@ export function AppShell({ children }: PropsWithChildren) {
     .map((part) => part[0]?.toUpperCase())
     .join('')
     .slice(0, 2)
-  const profileLabel = user?.role === 'admin' ? 'Admin' : 'Creative Director'
+  const profileLabel = user?.role === 'admin' ? m.app_profile_admin() : m.app_profile_creative_director()
 
   return (
     <main className={shellClassName}>
-      <aside aria-label="Primary navigation" className={navIslandClassName}>
+      <aside aria-label={m.app_nav_label()} className={navIslandClassName}>
         <div className="flex items-center gap-3.5 max-md:justify-between">
           <div className={brandMarkClassName} aria-hidden="true">
             <span className="font-display text-[0.48rem] font-extrabold tracking-[0.08em]">MINA</span>
@@ -78,11 +82,12 @@ export function AppShell({ children }: PropsWithChildren) {
 
         <section className="grid gap-[17px] max-lg:min-w-0">
           <h2 className="m-0 text-[0.68rem] font-extrabold uppercase tracking-[0.32em] text-foreground-quaternary max-md:hidden">
-            Navigate
+            {m.app_nav_heading()}
           </h2>
           <nav className="grid gap-2 max-lg:flex max-lg:gap-1.5 max-lg:overflow-x-auto">
-            {navigationItems.map(({ icon: Icon, label, routeEnabled = false, to }) => {
+            {navigationItems.map(({ icon: Icon, label: getLabel, routeEnabled = false, to }) => {
               const active = routeEnabled && (pathname === to || (to !== '/' && pathname.startsWith(to)))
+              const label = getLabel(m)
 
               return (
                 <Link
@@ -101,7 +106,7 @@ export function AppShell({ children }: PropsWithChildren) {
 
         <section className="grid gap-[17px] max-lg:hidden">
           <h2 className="m-0 text-[0.68rem] font-extrabold uppercase tracking-[0.32em] text-foreground-quaternary">
-            Recent Projects
+            {m.app_recent_projects()}
           </h2>
           <div className="grid gap-2">
             {recentProjects.map((project) => (
@@ -130,17 +135,18 @@ export function AppShell({ children }: PropsWithChildren) {
           className="mt-auto min-h-11 rounded-lg border-0 bg-foreground px-4 text-[0.76rem] font-extrabold uppercase tracking-[0.12em] text-primary-foreground hover:bg-foreground-secondary max-lg:m-0 max-lg:px-[18px] max-md:hidden"
           type="button"
         >
-          New Project
+          {m.app_new_project()}
         </button>
       </aside>
 
       <section
         className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-[38px_58px_30px] max-lg:p-[22px] max-md:p-[18px]"
-        aria-label="Creative workspace"
+        aria-label={m.app_workspace_label()}
       >
         <header className="flex items-center justify-between max-md:justify-end">
           <div aria-hidden="true" />
           <div className="flex items-center gap-3.5">
+            <LocaleSwitcher className="max-md:h-10 max-md:px-2.5" compact />
             <div className="grid justify-items-end gap-px max-md:hidden">
               <strong className="text-[0.82rem] leading-tight">{displayName}</strong>
               <span className="text-[0.72rem] text-foreground-tertiary">{profileLabel}</span>
@@ -154,7 +160,7 @@ export function AppShell({ children }: PropsWithChildren) {
             <button
               className="flex size-10 items-center justify-center rounded-full border-0 bg-surface-container-low text-foreground-tertiary hover:bg-foreground hover:text-primary-foreground max-md:hidden"
               type="button"
-              aria-label="Sign out"
+              aria-label={m.app_sign_out()}
               onClick={logout}
             >
               <LogOut aria-hidden="true" size={17} />
@@ -165,7 +171,7 @@ export function AppShell({ children }: PropsWithChildren) {
         <section className="grid min-h-0 min-w-0 overflow-hidden">{children}</section>
 
         <footer className="justify-self-end pr-2.5 text-[0.64rem] font-extrabold uppercase tracking-[0.4em] text-[color-mix(in_oklch,var(--foreground-quaternary)_45%,transparent)] max-md:justify-self-center max-md:p-0 max-md:text-center">
-          Verify production critical details.
+          {m.app_footer_notice()}
         </footer>
       </section>
     </main>

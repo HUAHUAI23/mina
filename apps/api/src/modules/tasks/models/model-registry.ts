@@ -18,7 +18,11 @@ export class ModelRegistry {
   get(kind: TaskKind, provider: string, model: string): ModelSpec {
     const spec = this.specs.get(modelKey({ kind, provider, model }))
     if (!spec) {
-      throw new HttpError(422, 'TASK_MODEL_UNSUPPORTED', `Unsupported task model: ${kind}/${provider}/${model}.`)
+      throw new HttpError(422, 'TASK_MODEL_UNSUPPORTED', {
+        fallbackMessage: `Unsupported task model: ${kind}/${provider}/${model}.`,
+        messageKey: 'api_error_task_model_unsupported',
+        params: { kind, model, provider },
+      })
     }
     return spec
   }

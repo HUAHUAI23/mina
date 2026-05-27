@@ -1,5 +1,6 @@
 import type { NodeMediaSlotItem } from '@mina/contracts/modules/media'
 
+import { baseMessages } from '../../../lib/i18n-messages'
 import { useCanvasUiStore } from '../store/canvas-ui-store'
 import { submitComposerDraft } from './draft-submit'
 
@@ -67,6 +68,7 @@ await submitComposerDraft(
       uploadBlockedCalls.push('setDraftExpanded')
     },
   },
+  baseMessages,
 )
 
 if (uploadBlockedCalls.join(',') !== 'setDraftExpanded,setDraftError') {
@@ -122,6 +124,7 @@ await submitComposerDraft(
     setDraftError: () => successfulCalls.push('setDraftError'),
     setDraftExpanded: () => successfulCalls.push('setDraftExpanded'),
   },
+  baseMessages,
 )
 
 if (!createdInput) {
@@ -179,6 +182,7 @@ await submitComposerDraft(
       failedCalls.push('setDraftExpanded')
     },
   },
+  baseMessages,
 )
 
 if (useCanvasUiStore.getState().selectedNodeIds.length !== 0) {

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { LocalizedErrorDetailsSchema } from '../../schemas/api-error.schemas'
 import { MediaSlotNameSchema } from '../media/slot.schemas'
 
 export const IsoDateTimeSchema = z.string().datetime()
@@ -170,12 +171,7 @@ export const TaskSchema = z.object({
   providerMetadata: ResourceMetadataSchema.optional(),
   cost: TaskCostSchema,
   output: NodeExecutionOutputSchema.optional(),
-  error: z
-    .object({
-      code: z.string().min(1),
-      message: z.string().min(1),
-    })
-    .optional(),
+  error: LocalizedErrorDetailsSchema.optional(),
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,
   submittedAt: IsoDateTimeSchema.optional(),

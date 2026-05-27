@@ -3,6 +3,7 @@ import type { ComponentType } from 'react'
 import type { MediaSlotName, NodeMediaSlotItem } from '@mina/contracts/modules/media'
 import type { WorkflowNodeType } from '@mina/contracts/modules/canvas'
 
+import { useMessages } from '../../../app/i18n-provider'
 import type { MediaSlotDescriptor } from '../domain/media-slot-policy'
 
 export interface SlotRendererActions {
@@ -60,10 +61,14 @@ const fallbackItemClassName = 'flex min-w-0 items-center justify-between gap-2 r
 const fallbackButtonClassName = 'flex size-7 flex-none items-center justify-center rounded-md border-0 bg-transparent text-foreground-tertiary hover:bg-surface-container-low hover:text-foreground'
 
 function FallbackSlotRenderer({ actions, descriptor, items }: SlotRendererProps) {
+  const m = useMessages()
+
   if (items.length === 0) {
     return (
       <div className={fallbackSlotRendererClassName}>
-        <span className="text-[0.72rem] font-bold text-foreground-quaternary">No {descriptor.label.toLowerCase()} items</span>
+        <span className="text-[0.72rem] font-bold text-foreground-quaternary">
+          {m.workflow_canvas_no_slot_items({ label: descriptor.label.toLowerCase() })}
+        </span>
       </div>
     )
   }
@@ -72,9 +77,9 @@ function FallbackSlotRenderer({ actions, descriptor, items }: SlotRendererProps)
     <div className={fallbackSlotRendererClassName}>
       {items.map((item) => (
         <div className={fallbackItemClassName} key={item.id}>
-          <span className="truncate">{descriptor.label} {item.order + 1}</span>
+          <span className="truncate">{m.workflow_canvas_slot_item_label({ label: descriptor.label, index: item.order + 1 })}</span>
           <button
-            aria-label={`Remove ${descriptor.label}`}
+            aria-label={m.workflow_canvas_remove_slot_item({ label: descriptor.label })}
             className={fallbackButtonClassName}
             onClick={() => actions.onRemove(descriptor.slot, item.id)}
             type="button"

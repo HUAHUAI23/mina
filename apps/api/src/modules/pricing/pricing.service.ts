@@ -40,7 +40,10 @@ export class PricingService {
       })[0]
 
     if (!matched) {
-      throw new HttpError(422, 'PRICING_RULE_NOT_FOUND', 'No active pricing rule matches the task configuration.')
+      throw new HttpError(422, 'PRICING_RULE_NOT_FOUND', {
+        fallbackMessage: 'No active pricing rule matches the task configuration.',
+        messageKey: 'api_error_pricing_rule_not_found',
+      })
     }
 
     return {

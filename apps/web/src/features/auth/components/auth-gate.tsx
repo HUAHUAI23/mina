@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { ArrowRight, Eye, EyeOff, KeyRound, Mail, User, UserPlus } from 'lucide-react'
 
+import { useMessages } from '../../../app/i18n-provider'
+import { LocaleSwitcher } from '../../../app/locale-switcher'
 import { getErrorMessage } from '../../../lib/http'
 import { loginWithPassword, registerWithPassword } from '../api/auth.client'
 import { useAuth } from './auth-provider'
@@ -41,6 +43,7 @@ const authIconButtonClassName = 'flex size-8.5 flex-none items-center justify-ce
 const authSubmitClassName = 'flex min-h-12.5 items-center justify-center gap-2.5 rounded-full border-0 bg-foreground px-5 font-black text-primary-foreground hover:bg-foreground-secondary disabled:cursor-not-allowed disabled:bg-foreground-faint disabled:text-surface-container-lowest'
 
 export function AuthGate({ children }: PropsWithChildren) {
+  const m = useMessages()
   const { isAuthenticated, setAuthenticatedSession } = useAuth()
   const [mode, setMode] = useState<AuthMode>('login')
   const [showPassword, setShowPassword] = useState(false)
@@ -105,7 +108,7 @@ export function AuthGate({ children }: PropsWithChildren) {
               <div className="flex size-10 items-center justify-center rounded-[9px] bg-foreground text-primary-foreground">
                 <span className="font-display text-[0.48rem] font-extrabold tracking-[0.08em]">MINA</span>
               </div>
-              <span>Creative OS</span>
+              <span>{m.auth_gate_brand_product()}</span>
             </div>
             <div className="grid w-[min(100%,260px)] items-center justify-self-center self-center rounded-2xl bg-white/70 p-[18px] shadow-lg">
               <div className="mb-[18px] flex gap-2">
@@ -123,16 +126,17 @@ export function AuthGate({ children }: PropsWithChildren) {
           </aside>
 
           <section className="grid min-h-0 min-w-0 content-center gap-5 overflow-y-auto p-[clamp(30px,4dvw,48px)] max-md:px-[22px] max-md:py-7">
+            <LocaleSwitcher className="justify-self-end" />
             <div className="grid gap-2">
               <p className="m-0 text-[0.68rem] font-black uppercase tracking-[0.24em] text-foreground-quaternary">
-                {mode === 'login' ? 'Welcome back' : 'Create account'}
+                {mode === 'login' ? m.auth_gate_login_eyebrow() : m.auth_gate_register_eyebrow()}
               </p>
               <h1 className="font-display m-0 text-[clamp(2rem,4.4dvw,2.9rem)] font-black leading-none tracking-normal max-md:text-3xl" id="mina-auth-title">
-                {mode === 'login' ? 'Sign in to MINA' : 'Start with MINA'}
+                {mode === 'login' ? m.auth_gate_login_title() : m.auth_gate_register_title()}
               </h1>
             </div>
 
-            <div className="grid grid-cols-2 gap-1 rounded-full bg-surface-container-low p-1" role="tablist" aria-label="Authentication mode">
+            <div className="grid grid-cols-2 gap-1 rounded-full bg-surface-container-low p-1" role="tablist" aria-label={m.auth_gate_mode_label()}>
               <button
                 aria-selected={mode === 'login'}
                 className={authTabClassName}
@@ -142,7 +146,7 @@ export function AuthGate({ children }: PropsWithChildren) {
                 type="button"
               >
                 <User size={16} />
-                Login
+                {m.auth_login_tab()}
               </button>
               <button
                 aria-selected={mode === 'register'}
@@ -153,14 +157,14 @@ export function AuthGate({ children }: PropsWithChildren) {
                 type="button"
               >
                 <UserPlus size={16} />
-                Register
+                {m.auth_register_tab()}
               </button>
             </div>
 
             {mode === 'login' ? (
               <form className="grid gap-[15px]" onSubmit={handleLoginSubmit}>
                 <label className="grid gap-2">
-                  <span className="text-[0.72rem] font-black text-foreground-secondary">Username or email</span>
+                  <span className="text-[0.72rem] font-black text-foreground-secondary">{m.auth_username_or_email_label()}</span>
                   <div className={authFieldShellClassName}>
                     <Mail aria-hidden="true" size={17} />
                     <input
@@ -177,7 +181,7 @@ export function AuthGate({ children }: PropsWithChildren) {
                 </label>
 
                 <label className="grid gap-2">
-                  <span className="text-[0.72rem] font-black text-foreground-secondary">Password</span>
+                  <span className="text-[0.72rem] font-black text-foreground-secondary">{m.auth_password_label()}</span>
                   <div className={authFieldShellClassName}>
                     <KeyRound aria-hidden="true" size={17} />
                     <input
@@ -186,14 +190,14 @@ export function AuthGate({ children }: PropsWithChildren) {
                       maxLength={256}
                       minLength={8}
                       onChange={(event) => setLoginForm((form) => ({ ...form, password: event.target.value }))}
-                      placeholder="Password"
+                      placeholder={m.auth_password_placeholder()}
                       required
                       type={passwordInputType}
                       value={loginForm.password}
                     />
                     <button
                       className={authIconButtonClassName}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      aria-label={showPassword ? m.auth_hide_password() : m.auth_show_password()}
                       onClick={() => setShowPassword((visible) => !visible)}
                       type="button"
                     >
@@ -209,14 +213,14 @@ export function AuthGate({ children }: PropsWithChildren) {
                 ) : null}
 
                 <button className={authSubmitClassName} disabled={loginMutation.isPending} type="submit">
-                  {loginMutation.isPending ? 'Signing in' : 'Sign in'}
+                  {loginMutation.isPending ? m.auth_signing_in() : m.auth_sign_in_submit()}
                   <ArrowRight aria-hidden="true" size={18} />
                 </button>
               </form>
             ) : (
               <form className="grid gap-[15px]" onSubmit={handleRegisterSubmit}>
                 <label className="grid gap-2">
-                  <span className="text-[0.72rem] font-black text-foreground-secondary">Username</span>
+                  <span className="text-[0.72rem] font-black text-foreground-secondary">{m.auth_username_label()}</span>
                   <div className={authFieldShellClassName}>
                     <User aria-hidden="true" size={17} />
                     <input
@@ -235,7 +239,7 @@ export function AuthGate({ children }: PropsWithChildren) {
                 </label>
 
                 <label className="grid gap-2">
-                  <span className="text-[0.72rem] font-black text-foreground-secondary">Email</span>
+                  <span className="text-[0.72rem] font-black text-foreground-secondary">{m.auth_email_label()}</span>
                   <div className={authFieldShellClassName}>
                     <Mail aria-hidden="true" size={17} />
                     <input
@@ -251,7 +255,7 @@ export function AuthGate({ children }: PropsWithChildren) {
                 </label>
 
                 <label className="grid gap-2">
-                  <span className="text-[0.72rem] font-black text-foreground-secondary">Display name</span>
+                  <span className="text-[0.72rem] font-black text-foreground-secondary">{m.auth_display_name_label()}</span>
                   <div className={authFieldShellClassName}>
                     <User aria-hidden="true" size={17} />
                     <input
@@ -267,7 +271,7 @@ export function AuthGate({ children }: PropsWithChildren) {
                 </label>
 
                 <label className="grid gap-2">
-                  <span className="text-[0.72rem] font-black text-foreground-secondary">Password</span>
+                  <span className="text-[0.72rem] font-black text-foreground-secondary">{m.auth_password_label()}</span>
                   <div className={authFieldShellClassName}>
                     <KeyRound aria-hidden="true" size={17} />
                     <input
@@ -276,14 +280,14 @@ export function AuthGate({ children }: PropsWithChildren) {
                       maxLength={256}
                       minLength={8}
                       onChange={(event) => setRegisterForm((form) => ({ ...form, password: event.target.value }))}
-                      placeholder="Password"
+                      placeholder={m.auth_password_placeholder()}
                       required
                       type={passwordInputType}
                       value={registerForm.password}
                     />
                     <button
                       className={authIconButtonClassName}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      aria-label={showPassword ? m.auth_hide_password() : m.auth_show_password()}
                       onClick={() => setShowPassword((visible) => !visible)}
                       type="button"
                     >
@@ -299,7 +303,7 @@ export function AuthGate({ children }: PropsWithChildren) {
                 ) : null}
 
                 <button className={authSubmitClassName} disabled={registerMutation.isPending} type="submit">
-                  {registerMutation.isPending ? 'Creating account' : 'Create account'}
+                  {registerMutation.isPending ? m.auth_creating_account() : m.auth_create_account_submit()}
                   <ArrowRight aria-hidden="true" size={18} />
                 </button>
               </form>

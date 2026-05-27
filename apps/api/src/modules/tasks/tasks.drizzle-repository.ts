@@ -17,6 +17,20 @@ const toDate = (value: string | undefined): Date | null => (value ? new Date(val
 
 const leaseUntil = (date: Date, leaseSeconds: number): Date => new Date(date.getTime() + leaseSeconds * 1000)
 
+const taskErrorFromRow = (row: TaskRow): Task['error'] | undefined => {
+  if (!row.errorCode) {
+    return undefined
+  }
+
+  return {
+    code: row.errorCode,
+    message: row.errorMessage ?? row.errorDebugMessage ?? 'Task execution failed.',
+    ...(row.errorMessageKey ? { messageKey: row.errorMessageKey } : {}),
+    ...(row.errorParams ? { params: row.errorParams } : {}),
+    ...(row.errorDebugMessage ? { debugMessage: row.errorDebugMessage } : {}),
+  }
+}
+
 const taskFromRow = (row: TaskRow): Task =>
   TaskSchema.parse({
     id: row.id,
@@ -40,7 +54,7 @@ const taskFromRow = (row: TaskRow): Task =>
       },
     },
     ...(row.output ? { output: row.output } : {}),
-    ...(row.errorCode && row.errorMessage ? { error: { code: row.errorCode, message: row.errorMessage } } : {}),
+    ...(taskErrorFromRow(row) ? { error: taskErrorFromRow(row) } : {}),
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
     ...(row.submittedAt ? { submittedAt: toIso(row.submittedAt) } : {}),
@@ -72,7 +86,10 @@ const taskInsertFromTask = (task: Task): TaskInsert => ({
   actualUsageAmount: null,
   output: task.output ?? null,
   errorCode: task.error?.code ?? null,
+  errorMessageKey: task.error?.messageKey ?? null,
+  errorParams: task.error?.params ?? null,
   errorMessage: task.error?.message ?? null,
+  errorDebugMessage: task.error?.debugMessage ?? null,
   retryCount: task.retryCount ?? 0,
   nextRetryAt: toDate(task.nextRetryAt),
   submittedAt: toDate(task.submittedAt),
@@ -103,7 +120,10 @@ const taskUpdateFromTask = (task: Task): Partial<TaskInsert> => ({
   actualUsageAmount: null,
   output: task.output ?? null,
   errorCode: task.error?.code ?? null,
+  errorMessageKey: task.error?.messageKey ?? null,
+  errorParams: task.error?.params ?? null,
   errorMessage: task.error?.message ?? null,
+  errorDebugMessage: task.error?.debugMessage ?? null,
   retryCount: task.retryCount ?? 0,
   startedAt: toDate(task.startedAt),
   completedAt: toDate(task.completedAt),

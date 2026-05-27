@@ -1,6 +1,7 @@
 import { CirclePlus, Folder, Layers, MoreVertical } from 'lucide-react'
 
 import '../projects-page.css'
+import { useMessages } from '../../../app/i18n-provider'
 
 const projectFolders = [
   {
@@ -20,26 +21,39 @@ const projectFolders = [
 const canvasItems = [
   {
     id: 'hero-sequence',
-    status: 'In Progress',
+    status: 'in-progress',
     title: 'Hero Sequence_01',
     tone: 'lavender',
-    updatedAt: 'Modified 2h ago',
+    updatedAt: 'two-hours',
   },
   {
     id: 'atmosphere-study',
-    status: 'Draft',
+    status: 'draft',
     title: 'Atmosphere Study',
     tone: 'forest',
-    updatedAt: 'Modified yesterday',
+    updatedAt: 'yesterday',
   },
   {
     id: 'character-silhouette',
-    status: 'In Progress',
+    status: 'in-progress',
     title: 'Character Silhouette',
     tone: 'paper',
-    updatedAt: 'Modified 3d ago',
+    updatedAt: 'three-days',
   },
 ] as const
+
+const projectStatusLabel = (status: (typeof canvasItems)[number]['status'], m: ReturnType<typeof useMessages>): string =>
+  status === 'draft' ? m.projects_status_draft() : m.projects_status_in_progress()
+
+const projectUpdatedAtLabel = (updatedAt: (typeof canvasItems)[number]['updatedAt'], m: ReturnType<typeof useMessages>): string => {
+  if (updatedAt === 'yesterday') {
+    return m.projects_updated_yesterday()
+  }
+  if (updatedAt === 'three-days') {
+    return m.projects_updated_three_days()
+  }
+  return m.projects_updated_two_hours()
+}
 
 const pageClassName = 'grid min-h-0 min-w-0 content-start gap-[22px] overflow-y-auto [scrollbar-gutter:stable] py-[clamp(18px,3dvh,32px)] px-1 pb-[18px]'
 const projectGridClassName = 'grid items-start justify-start gap-[26px] [grid-template-columns:repeat(auto-fill,178px)] max-lg:[grid-template-columns:repeat(auto-fill,minmax(164px,1fr))] max-md:grid-cols-1'
@@ -47,9 +61,11 @@ const folderCardClassName = 'relative z-0 flex h-[252px] min-w-0 flex-col justif
 const dashedCardClassName = 'flex min-h-[252px] min-w-0 flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-outline-ghost bg-transparent font-extrabold text-foreground-tertiary hover:border-foreground-quaternary hover:text-foreground'
 
 export function ProjectsPage() {
+  const m = useMessages()
+
   return (
     <div className={pageClassName}>
-      <section className={projectGridClassName} aria-label="Projects and canvases">
+      <section className={projectGridClassName} aria-label={m.projects_section_label()}>
         {projectFolders.map((folder) => (
           <article className={folderCardClassName} key={folder.id}>
             <div className="absolute inset-x-3.5 -top-2 -z-10 h-7 rounded-2xl bg-surface-container-high" aria-hidden="true" />
@@ -63,7 +79,7 @@ export function ProjectsPage() {
               <h2 className="font-display m-0 text-[0.96rem] leading-[1.18] text-foreground">{folder.title}</h2>
               <p className="mt-2 flex items-center gap-1.5 text-[0.66rem] uppercase text-foreground-tertiary">
                 <Layers aria-hidden="true" size={14} />
-                {folder.canvasCount} Canvases
+                {m.projects_canvas_count({ count: folder.canvasCount })}
               </p>
             </div>
           </article>
@@ -79,17 +95,17 @@ export function ProjectsPage() {
               data-tone={item.tone}
             >
               <span className="relative z-10 m-3 inline-flex rounded-full bg-surface-container-lowest/80 px-2.5 py-1 text-[0.62rem] font-extrabold uppercase tracking-[0.12em] text-foreground-tertiary">
-                {item.status}
+                {projectStatusLabel(item.status, m)}
               </span>
             </div>
             <div className="flex items-start justify-between p-4">
               <div>
                 <h2 className="font-display m-0 text-[0.96rem] leading-[1.18] text-foreground">{item.title}</h2>
-                <p className="mt-2 text-[0.66rem] uppercase text-foreground-tertiary">{item.updatedAt}</p>
+                <p className="mt-2 text-[0.66rem] uppercase text-foreground-tertiary">{projectUpdatedAtLabel(item.updatedAt, m)}</p>
               </div>
               <button
                 className="flex size-8.5 items-center justify-center rounded-full border-0 bg-transparent text-foreground-quaternary hover:bg-surface-container-low hover:text-foreground"
-                aria-label={`More actions for ${item.title}`}
+                aria-label={m.projects_more_actions({ title: item.title })}
                 type="button"
               >
                 <MoreVertical aria-hidden="true" size={18} />
@@ -105,7 +121,7 @@ export function ProjectsPage() {
           <span className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-container-lowest">
             <CirclePlus aria-hidden="true" size={24} />
           </span>
-          Quick Upload
+          {m.projects_quick_upload()}
         </button>
       </section>
     </div>

@@ -200,7 +200,10 @@ export class MediaObjectService {
   async getMediaObject(accountId: string, mediaObjectId: string): Promise<MediaObject> {
     const mediaObject = await this.repository.findById(accountId, mediaObjectId)
     if (!mediaObject || mediaObject.deletedAt) {
-      throw new HttpError(404, 'MEDIA_OBJECT_NOT_FOUND', 'Media object not found.')
+      throw new HttpError(404, 'MEDIA_OBJECT_NOT_FOUND', {
+        fallbackMessage: 'Media object not found.',
+        messageKey: 'api_error_media_object_not_found',
+      })
     }
     return mediaObject
   }
@@ -217,10 +220,16 @@ export class MediaObjectService {
   async completePresignedUpload(input: CompletePresignedUploadInput): Promise<MediaObject> {
     const mediaObject = await this.getMediaObject(input.accountId, input.mediaObjectId)
     if (mediaObject.status !== 'uploading') {
-      throw new HttpError(409, 'MEDIA_OBJECT_NOT_UPLOADING', 'Media object is not waiting for upload completion.')
+      throw new HttpError(409, 'MEDIA_OBJECT_NOT_UPLOADING', {
+        fallbackMessage: 'Media object is not waiting for upload completion.',
+        messageKey: 'api_error_media_object_not_uploading',
+      })
     }
     if (mediaObject.storageKey !== input.storageKey) {
-      throw new HttpError(422, 'MEDIA_UPLOAD_KEY_MISMATCH', 'Upload storage key does not match the media object.')
+      throw new HttpError(422, 'MEDIA_UPLOAD_KEY_MISMATCH', {
+        fallbackMessage: 'Upload storage key does not match the media object.',
+        messageKey: 'api_error_media_upload_key_mismatch',
+      })
     }
     return this.repository.updateStatus(input.accountId, input.mediaObjectId, 'ready', nowIso())
   }

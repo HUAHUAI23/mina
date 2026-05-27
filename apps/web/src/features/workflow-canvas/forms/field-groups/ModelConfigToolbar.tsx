@@ -1,5 +1,7 @@
 import { ChevronDown, Languages, SlidersHorizontal, Sparkles } from 'lucide-react'
+import { cn } from '@mina/ui/lib/utils'
 
+import { useMessages } from '../../../../app/i18n-provider'
 import { RunControls } from '../../components/panels/RunControls'
 import {
   modelKey,
@@ -25,17 +27,17 @@ interface ModelConfigToolbarProps {
   spec: ClientModelSpec
 }
 
-const modeLabel = (mode: GenerationMode): string => {
+const modeLabel = (mode: GenerationMode, m: ReturnType<typeof useMessages>): string => {
   if (mode === 'i2i') {
-    return 'Image + Text to Image'
+    return m.workflow_canvas_mode_image_text_to_image()
   }
   if (mode === 't2v') {
-    return 'Text to Video'
+    return m.workflow_canvas_mode_text_to_video()
   }
   if (mode === 'i2v') {
-    return 'Image + Text to Video'
+    return m.workflow_canvas_mode_image_text_to_video()
   }
-  return 'Text to Image'
+  return m.workflow_canvas_mode_text_to_image()
 }
 
 const toolbarClassName = 'mina-wc-config-toolbar flex min-h-[54px] min-w-0 items-center gap-2.5 overflow-x-auto pr-[66px] max-[720px]:gap-2'
@@ -56,6 +58,7 @@ export function ModelConfigToolbar({
   setAdvancedOpen,
   spec,
 }: ModelConfigToolbarProps) {
+  const m = useMessages()
   const registry = useClientModelRegistry()
   const compatible = models ?? registry.listModels(spec.key.kind, compatibilityMode)
   const value = modelKey(spec.key)
@@ -65,7 +68,7 @@ export function ModelConfigToolbar({
       <label className="inline-flex max-w-60 min-w-0 flex-none items-center gap-[7px] text-foreground">
         <Sparkles aria-hidden="true" size={16} />
         <select
-          aria-label="Model"
+          aria-label={m.workflow_canvas_model()}
           className="min-h-10 min-w-0 appearance-none border-0 bg-transparent text-sm font-bold text-foreground outline-0"
           value={value}
           onChange={(event) => {
@@ -82,25 +85,25 @@ export function ModelConfigToolbar({
               </option>
             ))
           ) : (
-            <option disabled>No compatible models</option>
+            <option disabled>{m.workflow_canvas_no_compatible_models()}</option>
           )}
         </select>
         <ChevronDown aria-hidden="true" size={14} />
       </label>
 
-      <span className={modeChipClassName}>{modeLabel(generationMode)}</span>
+      <span className={modeChipClassName}>{modeLabel(generationMode, m)}</span>
 
       {spec.BasicFields ? <spec.BasicFields fields="params" form={form} /> : null}
 
-      <button className={`${iconToggleClassName} ml-auto`} type="button" title="Language tools" aria-label="Language tools">
+      <button className={cn(iconToggleClassName, 'ml-auto')} type="button" title={m.workflow_canvas_language_tools()} aria-label={m.workflow_canvas_language_tools()}>
         <Languages aria-hidden="true" size={17} />
       </button>
       <button
         className={iconToggleClassName}
         data-active={advancedOpen ? 'true' : undefined}
         type="button"
-        title="Advanced settings"
-        aria-label="Advanced settings"
+        title={m.workflow_canvas_advanced_settings()}
+        aria-label={m.workflow_canvas_advanced_settings()}
         onClick={() => setAdvancedOpen(!advancedOpen)}
       >
         <SlidersHorizontal aria-hidden="true" size={17} />

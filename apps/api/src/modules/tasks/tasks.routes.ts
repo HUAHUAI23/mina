@@ -1,4 +1,3 @@
-import { sValidator } from '@hono/standard-validator'
 import {
   CancelTaskResponseSchema,
   CreateTaskSchema,
@@ -7,7 +6,9 @@ import {
 } from '@mina/contracts/modules/tasks'
 import { TaskModelCatalogResponseSchema } from '@mina/contracts/modules/tasks/model-catalog'
 import { Hono } from 'hono'
+import { getRequestLocale } from '@mina/i18n/server'
 
+import { apiValidator } from '../../lib/http/validation'
 import { requireAuthActor } from '../accounts/auth-middleware'
 import type { AccountsService } from '../accounts/accounts.service'
 import type { TaskModelCatalogService } from './models/model-catalog.service'
@@ -22,9 +23,9 @@ export const createTasksRoutes = (
     .get('/models', async (c) => c.json(TaskModelCatalogResponseSchema.parse({ items: modelCatalogService.listDescriptors() })))
     .get('/', async (c) => {
       const actor = await requireAuthActor(c, accountsService)
-      return c.json({ items: await tasksService.listTasks(actor.accountId) })
+      return c.json({ items: await tasksService.listTasksLocalized(actor.accountId, getRequestLocale(c)) })
     })
-    .post('/', sValidator('json', CreateTaskSchema), async (c) => {
+    .post('/', apiValidator('json', CreateTaskSchema), async (c) => {
       const actor = await requireAuthActor(c, accountsService)
       const payload = c.req.valid('json')
       return c.json(
@@ -37,17 +38,17 @@ export const createTasksRoutes = (
         201,
       )
     })
-    .get('/:id', sValidator('param', TaskParamsSchema), async (c) => {
+    .get('/:id', apiValidator('param', TaskParamsSchema), async (c) => {
       const actor = await requireAuthActor(c, accountsService)
       const { id } = c.req.valid('param')
-      return c.json({ item: await tasksService.getTaskForAccount(actor.accountId, id) })
+      return c.json({ item: await tasksService.getTaskForAccountLocalized(actor.accountId, id, getRequestLocale(c)) })
     })
-    .get('/:id/resources', sValidator('param', TaskParamsSchema), async (c) => {
+    .get('/:id/resources', apiValidator('param', TaskParamsSchema), async (c) => {
       const actor = await requireAuthActor(c, accountsService)
       const { id } = c.req.valid('param')
       return c.json(TaskResourceListResponseSchema.parse({ items: await tasksService.listTaskResourcesForAccount(actor.accountId, id) }))
     })
-    .post('/:id/cancel', sValidator('param', TaskParamsSchema), async (c) => {
+    .post('/:id/cancel', apiValidator('param', TaskParamsSchema), async (c) => {
       const actor = await requireAuthActor(c, accountsService)
       const { id } = c.req.valid('param')
       await tasksService.cancelTask(actor.accountId, id)

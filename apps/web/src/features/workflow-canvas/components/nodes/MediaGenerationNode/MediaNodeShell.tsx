@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { NodeMediaViewState } from '@mina/contracts/modules/canvas'
 
+import { useMessages } from '../../../../../app/i18n-provider'
 import { getTask } from '../../../api/workflow-queries'
 import { taskKeys } from '../../../api/workflow-keys'
 import { createNodeMediaPreview, useMediaPreviewStore } from '../../../media/media-preview-store'
@@ -45,6 +46,7 @@ export const MediaNodeShell = memo(function MediaNodeShell({
   renderPreview,
   title,
 }: MediaNodeShellProps) {
+  const m = useMessages()
   markCanvasNodeRender(id, mediaNodeRenderSignature({ id, mediaView, nodeType, title }))
   const onSelectOutput = useWorkflowRuntimeStore((state) => state.actions.onSelectOutput)
   const taskId = mediaView?.taskId
@@ -74,7 +76,7 @@ export const MediaNodeShell = memo(function MediaNodeShell({
       <WorkflowNodeHandles />
       <div className={nodeHeaderClassName}>
         <strong className={nodeTitleClassName}>{title}</strong>
-        <span className={nodeKindClassName}>{nodeType === 'video_generation' ? 'Video' : 'Image'}</span>
+        <span className={nodeKindClassName}>{nodeType === 'video_generation' ? m.workflow_canvas_video() : m.workflow_canvas_image()}</span>
       </div>
       <div className={nodePreviewClassName}>
         {renderPreview({ preview: visiblePreview })}

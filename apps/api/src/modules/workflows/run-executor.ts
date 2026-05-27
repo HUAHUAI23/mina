@@ -2,6 +2,7 @@ import type { WorkflowRun } from '@mina/contracts/modules/workflows'
 
 import { apiEnv } from '../../config/env'
 import { HttpError } from '../../lib/http/http-error'
+import { createLocalizedErrorDetails } from '../../lib/http/localized-error'
 import type { TaskConfigAssembler } from '../tasks/config/task-config-assembler'
 import type { TasksService } from '../tasks/tasks.service'
 import type { WorkflowMediaResolver } from './media/workflow-media-resolver'
@@ -59,7 +60,10 @@ export class WorkflowRunExecutor {
   async reconcileRun(runId: string): Promise<WorkflowRun> {
     const run = await this.repositories.runs.findRunById(runId)
     if (!run) {
-      throw new HttpError(404, 'WORKFLOW_RUN_NOT_FOUND', 'Workflow run not found.')
+      throw new HttpError(404, 'WORKFLOW_RUN_NOT_FOUND', {
+        fallbackMessage: 'Workflow run not found.',
+        messageKey: 'api_error_workflow_run_not_found',
+      })
     }
     if (run.status !== 'running') {
       return run
@@ -79,7 +83,10 @@ export class WorkflowRunExecutor {
   private async reconcileClaimedRun(claimedRun: ClaimedWorkflowRun): Promise<WorkflowRun> {
     const snapshot = await this.repositories.runs.getSnapshot(claimedRun.id)
     if (!snapshot) {
-      throw new HttpError(404, 'WORKFLOW_RUN_NOT_FOUND', 'Workflow run not found.')
+      throw new HttpError(404, 'WORKFLOW_RUN_NOT_FOUND', {
+        fallbackMessage: 'Workflow run not found.',
+        messageKey: 'api_error_workflow_run_not_found',
+      })
     }
     if (snapshot.run.status !== 'running') {
       return this.runDto(snapshot)
@@ -147,17 +154,23 @@ export class WorkflowRunExecutor {
     const summary = await this.repositories.nodeStates.summarizeRunStates(run.id)
 
     if (failureMessage || summary.failed > 0) {
+      const error = createLocalizedErrorDetails({
+        code: 'WORKFLOW_RUN_FAILED',
+        fallbackMessage: failureMessage ?? 'One or more workflow nodes failed.',
+        messageKey: 'api_error_workflow_run_failed',
+        ...(failureMessage ? { debugMessage: failureMessage } : {}),
+      })
       const failed = await this.repositories.runs.markRunFailed({
         runId: run.id,
         leaseToken,
-        error: failureMessage ?? 'One or more workflow nodes failed.',
+        error,
         timestamp,
       })
       if (!failed) {
         return this.getRunOrThrow(run.id)
       }
       await this.recordWorkflowRunEvent(failed, 'workflow.run.failed', failureMessage ?? 'Workflow run failed.', {
-        error: failed.error ?? failureMessage ?? 'One or more workflow nodes failed.',
+        error: failed.error?.debugMessage ?? failed.error?.message ?? failureMessage ?? 'One or more workflow nodes failed.',
       })
       return this.getRunOrThrow(run.id)
     }
@@ -181,7 +194,10 @@ export class WorkflowRunExecutor {
   private async getRunOrThrow(runId: string): Promise<WorkflowRun> {
     const run = await this.repositories.runs.findRunById(runId)
     if (!run) {
-      throw new HttpError(404, 'WORKFLOW_RUN_NOT_FOUND', 'Workflow run not found.')
+      throw new HttpError(404, 'WORKFLOW_RUN_NOT_FOUND', {
+        fallbackMessage: 'Workflow run not found.',
+        messageKey: 'api_error_workflow_run_not_found',
+      })
     }
     return run
   }

@@ -7,6 +7,7 @@ import type {
   WorkflowSummary,
 } from '@mina/contracts/modules/workflows'
 import type { WorkflowEvent } from '@mina/contracts/modules/workflows/events'
+import type { MinaLocale } from '@mina/i18n'
 
 import { HttpError } from '../../lib/http/http-error'
 import type { TaskConfigAssembler } from '../tasks/config/task-config-assembler'
@@ -90,48 +91,66 @@ export class WorkflowsService {
     await this.getWorkflow(id, accountId)
     const deleted = await this.repositories.definitions.delete(id)
     if (!deleted) {
-      throw new HttpError(404, 'WORKFLOW_NOT_FOUND', 'Workflow not found.')
+      throw new HttpError(404, 'WORKFLOW_NOT_FOUND', {
+        fallbackMessage: 'Workflow not found.',
+        messageKey: 'api_error_workflow_not_found',
+      })
     }
   }
 
-  async getNodeTasks(workflowId: string, nodeId: string, accountId: string): Promise<WorkflowNodeTaskHistoryItem[]> {
+  async getNodeTasks(
+    workflowId: string,
+    nodeId: string,
+    accountId: string,
+    locale?: MinaLocale,
+  ): Promise<WorkflowNodeTaskHistoryItem[]> {
     await this.getWorkflow(workflowId, accountId)
     const links = await this.repositories.nodeTasks.listNodeTaskLinks(workflowId, nodeId)
     const hydrated = await Promise.all(
       links.map(async (link) => ({
         workflowRunId: link.workflowRunId,
         nodeId: link.nodeId,
-        task: await this.workflowRunsService.getTask(accountId, link.taskId),
+        task: locale
+          ? await this.workflowRunsService.getTaskLocalized(accountId, link.taskId, locale)
+          : await this.workflowRunsService.getTask(accountId, link.taskId),
       })),
     )
     return hydrated.sort((left, right) => right.task.createdAt.localeCompare(left.task.createdAt))
   }
 
-  async getRun(runId: string, accountId: string): Promise<WorkflowRun> {
+  async getRun(runId: string, accountId: string, locale?: MinaLocale): Promise<WorkflowRun> {
     const run = await this.workflowRunsService.getRun(runId)
     this.assertAccountAccess(run.accountId, accountId)
-    return run
+    return locale ? this.workflowRunsService.localizeRun(run, locale) : run
   }
 
   async getWorkflow(id: string, accountId: string): Promise<Workflow> {
     const metadata = await this.repositories.definitions.findById(id)
     if (!metadata) {
-      throw new HttpError(404, 'WORKFLOW_NOT_FOUND', 'Workflow not found.')
+      throw new HttpError(404, 'WORKFLOW_NOT_FOUND', {
+        fallbackMessage: 'Workflow not found.',
+        messageKey: 'api_error_workflow_not_found',
+      })
     }
     this.assertAccountAccess(metadata.accountId, accountId)
     return this.workflowFromSnapshot(metadata, await this.workflowYjsRoomService.snapshotForWorkflow(metadata))
   }
 
-  async listRuns(workflowId: string, accountId: string): Promise<WorkflowRun[]> {
+  async listRuns(workflowId: string, accountId: string, locale?: MinaLocale): Promise<WorkflowRun[]> {
     await this.getWorkflow(workflowId, accountId)
-    return this.workflowRunsService.listRuns(workflowId)
+    return locale ? this.workflowRunsService.listRunsLocalized(workflowId, locale) : this.workflowRunsService.listRuns(workflowId)
   }
 
   async listWorkflows(accountId: string): Promise<WorkflowSummary[]> {
     return this.repositories.definitions.list(accountId)
   }
 
-  async createRun(workflowId: string, input: CreateWorkflowRunInput, accountId: string): Promise<WorkflowRun> {
+  async createRun(
+    workflowId: string,
+    input: CreateWorkflowRunInput,
+    accountId: string,
+    locale?: MinaLocale,
+  ): Promise<WorkflowRun> {
     const metadata = await this.getWorkflowMetadata(workflowId, accountId)
     const snapshot = await this.workflowYjsRoomService.compactWorkflow(metadata, 'create_run')
     if (snapshot.version !== metadata.version) {
@@ -163,7 +182,7 @@ export class WorkflowsService {
         })
       }
     }
-    return run
+    return locale ? this.workflowRunsService.localizeRun(run, locale) : run
   }
 
   async cancelRun(runId: string, accountId: string): Promise<void> {
@@ -186,7 +205,10 @@ export class WorkflowsService {
   private async getWorkflowMetadata(id: string, accountId: string): Promise<WorkflowSummary> {
     const metadata = await this.repositories.definitions.findById(id)
     if (!metadata) {
-      throw new HttpError(404, 'WORKFLOW_NOT_FOUND', 'Workflow not found.')
+      throw new HttpError(404, 'WORKFLOW_NOT_FOUND', {
+        fallbackMessage: 'Workflow not found.',
+        messageKey: 'api_error_workflow_not_found',
+      })
     }
     this.assertAccountAccess(metadata.accountId, accountId)
     return metadata
@@ -207,7 +229,10 @@ export class WorkflowsService {
 
   private assertAccountAccess(resourceAccountId: string, expectedAccountId: string): void {
     if (resourceAccountId !== expectedAccountId) {
-      throw new HttpError(404, 'WORKFLOW_NOT_FOUND', 'Workflow not found.')
+      throw new HttpError(404, 'WORKFLOW_NOT_FOUND', {
+        fallbackMessage: 'Workflow not found.',
+        messageKey: 'api_error_workflow_not_found',
+      })
     }
   }
 }

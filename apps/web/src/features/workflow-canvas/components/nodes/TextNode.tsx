@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import type { NodeProps } from '@xyflow/react'
 
+import { useMessages } from '../../../../app/i18n-provider'
 import { markCanvasNodeRender } from '../../diagnostics/canvas-render-counts'
 import type { TextFlowNode, WorkflowFlowNodeData } from '../../domain/flow-types'
 import { WorkflowNodeHandles } from './WorkflowNodeHandles'
@@ -33,6 +34,7 @@ const textNodeRenderSignature = (data: TextNodeViewProps['data']): string =>
   })
 
 const TextNodeView = memo(function TextNodeView({ data, id }: TextNodeViewProps) {
+  const m = useMessages()
   markCanvasNodeRender(id, textNodeRenderSignature(data))
   const text = data.textPreview ?? ''
   return (
@@ -40,9 +42,9 @@ const TextNodeView = memo(function TextNodeView({ data, id }: TextNodeViewProps)
       <WorkflowNodeHandles />
       <div className={nodeHeaderClassName}>
         <strong className={nodeTitleClassName}>{data.title}</strong>
-        <span className={nodeKindClassName}>Text</span>
+        <span className={nodeKindClassName}>{m.workflow_canvas_text()}</span>
       </div>
-      <p className="m-0 text-[0.8rem] text-foreground-tertiary">{text || 'Empty note'}</p>
+      <p className="m-0 text-[0.8rem] text-foreground-tertiary">{text || m.workflow_canvas_empty_note()}</p>
     </article>
   )
 }, textNodeViewPropsEqual)

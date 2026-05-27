@@ -1,7 +1,9 @@
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import type { MediaSlotName } from '@mina/contracts/modules/media'
 import type { MediaInput, TaskConfig } from '@mina/contracts/modules/tasks'
+import type { ApiErrorMessageKey } from '@mina/i18n'
 
+import { createLocalizedErrorDetails, localizedErrorFromUnknown } from '../../lib/http/localized-error'
 import type { TaskConfigAssembler } from '../tasks/config/task-config-assembler'
 import type { TasksService } from '../tasks/tasks.service'
 import type { WorkflowMediaResolver } from './media/workflow-media-resolver'
@@ -63,11 +65,18 @@ export class WorkflowNodeExecutor {
 
     if (task.status === 'failed' || task.status === 'cancelled') {
       const message = `Task ${task.id} ended with status ${task.status}.`
+      const error = createLocalizedErrorDetails({
+        code: task.error?.code ?? 'WORKFLOW_NODE_FAILED',
+        debugMessage: task.error?.debugMessage ?? message,
+        fallbackMessage: task.error?.message ?? message,
+        messageKey: (task.error?.messageKey as ApiErrorMessageKey | undefined) ?? 'api_error_workflow_node_failed',
+        ...(task.error?.params ? { params: task.error.params } : {}),
+      })
       const updated = await this.dependencies.nodeStates.markNodeFailed({
         workflowRunId: input.run.id,
         nodeId: input.node.id,
         taskId: task.id,
-        error: message,
+        error,
         completedAt: timestamp,
       })
       if (!updated) {
@@ -77,7 +86,7 @@ export class WorkflowNodeExecutor {
         nodeId: input.node.id,
         taskId: task.id,
       })
-      return { error: message, progressed: true }
+      return { error: error.message, progressed: true }
     }
 
     return { progressed: false }
@@ -132,10 +141,13 @@ export class WorkflowNodeExecutor {
       return { progressed: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Workflow node execution failed.'
+      const details = localizedErrorFromUnknown('WORKFLOW_NODE_FAILED', error, 'Workflow node execution failed.', {
+        messageKey: 'api_error_workflow_node_failed',
+      })
       const updated = await this.dependencies.nodeStates.markNodeFailed({
         workflowRunId: input.run.id,
         nodeId: input.node.id,
-        error: message,
+        error: details,
         expectedStatus: 'pending',
         completedAt: new Date().toISOString(),
       })
@@ -145,7 +157,7 @@ export class WorkflowNodeExecutor {
       await this.recordWorkflowRunEvent(input.run, 'workflow.node.failed', message, {
         nodeId: input.node.id,
       })
-      return { error: message, progressed: true }
+      return { error: details.message, progressed: true }
     }
   }
 

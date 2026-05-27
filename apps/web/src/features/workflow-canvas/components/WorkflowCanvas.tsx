@@ -10,7 +10,9 @@ import {
   ReactFlowProvider,
 } from '@xyflow/react'
 import type { NodeMouseHandler } from '@xyflow/react'
+import { formatNumber } from '@mina/i18n'
 
+import { useI18n, useMessages } from '../../../app/i18n-provider'
 import { MediaEdge } from './edges/MediaEdge'
 import { WorkflowConnectionLine } from './edges/WorkflowConnectionLine'
 import { FlowGroupNode } from './nodes/FlowGroupNode'
@@ -81,6 +83,8 @@ const getMiniMapNodeColor = (node: WorkflowFlowNode): string => {
 }
 
 export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNodeId }: WorkflowCanvasProps) {
+  const { locale } = useI18n()
+  const m = useMessages()
   useHydrateFlowRender()
   const flowNodes = useFlowRenderStore((state) => state.flowNodes)
   const flowEdges = useFlowRenderStore((state) => state.flowEdges)
@@ -258,9 +262,9 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
               <Panel className="mina-wc-minimap-fallback-panel" position="bottom-right">
                 <div className="mina-wc-minimap-frame">
                   <div className="mina-wc-minimap-fallback" role="status">
-                    <span className="mina-wc-minimap-fallback-label">MiniMap suspended</span>
-                    <strong>{nodeCount.toLocaleString()}</strong>
-                    <span>Nodes</span>
+                    <span className="mina-wc-minimap-fallback-label">{m.workflow_canvas_minimap_suspended()}</span>
+                    <strong>{formatNumber(nodeCount, locale)}</strong>
+                    <span>{m.workflow_canvas_nodes()}</span>
                   </div>
                 </div>
               </Panel>

@@ -854,7 +854,7 @@ export class FakeWorkflowRunRepository
   private markTerminal(
     input: MarkRunTerminalInput,
     status: WorkflowRunRecord['status'],
-    error?: string,
+    error?: WorkflowRunRecord['error'],
   ): WorkflowRunRecord | undefined {
     const stored = this.#runs.get(input.runId)
     if (!stored || stored.run.status !== 'running') {

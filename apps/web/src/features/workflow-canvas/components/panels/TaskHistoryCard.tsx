@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
+import { formatDateTime } from '@mina/i18n'
 import { cn } from '@mina/ui/lib/utils'
 
+import { useI18n, useMessages } from '../../../../app/i18n-provider'
 import { workflowKeys } from '../../api/workflow-keys'
 import { listNodeTasks } from '../../api/workflow-queries'
 import { selectableResources } from '../../utils/media-view'
@@ -15,6 +17,8 @@ interface TaskHistoryCardProps {
 }
 
 export function TaskHistoryCard({ node, open, workflowId }: TaskHistoryCardProps) {
+  const { locale } = useI18n()
+  const m = useMessages()
   const setNodeMediaView = useCanvasStore((state) => state.setNodeMediaView)
   const mediaView = node.data.nodeType === 'image_generation' || node.data.nodeType === 'video_generation'
     ? node.data.mediaView
@@ -28,7 +32,7 @@ export function TaskHistoryCard({ node, open, workflowId }: TaskHistoryCardProps
   return (
     <section className="grid min-h-0 gap-3 overflow-auto rounded-2xl bg-surface-container-lowest/90 p-4 shadow-floating">
       <div className="flex items-center justify-between">
-        <strong className="text-[0.84rem] text-foreground">Task History</strong>
+        <strong className="text-[0.84rem] text-foreground">{m.workflow_canvas_task_history()}</strong>
         <span className="text-[0.66rem] font-extrabold text-foreground-tertiary">{query.data?.items.length ?? 0}</span>
       </div>
       <div className="grid gap-2.5">
@@ -38,7 +42,7 @@ export function TaskHistoryCard({ node, open, workflowId }: TaskHistoryCardProps
             <article className="grid gap-2 rounded-xl bg-surface-container-low p-2.5" key={`${item.workflowRunId}:${item.task.id}`}>
               <div className="flex items-center justify-between">
                 <strong className="text-[0.84rem] text-foreground">{item.task.status}</strong>
-                <span className="text-[0.66rem] font-extrabold text-foreground-tertiary">{new Date(item.task.createdAt).toLocaleString()}</span>
+                <span className="text-[0.66rem] font-extrabold text-foreground-tertiary">{formatDateTime(item.task.createdAt, locale)}</span>
               </div>
               {item.task.error ? <p className="m-0 text-[0.74rem] text-destructive">{item.task.error.message}</p> : null}
               <div className="flex min-w-0 gap-1.5 overflow-x-auto">
@@ -50,7 +54,7 @@ export function TaskHistoryCard({ node, open, workflowId }: TaskHistoryCardProps
                   const disabled = item.task.status === 'failed'
                   return (
                     <button
-                      aria-label={`Select ${resource.role ?? resource.kind} ${resource.index + 1}`}
+                      aria-label={m.workflow_canvas_select_output({ label: resource.role ?? resource.kind, index: resource.index + 1 })}
                       aria-pressed={selected}
                       className={cn(
                         'flex h-10 w-11 flex-none items-center justify-center overflow-hidden rounded-md border-0 bg-surface-container-lowest p-0 text-foreground-tertiary',
@@ -81,7 +85,7 @@ export function TaskHistoryCard({ node, open, workflowId }: TaskHistoryCardProps
             </article>
           )
         })}
-        {query.data?.items.length === 0 ? <div className="p-2.5 text-[0.74rem] font-bold text-foreground-quaternary">No tasks yet</div> : null}
+        {query.data?.items.length === 0 ? <div className="p-2.5 text-[0.74rem] font-bold text-foreground-quaternary">{m.workflow_canvas_no_tasks()}</div> : null}
       </div>
     </section>
   )

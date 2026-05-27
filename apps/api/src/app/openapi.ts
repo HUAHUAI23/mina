@@ -43,7 +43,47 @@ const apiErrorSchema = {
       additionalProperties: false,
       properties: {
         code: { type: 'string' },
-        message: { type: 'string' },
+        issues: {
+          items: {
+            additionalProperties: false,
+            properties: {
+              code: { type: 'string' },
+              message: {
+                description: 'Optional localized validation issue message.',
+                type: 'string',
+              },
+              params: {
+                additionalProperties: {
+                  oneOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }],
+                },
+                type: 'object',
+              },
+              path: {
+                items: {
+                  oneOf: [{ type: 'string' }, { type: 'number' }],
+                },
+                type: 'array',
+              },
+            },
+            required: ['path', 'code'],
+            type: 'object',
+          },
+          type: 'array',
+        },
+        locale: {
+          enum: ['en', 'zh-Hans'],
+          type: 'string',
+        },
+        message: {
+          description: 'Localized human-readable fallback. Clients must use error.code and structured fields for behavior.',
+          type: 'string',
+        },
+        params: {
+          additionalProperties: {
+            oneOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }],
+          },
+          type: 'object',
+        },
       },
       required: ['code', 'message'],
       type: 'object',
@@ -65,6 +105,20 @@ export const createOpenApiRouter = (): Hono => {
   docs.get('/openapi.json', (c) =>
     c.json({
       openapi: '3.1.0',
+      components: {
+        parameters: {
+          MinaLocaleHeader: {
+            description: 'Optional locale for localized response messages. Supported values are en and zh-Hans.',
+            in: 'header',
+            name: 'X-Mina-Locale',
+            required: false,
+            schema: {
+              enum: ['en', 'zh-Hans'],
+              type: 'string',
+            },
+          },
+        },
+      },
       info: {
         description:
           'Mina API for authentication, typed task execution, workflow orchestration, media resources, and operational health.',
@@ -74,6 +128,7 @@ export const createOpenApiRouter = (): Hono => {
       paths: {
         '/api/auth/login': {
           post: {
+            parameters: [{ $ref: '#/components/parameters/MinaLocaleHeader' }],
             requestBody: {
               content: jsonContent({
                 additionalProperties: false,
@@ -102,6 +157,7 @@ export const createOpenApiRouter = (): Hono => {
         },
         '/api/auth/register': {
           post: {
+            parameters: [{ $ref: '#/components/parameters/MinaLocaleHeader' }],
             requestBody: {
               content: jsonContent({
                 additionalProperties: false,

@@ -29,6 +29,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { createPortal } from 'react-dom'
 import type { MediaSlotName, NodeMediaSlotItem } from '@mina/contracts/modules/media'
 
+import { useMessages } from '../../../../app/i18n-provider'
 import { MediaSlotItem } from '../../components/media-slots/MediaSlotItem'
 import type { SlotRendererProps } from '../slot-renderer-registry'
 
@@ -137,6 +138,7 @@ interface SortableMediaSlotItemProps {
   itemCount: number
   onKeyboardReorder(nextVisibleIds: string[]): void
   slot: MediaSlotName
+  tooltipLabel: string
   visibleIds: readonly string[]
 }
 
@@ -149,6 +151,7 @@ function SortableMediaSlotItem({
   itemCount,
   onKeyboardReorder,
   slot,
+  tooltipLabel,
   visibleIds,
 }: SortableMediaSlotItemProps) {
   const {
@@ -230,7 +233,7 @@ function SortableMediaSlotItem({
           {content}
         </TooltipTrigger>
         <TooltipContent side="top" sideOffset={8}>
-          Item {index + 1}
+          {tooltipLabel}
         </TooltipContent>
       </Tooltip>
     )
@@ -295,6 +298,7 @@ export function MediaStackSlotRenderer({
   onExpandedChange,
   variant = 'block',
 }: SlotRendererProps) {
+  const m = useMessages()
   const [hoveredSlot, setHoveredSlot] = useState<MediaSlotName | undefined>()
   const [focusedSlot, setFocusedSlot] = useState<MediaSlotName | undefined>()
   const [draggingItemId, setDraggingItemId] = useState<string | undefined>()
@@ -447,6 +451,7 @@ export function MediaStackSlotRenderer({
                 key={item.id}
                 onKeyboardReorder={commitVisibleOrder}
                 slot={slot}
+                tooltipLabel={m.workflow_canvas_slot_item({ index: index + 1 })}
                 visibleIds={visibleIds}
               />
             ))}
@@ -457,7 +462,7 @@ export function MediaStackSlotRenderer({
         <DragPreviewPortal actions={actions} dragPoint={dragPoint} item={activeItem} slot={slot} />
       ) : null}
       <button
-        aria-label={`Add ${label}`}
+        aria-label={m.workflow_canvas_add_slot_item({ label })}
         className={cn(
           stackAddClassName,
           attachment && items.length === 0 && emptyStackAddClassName,
@@ -472,7 +477,7 @@ export function MediaStackSlotRenderer({
         data-variant={variant}
         data-uploading={actions.uploading ? 'true' : undefined}
         disabled={actions.uploading || full}
-        title={full ? `${label} limit reached` : `Add ${label}`}
+        title={full ? m.workflow_canvas_slot_limit_reached({ label }) : m.workflow_canvas_add_slot_item({ label })}
         type="button"
         onClick={(event) => {
           event.stopPropagation()

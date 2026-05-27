@@ -2,6 +2,7 @@ import { memo } from 'react'
 import type { NodeMediaViewState } from '@mina/contracts/modules/canvas'
 import type { NodeOutputResource } from '@mina/contracts/modules/tasks'
 
+import { useMessages } from '../../../../../app/i18n-provider'
 import { previewUrlForMedia } from '../../../utils/media-url'
 
 interface MediaOutputStripProps {
@@ -11,6 +12,8 @@ interface MediaOutputStripProps {
 }
 
 export const MediaOutputStrip = memo(function MediaOutputStrip({ mediaView, onSelect, resources }: MediaOutputStripProps) {
+  const m = useMessages()
+
   if (resources.length <= 1) {
     return null
   }
@@ -23,7 +26,7 @@ export const MediaOutputStrip = memo(function MediaOutputStrip({ mediaView, onSe
         const previewUrl = previewUrlForMedia(resource)
         return (
           <button
-            aria-label={`Select output ${resource.index + 1}`}
+            aria-label={m.workflow_canvas_select_output_number({ index: resource.index + 1 })}
             className="flex h-10 w-11 flex-none items-center justify-center overflow-hidden rounded-md border-0 bg-surface-container-lowest p-0 text-foreground-tertiary data-[active=true]:outline-2 data-[active=true]:outline-foreground-secondary/60"
             data-active={active ? 'true' : undefined}
             key={resource.id}

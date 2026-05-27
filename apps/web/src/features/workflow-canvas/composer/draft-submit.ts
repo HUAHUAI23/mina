@@ -1,5 +1,6 @@
 import type { XYPosition } from '@xyflow/react'
 
+import type { WebMessages } from '../../../lib/i18n-messages'
 import { formValueToTask } from '../forms/model-form-utils'
 import { selectWorkflowCanvasNodes } from '../store/canvas-selection-actions'
 import type { ComposerDraftState } from '../store/canvas-ui-store'
@@ -23,10 +24,11 @@ export interface SubmitComposerDraftDependencies {
 export const submitComposerDraft = async (
   snapshot: ComposerDraftState,
   dependencies: SubmitComposerDraftDependencies,
+  m: WebMessages,
 ): Promise<void> => {
   if (Object.values(snapshot.uploads).some((entry) => entry.status === 'uploading')) {
     dependencies.setDraftExpanded(true)
-    dependencies.setDraftError('Uploading media')
+    dependencies.setDraftError(m.workflow_canvas_error_uploading_media())
     return
   }
 
@@ -45,6 +47,6 @@ export const submitComposerDraft = async (
     dependencies.onRunNode(nodeId)
   } catch (error) {
     dependencies.setDraftExpanded(true)
-    dependencies.setDraftError(error instanceof Error ? error.message : 'Failed to create node')
+    dependencies.setDraftError(error instanceof Error ? error.message : m.workflow_canvas_error_failed_create_node())
   }
 }

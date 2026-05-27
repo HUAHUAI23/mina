@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun run routes:generate && vite",
-    "build": "bun run routes:generate && tsc -b tsconfig.json && vite build",
+    "dev": "bun --filter @mina/i18n i18n:compile && bun run routes:generate && vite",
+    "build": "bun --filter @mina/i18n i18n:compile && bun run routes:generate && tsc -b tsconfig.json && vite build",
     "routes:generate": "tsr generate",
-    "typecheck": "bun run routes:generate && tsc -b tsconfig.json",
+    "typecheck": "bun --filter @mina/i18n i18n:compile && bun run routes:generate && tsc -b tsconfig.json",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -16,6 +16,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@mina/api": "workspace:*",
     "@mina/contracts": "workspace:*",
+    "@mina/i18n": "workspace:*",
     "@mina/ui": "workspace:*",
     "@t3-oss/env-core": "catalog:",
     "@tanstack/react-form": "^1.27.3",

@@ -153,6 +153,83 @@ describe('mina api', () => {
 
     expect(response.status).toBe(401)
     expect(payload.error.code).toBe('INVALID_CREDENTIALS')
+    expect(payload.error.message).toBe('Invalid username or password.')
+    expect(payload.error.locale).toBe('en')
+  })
+
+  test('localizes missing route errors from the locale header', async () => {
+    const response = await app.request('/api/missing', {
+      headers: {
+        'X-Mina-Locale': 'zh-Hans',
+      },
+    })
+    const payload = (await response.json()) as ApiError
+
+    expect(response.status).toBe(404)
+    expect(payload.error.code).toBe('NOT_FOUND')
+    expect(payload.error.locale).toBe('zh-Hans')
+    expect(payload.error.message).toBe('未找到请求的路由。')
+  })
+
+  test('falls back to English for unsupported locale headers', async () => {
+    const response = await app.request('/api/missing', {
+      headers: {
+        'X-Mina-Locale': 'fr-FR',
+      },
+    })
+    const payload = (await response.json()) as ApiError
+
+    expect(response.status).toBe(404)
+    expect(payload.error.code).toBe('NOT_FOUND')
+    expect(payload.error.locale).toBe('en')
+    expect(payload.error.message).toBe('Route not found.')
+  })
+
+  test('keeps auth failure codes stable across localized messages', async () => {
+    const response = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Mina-Locale': 'zh-Hans',
+      },
+      body: JSON.stringify({
+        identifier: 'missing',
+        password: 'incorrect password',
+      }),
+    })
+    const payload = (await response.json()) as ApiError
+
+    expect(response.status).toBe(401)
+    expect(payload.error.code).toBe('INVALID_CREDENTIALS')
+    expect(payload.error.locale).toBe('zh-Hans')
+    expect(payload.error.message).toBe('用户名或密码错误。')
+  })
+
+  test('returns structured validation issues for invalid requests', async () => {
+    const response = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Mina-Locale': 'zh-Hans',
+      },
+      body: JSON.stringify({
+        identifier: '',
+        password: 'short',
+      }),
+    })
+    const payload = (await response.json()) as ApiError
+
+    expect(response.status).toBe(400)
+    expect(payload.error.code).toBe('VALIDATION_FAILED')
+    expect(payload.error.locale).toBe('zh-Hans')
+    expect(payload.error.message).toBe('请求参数无效。')
+    expect(payload.error.issues?.length).toBeGreaterThan(0)
+    expect(payload.error.issues?.[0]).toEqual(
+      expect.objectContaining({
+        code: expect.any(String),
+        path: expect.any(Array),
+      }),
+    )
   })
 
   test('POST /api/tasks creates an independently runnable task', async () => {

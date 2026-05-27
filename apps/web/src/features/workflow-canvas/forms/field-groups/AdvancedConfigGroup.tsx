@@ -1,3 +1,4 @@
+import { useMessages } from '../../../../app/i18n-provider'
 import type { ClientModelSpec } from '../registry/client-model-registry'
 import type { NodeTaskFormApi } from '../form-context'
 
@@ -7,8 +8,10 @@ interface AdvancedConfigGroupProps {
 }
 
 export function AdvancedConfigGroup({ form, spec }: AdvancedConfigGroupProps) {
+  const m = useMessages()
+
   if (!spec.AdvancedFields) {
-    return <div className="p-2.5 text-[0.74rem] font-bold text-foreground-quaternary">No advanced fields for this model</div>
+    return <div className="p-2.5 text-[0.74rem] font-bold text-foreground-quaternary">{m.workflow_canvas_no_advanced_fields()}</div>
   }
 
   return (

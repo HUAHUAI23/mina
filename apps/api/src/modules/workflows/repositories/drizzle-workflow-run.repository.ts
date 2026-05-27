@@ -1,5 +1,6 @@
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import type { WorkflowRun, WorkflowRunNodeState } from '@mina/contracts/modules/workflows'
+import type { LocalizedErrorDetails } from '@mina/contracts/schemas/api-error'
 import { and, asc, desc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm'
 
 import type { MinaDbClient } from '../../../db/client'
@@ -38,21 +39,44 @@ type WorkflowRunNodeRow = typeof workflowRunNodes.$inferSelect
 type WorkflowRunEdgeRow = typeof workflowRunEdges.$inferSelect
 type WorkflowRunNodeStateRow = typeof workflowRunNodeStates.$inferSelect
 
-const runRecordFromRow = (row: WorkflowRunRow): WorkflowRunRecord => ({
-  id: row.id,
-  workflowId: row.workflowId,
-  accountId: row.accountId,
-  workflowVersion: row.workflowVersion,
-  runMode: row.runMode,
-  selectedNodeId: row.selectedNodeId,
-  ...(row.scopeGroupNodeId ? { scopeGroupNodeId: row.scopeGroupNodeId } : {}),
-  status: row.status,
-  ...(row.error ? { error: row.error } : {}),
-  createdAt: toIso(row.createdAt),
-  updatedAt: toIso(row.updatedAt),
-  ...(row.startedAt ? { startedAt: toIso(row.startedAt) } : {}),
-  ...(row.completedAt ? { completedAt: toIso(row.completedAt) } : {}),
-})
+const runErrorFromRow = (row: WorkflowRunRow): LocalizedErrorDetails | undefined => {
+  if (row.errorCode) {
+    return {
+      code: row.errorCode,
+      message: row.error ?? row.errorDebugMessage ?? 'Workflow run failed.',
+      ...(row.errorMessageKey ? { messageKey: row.errorMessageKey } : {}),
+      ...(row.errorParams ? { params: row.errorParams } : {}),
+      ...(row.errorDebugMessage ? { debugMessage: row.errorDebugMessage } : {}),
+    }
+  }
+
+  return row.error
+    ? {
+        code: 'WORKFLOW_RUN_FAILED',
+        message: row.error,
+        debugMessage: row.error,
+      }
+    : undefined
+}
+
+const runRecordFromRow = (row: WorkflowRunRow): WorkflowRunRecord => {
+  const error = runErrorFromRow(row)
+  return {
+    id: row.id,
+    workflowId: row.workflowId,
+    accountId: row.accountId,
+    workflowVersion: row.workflowVersion,
+    runMode: row.runMode,
+    selectedNodeId: row.selectedNodeId,
+    ...(row.scopeGroupNodeId ? { scopeGroupNodeId: row.scopeGroupNodeId } : {}),
+    status: row.status,
+    ...(error ? { error } : {}),
+    createdAt: toIso(row.createdAt),
+    updatedAt: toIso(row.updatedAt),
+    ...(row.startedAt ? { startedAt: toIso(row.startedAt) } : {}),
+    ...(row.completedAt ? { completedAt: toIso(row.completedAt) } : {}),
+  }
+}
 
 export const workflowRunNodeFromRow = (row: WorkflowRunNodeRow): WorkflowCanvasNode =>
   workflowNodeFromSnapshotRow(row)
@@ -64,7 +88,19 @@ export const workflowRunNodeStateFromRow = (row: WorkflowRunNodeStateRow): Workf
   status: row.status,
   ...(row.taskId ? { taskId: row.taskId } : {}),
   ...(row.output ? { output: row.output } : {}),
-  ...(row.error ? { error: row.error } : {}),
+  ...(row.errorCode
+    ? {
+        error: {
+          code: row.errorCode,
+          message: row.error ?? row.errorDebugMessage ?? 'Workflow node execution failed.',
+          ...(row.errorMessageKey ? { messageKey: row.errorMessageKey } : {}),
+          ...(row.errorParams ? { params: row.errorParams } : {}),
+          ...(row.errorDebugMessage ? { debugMessage: row.errorDebugMessage } : {}),
+        },
+      }
+    : row.error
+      ? { error: { code: 'WORKFLOW_NODE_FAILED', message: row.error, debugMessage: row.error } }
+      : {}),
   ...(row.startedAt ? { startedAt: toIso(row.startedAt) } : {}),
   ...(row.completedAt ? { completedAt: toIso(row.completedAt) } : {}),
 })
@@ -211,7 +247,11 @@ export class DrizzleWorkflowRunRepository implements WorkflowRunRepository {
         selectedNodeId: input.run.selectedNodeId,
         scopeGroupNodeId: input.run.scopeGroupNodeId ?? null,
         status: input.run.status,
-        error: input.run.error ?? null,
+        error: input.run.error?.message ?? null,
+        errorCode: input.run.error?.code ?? null,
+        errorMessageKey: input.run.error?.messageKey ?? null,
+        errorParams: input.run.error?.params ?? null,
+        errorDebugMessage: input.run.error?.debugMessage ?? null,
         nextReconcileAt: null,
         leaseUntil: null,
         leasedBy: null,
@@ -239,6 +279,10 @@ export class DrizzleWorkflowRunRepository implements WorkflowRunRepository {
             taskId: null,
             output: null,
             error: null,
+            errorCode: null,
+            errorMessageKey: null,
+            errorParams: null,
+            errorDebugMessage: null,
             startedAt: null,
             completedAt: null,
             updatedAt: new Date(input.run.createdAt),
@@ -355,14 +399,18 @@ export class DrizzleWorkflowRunRepository implements WorkflowRunRepository {
   private async markTerminal(
     input: MarkRunTerminalInput,
     status: WorkflowRunRecord['status'],
-    error?: string,
+    error?: LocalizedErrorDetails,
   ): Promise<WorkflowRunRecord | undefined> {
     const leasePredicate = input.leaseToken ? eq(workflowRuns.leaseToken, input.leaseToken) : sql`true`
     const [row] = await this.db
       .update(workflowRuns)
       .set({
         status,
-        error: error ?? null,
+        error: error?.message ?? null,
+        errorCode: error?.code ?? null,
+        errorMessageKey: error?.messageKey ?? null,
+        errorParams: error?.params ?? null,
+        errorDebugMessage: error?.debugMessage ?? null,
         completedAt: new Date(input.timestamp),
         updatedAt: new Date(input.timestamp),
       })

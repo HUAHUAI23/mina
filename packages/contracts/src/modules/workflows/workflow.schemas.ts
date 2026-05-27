@@ -5,6 +5,7 @@ import {
   WorkflowCanvasNodeSchema,
 } from '../canvas/canvas.schemas'
 import { NodeExecutionOutputSchema, TaskSchema } from '../tasks/task.schemas'
+import { LocalizedErrorDetailsSchema } from '../../schemas/api-error.schemas'
 
 export const WorkflowRunModeSchema = z.enum(['isolated_node', 'flow_group'])
 export const WorkflowRunStatusSchema = z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled'])
@@ -30,7 +31,7 @@ export const WorkflowRunNodeStateSchema = z.object({
   status: WorkflowNodeRunStatusSchema,
   taskId: z.string().min(1).optional(),
   output: NodeExecutionOutputSchema.optional(),
-  error: z.string().optional(),
+  error: LocalizedErrorDetailsSchema.optional(),
   startedAt: z.string().datetime().optional(),
   completedAt: z.string().datetime().optional(),
 })
@@ -47,7 +48,7 @@ export const WorkflowRunSchema = z.object({
   snapshotEdges: z.array(WorkflowCanvasEdgeSchema),
   nodeStates: z.record(z.string(), WorkflowRunNodeStateSchema),
   status: WorkflowRunStatusSchema,
-  error: z.string().optional(),
+  error: LocalizedErrorDetailsSchema.optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   startedAt: z.string().datetime().optional(),

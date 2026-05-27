@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import type { NodeProps } from '@xyflow/react'
 
+import { useMessages } from '../../../../app/i18n-provider'
 import { markCanvasNodeRender } from '../../diagnostics/canvas-render-counts'
 import type { NodeGroupFlowNode, WorkflowFlowNodeData } from '../../domain/flow-types'
 import { WorkflowNodeHandles } from './WorkflowNodeHandles'
@@ -28,12 +29,13 @@ const groupNodeRenderSignature = (data: NodeGroupNodeViewProps['data']): string 
   })
 
 const NodeGroupNodeView = memo(function NodeGroupNodeView({ data, id }: NodeGroupNodeViewProps) {
+  const m = useMessages()
   markCanvasNodeRender(id, groupNodeRenderSignature(data))
   return (
     <section className={groupNodeClassName}>
       <WorkflowNodeHandles />
       <strong>{data.title}</strong>
-      <span>Group</span>
+      <span>{m.workflow_canvas_group_node()}</span>
     </section>
   )
 }, nodeGroupNodeViewPropsEqual)

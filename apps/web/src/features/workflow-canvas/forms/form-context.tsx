@@ -4,7 +4,7 @@ import type { ComponentType, ReactNode } from 'react'
 import { cn } from '@mina/ui/lib/utils'
 
 import type { NodeTaskFormValue } from './model-form-utils'
-import type { validateNodeTaskFormSubmitValue } from './validation'
+import type { NodeTaskFormValidator } from './validation'
 import { PromptField } from './shared/PromptField'
 
 const {
@@ -141,7 +141,7 @@ function NumberField({ ariaLabel, icon: Icon, label, max, min, step }: NumberFie
     <input
       aria-invalid={error ? true : undefined}
       aria-label={ariaLabel ?? label}
-      className={label ? fieldControlClassName : `${toolbarControlClassName} w-[72px]`}
+      className={label ? fieldControlClassName : cn(toolbarControlClassName, 'w-[72px]')}
       max={max}
       min={min}
       onBlur={field.handleBlur}
@@ -278,8 +278,6 @@ type NodeTaskFormComponents = {
   FormShell: typeof FormShell
   SubmitButton: typeof SubmitButton
 }
-
-type NodeTaskFormValidator = typeof validateNodeTaskFormSubmitValue
 
 export type NodeTaskFormApi = AppFieldExtendedReactFormApi<
   NodeTaskFormValue,

@@ -94,6 +94,38 @@ bun --filter @mina/web routes:generate
 
 The web `dev`, `typecheck`, and `build` scripts run route generation automatically.
 
+## Internationalization
+
+Mina uses `@mina/i18n` with Paraglide JS for shared API and web messages. The supported locales are:
+
+- `en`
+- `zh-Hans`
+
+Compile the generated Paraglide runtime manually when working directly on the catalogs:
+
+```bash
+bun run i18n:compile
+```
+
+The `@mina/i18n` package `typecheck` and `build` scripts compile messages automatically. The API and web `dev`, `typecheck`, `build`, and API `test` scripts also run the compile step first so generated `packages/i18n/src/paraglide` files do not need to be committed.
+
+The web app stores the selected browser locale in `localStorage` under `mina.locale`, updates `<html lang>`, and sends it to the API through `X-Mina-Locale`. API locale resolution uses this order:
+
+```text
+X-Mina-Locale
+-> mina_locale cookie
+-> Accept-Language
+-> en
+```
+
+Use `X-Mina-Locale` for deterministic API responses:
+
+```bash
+curl -H 'X-Mina-Locale: zh-Hans' http://localhost:3001/api/health
+```
+
+Localized API error responses keep `error.code` stable and expose `error.message` as display text. Optional fields include `error.locale`, primitive `error.params`, and validation `error.issues`. Client logic should branch on `error.code`, not `error.message`.
+
 Add all currently available shadcn/ui primitives from the web workspace config:
 
 ```bash

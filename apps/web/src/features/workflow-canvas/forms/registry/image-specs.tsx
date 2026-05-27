@@ -12,6 +12,7 @@ import {
   type VolcengineSeedreamParams,
 } from '@mina/contracts/modules/tasks/image-model-params'
 
+import { useMessages } from '../../../../app/i18n-provider'
 import type { ClientModelSpec } from './client-model-registry'
 import { withNodeTaskFieldGroup } from '../form-context'
 
@@ -35,75 +36,87 @@ const GeminiBasicFields = withNodeTaskFieldGroup<Partial<GoogleGeminiImageParams
     group,
     imageSizeOptions = googleSizeOptions,
     aspectRatioOptions = googleAspectRatioOptions,
-  }) => (
-    <>
-      <group.AppField name="aspectRatio">
-        {(field) => <field.SelectField ariaLabel="Aspect ratio" icon={ImageIcon} options={aspectRatioOptions} />}
-      </group.AppField>
-      <group.AppField name="imageSize">
-        {(field) => <field.SelectField ariaLabel="Image size" icon={Camera} options={imageSizeOptions} />}
-      </group.AppField>
-      <group.AppField name="count">
-        {(field) => <field.NumberField ariaLabel="Count" icon={Sparkles} max={16} min={1} step={1} />}
-      </group.AppField>
-    </>
-  ),
+  }) => {
+    const m = useMessages()
+    return (
+      <>
+        <group.AppField name="aspectRatio">
+          {(field) => <field.SelectField ariaLabel={m.workflow_canvas_aspect_ratio()} icon={ImageIcon} options={aspectRatioOptions} />}
+        </group.AppField>
+        <group.AppField name="imageSize">
+          {(field) => <field.SelectField ariaLabel={m.workflow_canvas_image_size()} icon={Camera} options={imageSizeOptions} />}
+        </group.AppField>
+        <group.AppField name="count">
+          {(field) => <field.NumberField ariaLabel={m.workflow_canvas_count()} icon={Sparkles} max={16} min={1} step={1} />}
+        </group.AppField>
+      </>
+    )
+  },
 })
 
 const GeminiAdvancedFields = withNodeTaskFieldGroup<Partial<GoogleGeminiImageParams>, unknown>({
   defaultValues: {},
-  render: ({ group }) => (
-    <>
-      <group.AppField name="imageSearch">
-        {(field) => <field.SwitchField label="Image search grounding" />}
-      </group.AppField>
-      <group.AppField name="webSearch">
-        {(field) => <field.SwitchField label="Web search grounding" />}
-      </group.AppField>
-      <group.AppField name="includeThoughts">
-        {(field) => <field.SwitchField label="Include thoughts" />}
-      </group.AppField>
-      <group.AppField name="thinkingLevel">
-        {(field) => (
-          <field.SelectField
-            label="Thinking level"
-            options={[
-              { label: 'Default', value: '' },
-              { label: 'Minimal', value: 'minimal' },
-              { label: 'High', value: 'high' },
-            ]}
-          />
-        )}
-      </group.AppField>
-    </>
-  ),
+  render: ({ group }) => {
+    const m = useMessages()
+    return (
+      <>
+        <group.AppField name="imageSearch">
+          {(field) => <field.SwitchField label={m.workflow_canvas_image_search_grounding()} />}
+        </group.AppField>
+        <group.AppField name="webSearch">
+          {(field) => <field.SwitchField label={m.workflow_canvas_web_search_grounding()} />}
+        </group.AppField>
+        <group.AppField name="includeThoughts">
+          {(field) => <field.SwitchField label={m.workflow_canvas_include_thoughts()} />}
+        </group.AppField>
+        <group.AppField name="thinkingLevel">
+          {(field) => (
+            <field.SelectField
+              label={m.workflow_canvas_thinking_level()}
+              options={[
+                { label: m.workflow_canvas_option_default(), value: '' },
+                { label: m.workflow_canvas_option_minimal(), value: 'minimal' },
+                { label: m.workflow_canvas_option_high(), value: 'high' },
+              ]}
+            />
+          )}
+        </group.AppField>
+      </>
+    )
+  },
 })
 
 const GeminiProAdvancedFields = withNodeTaskFieldGroup<Partial<GoogleGeminiImageParams>, unknown>({
   defaultValues: {},
-  render: ({ group }) => (
-    <>
-      <group.AppField name="webSearch">
-        {(field) => <field.SwitchField label="Web search grounding" />}
-      </group.AppField>
-    </>
-  ),
+  render: ({ group }) => {
+    const m = useMessages()
+    return (
+      <>
+        <group.AppField name="webSearch">
+          {(field) => <field.SwitchField label={m.workflow_canvas_web_search_grounding()} />}
+        </group.AppField>
+      </>
+    )
+  },
 })
 
 const SeedreamBasicFields = withNodeTaskFieldGroup<Partial<VolcengineSeedreamParams>, unknown, {
   sizeOptions: SelectOption[]
 }>({
   defaultValues: {},
-  render: ({ group, sizeOptions }) => (
-    <>
-      <group.AppField name="size">
-        {(field) => <field.SelectField ariaLabel="Image size" icon={ImageIcon} options={sizeOptions} />}
-      </group.AppField>
-      <group.AppField name="count">
-        {(field) => <field.NumberField ariaLabel="Count" icon={Sparkles} max={16} min={1} step={1} />}
-      </group.AppField>
-    </>
-  ),
+  render: ({ group, sizeOptions }) => {
+    const m = useMessages()
+    return (
+      <>
+        <group.AppField name="size">
+          {(field) => <field.SelectField ariaLabel={m.workflow_canvas_image_size()} icon={ImageIcon} options={sizeOptions} />}
+        </group.AppField>
+        <group.AppField name="count">
+          {(field) => <field.NumberField ariaLabel={m.workflow_canvas_count()} icon={Sparkles} max={16} min={1} step={1} />}
+        </group.AppField>
+      </>
+    )
+  },
 })
 
 const SeedreamAdvancedFields = withNodeTaskFieldGroup<Partial<VolcengineSeedreamParams>, unknown, {
@@ -111,48 +124,51 @@ const SeedreamAdvancedFields = withNodeTaskFieldGroup<Partial<VolcengineSeedream
   supportsWebSearch: boolean
 }>({
   defaultValues: {},
-  render: ({ group, supportsPng, supportsWebSearch }) => (
-    <>
-      <group.AppField name="optimizePrompt">
-        {(field) => <field.SwitchField label="Optimize prompt" />}
-      </group.AppField>
-      <group.AppField name="outputFormat">
-        {(field) => (
-          <field.SelectField
-            label="Output format"
-            options={[
-              { label: 'Default', value: '' },
-              ...(supportsPng ? [{ label: 'PNG', value: 'png' }] : []),
-              { label: 'JPEG', value: 'jpeg' },
-            ]}
-          />
-        )}
-      </group.AppField>
-      <group.AppField name="sequentialImageGeneration">
-        {(field) => (
-          <field.SelectField
-            label="Sequential generation"
-            options={[
-              { label: 'Default', value: '' },
-              { label: 'Auto', value: 'auto' },
-              { label: 'Disabled', value: 'disabled' },
-            ]}
-          />
-        )}
-      </group.AppField>
-      <group.AppField name="maxImages">
-        {(field) => <field.NumberField label="Max images" max={16} min={1} step={1} />}
-      </group.AppField>
-      <group.AppField name="watermark">
-        {(field) => <field.SwitchField label="Watermark" />}
-      </group.AppField>
-      {supportsWebSearch ? (
-        <group.AppField name="webSearch">
-          {(field) => <field.SwitchField label="Web search" />}
+  render: ({ group, supportsPng, supportsWebSearch }) => {
+    const m = useMessages()
+    return (
+      <>
+        <group.AppField name="optimizePrompt">
+          {(field) => <field.SwitchField label={m.workflow_canvas_optimize_prompt()} />}
         </group.AppField>
-      ) : null}
-    </>
-  ),
+        <group.AppField name="outputFormat">
+          {(field) => (
+            <field.SelectField
+              label={m.workflow_canvas_output_format()}
+              options={[
+                { label: m.workflow_canvas_option_default(), value: '' },
+                ...(supportsPng ? [{ label: 'PNG', value: 'png' }] : []),
+                { label: 'JPEG', value: 'jpeg' },
+              ]}
+            />
+          )}
+        </group.AppField>
+        <group.AppField name="sequentialImageGeneration">
+          {(field) => (
+            <field.SelectField
+              label={m.workflow_canvas_sequential_generation()}
+              options={[
+                { label: m.workflow_canvas_option_default(), value: '' },
+                { label: m.workflow_canvas_option_auto(), value: 'auto' },
+                { label: m.workflow_canvas_option_disabled(), value: 'disabled' },
+              ]}
+            />
+          )}
+        </group.AppField>
+        <group.AppField name="maxImages">
+          {(field) => <field.NumberField label={m.workflow_canvas_max_images()} max={16} min={1} step={1} />}
+        </group.AppField>
+        <group.AppField name="watermark">
+          {(field) => <field.SwitchField label={m.workflow_canvas_watermark()} />}
+        </group.AppField>
+        {supportsWebSearch ? (
+          <group.AppField name="webSearch">
+            {(field) => <field.SwitchField label={m.workflow_canvas_web_search()} />}
+          </group.AppField>
+        ) : null}
+      </>
+    )
+  },
 })
 
 export const imageClientModelSpecs: ClientModelSpec[] = [

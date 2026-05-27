@@ -41,12 +41,18 @@ export class AccountsService {
       : await this.accountsRepository.findUserByUsername(normalizeUsername(identifier))
 
     if (!user) {
-      throw new HttpError(401, 'INVALID_CREDENTIALS', 'Invalid username or password.')
+      throw new HttpError(401, 'INVALID_CREDENTIALS', {
+        fallbackMessage: 'Invalid username or password.',
+        messageKey: 'api_error_auth_invalid_credentials',
+      })
     }
 
     const credential = await this.accountsRepository.findPasswordCredentialByUserId(user.id)
     if (!credential || !(await verifyPassword(input.password, credential.passwordHash))) {
-      throw new HttpError(401, 'INVALID_CREDENTIALS', 'Invalid username or password.')
+      throw new HttpError(401, 'INVALID_CREDENTIALS', {
+        fallbackMessage: 'Invalid username or password.',
+        messageKey: 'api_error_auth_invalid_credentials',
+      })
     }
 
     await this.requireAccount(user.id)
@@ -60,12 +66,18 @@ export class AccountsService {
   async getActorForSessionToken(token: string): Promise<AuthActor> {
     const session = await this.accountsRepository.findSessionByTokenHash(hashSessionToken(token))
     if (!session || session.revokedAt || Date.parse(session.expiresAt) <= Date.now()) {
-      throw new HttpError(401, 'UNAUTHENTICATED', 'Authentication is required.')
+      throw new HttpError(401, 'UNAUTHENTICATED', {
+        fallbackMessage: 'Authentication is required.',
+        messageKey: 'api_error_unauthenticated',
+      })
     }
 
     const user = await this.accountsRepository.findUserById(session.userId)
     if (!user) {
-      throw new HttpError(401, 'UNAUTHENTICATED', 'Authentication is required.')
+      throw new HttpError(401, 'UNAUTHENTICATED', {
+        fallbackMessage: 'Authentication is required.',
+        messageKey: 'api_error_unauthenticated',
+      })
     }
 
     const account = await this.requireAccount(user.id)
@@ -82,11 +94,17 @@ export class AccountsService {
     const username = normalizeUsername(input.username)
 
     if (await this.accountsRepository.findUserByEmail(email)) {
-      throw new HttpError(409, 'EMAIL_ALREADY_REGISTERED', 'Email is already registered.')
+      throw new HttpError(409, 'EMAIL_ALREADY_REGISTERED', {
+        fallbackMessage: 'Email is already registered.',
+        messageKey: 'api_error_email_already_registered',
+      })
     }
 
     if (await this.accountsRepository.findUserByUsername(username)) {
-      throw new HttpError(409, 'USERNAME_ALREADY_REGISTERED', 'Username is already registered.')
+      throw new HttpError(409, 'USERNAME_ALREADY_REGISTERED', {
+        fallbackMessage: 'Username is already registered.',
+        messageKey: 'api_error_username_already_registered',
+      })
     }
 
     const userId = createId('user')
@@ -119,7 +137,10 @@ export class AccountsService {
   private async requireAccount(userId: string) {
     const account = await this.accountsRepository.findAccountByOwnerUserId(userId)
     if (!account) {
-      throw new HttpError(409, 'ACCOUNT_NOT_INITIALIZED', 'User account is not initialized.')
+      throw new HttpError(409, 'ACCOUNT_NOT_INITIALIZED', {
+        fallbackMessage: 'User account is not initialized.',
+        messageKey: 'api_error_account_not_initialized',
+      })
     }
     return account
   }

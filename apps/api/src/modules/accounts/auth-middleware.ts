@@ -22,7 +22,10 @@ export const requireAuthActor = async (c: Context, accountsService: AccountsServ
 
   const token = tokenFromRequest(c)
   if (!token) {
-    throw new HttpError(401, 'UNAUTHENTICATED', 'Authentication is required.')
+    throw new HttpError(401, 'UNAUTHENTICATED', {
+      fallbackMessage: 'Authentication is required.',
+      messageKey: 'api_error_unauthenticated',
+    })
   }
 
   const actor = await accountsService.getActorForSessionToken(token)

@@ -1,5 +1,6 @@
 import type { NodeExecutionOutput } from '@mina/contracts/modules/tasks'
 import type { WorkflowRunNodeState } from '@mina/contracts/modules/workflows'
+import type { LocalizedErrorDetails } from '@mina/contracts/schemas/api-error'
 
 import type { WorkflowRunNodeExecutionItem, WorkflowRunStateSummary } from './workflow-types'
 
@@ -34,7 +35,7 @@ export interface MarkNodeSucceededInput {
 
 export interface MarkNodeFailedInput {
   completedAt: string
-  error: string
+  error: LocalizedErrorDetails
   nodeId: string
   expectedStatus?: WorkflowRunNodeState['status']
   taskId?: string

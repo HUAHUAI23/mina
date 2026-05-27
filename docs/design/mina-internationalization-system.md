@@ -4,6 +4,15 @@
 
 Date: 2026-05-26
 
+Implementation status: implemented for the first shared-catalog phase. The delivered scope includes `@mina/i18n`, English and Simplified Chinese catalogs, API locale middleware, localized API errors, web runtime locale switching, migrated primary web/workflow canvas copy, response-time localization for durable task/workflow errors, and documentation updates.
+
+Deferred by design:
+
+1. URL locale routing.
+2. Database-backed user locale preferences.
+3. Splitting web-only messages into an `apps/web` catalog.
+4. Future server-generated artifacts such as emails, reports, and exports.
+
 This document is the implementation guidance for adding an internationalization system to Mina. The initial locale set is English and Simplified Chinese. The design covers the web application, API error messages, future server-rendered user-facing artifacts, contracts, persistence rules, testing, and rollout sequencing.
 
 ## Problem Statement
@@ -838,6 +847,141 @@ Purpose:
 
 Do not add this check before baseline migration, or it will create too much noise.
 
+## File-Level Implementation Guide
+
+This section describes the expected first implementation shape by file. Keep exact names aligned with the final code, but preserve the boundaries.
+
+### New Package Files
+
+Create:
+
+```text
+packages/i18n/package.json
+packages/i18n/project.inlang
+packages/i18n/tsconfig.json
+packages/i18n/messages/en.json
+packages/i18n/messages/zh-Hans.json
+packages/i18n/src/index.ts
+packages/i18n/src/locale.ts
+packages/i18n/src/format.ts
+packages/i18n/src/api-errors.ts
+packages/i18n/src/server.ts
+```
+
+`locale.ts` should own:
+
+1. `minaBaseLocale`.
+2. `minaLocales`.
+3. `MinaLocaleSchema`.
+4. `type MinaLocale`.
+5. `isMinaLocale`.
+6. `normalizeLocale`.
+7. `resolveLocale`.
+8. `localeToIntlLocale`.
+
+`format.ts` should own:
+
+1. `formatDateTime`.
+2. `formatDate`.
+3. `formatNumber`.
+4. Cached `Intl` formatter helpers if needed.
+
+`api-errors.ts` should own:
+
+1. API error message key types.
+2. API error code to message key mapping.
+3. `translateApiErrorMessage`.
+4. Known provider/category mappings only if they are generic and shared.
+
+`server.ts` should own:
+
+1. Hono request locale helpers.
+2. `X-Mina-Locale` constant.
+3. Cookie name constant.
+4. Server-side request locale extraction helpers.
+
+### Existing Package Files
+
+Update root `package.json`:
+
+1. Add workspace catalog entry for `@inlang/paraglide-js`.
+2. No root script is required initially unless the implementation wants `bun run i18n:compile`.
+
+Update `packages/contracts/package.json` only if new exports are added for error code schemas.
+
+Update `packages/contracts/src/schemas/api-error.schemas.ts`:
+
+1. Add locale schema import or duplicate only the minimal string validation if importing `@mina/i18n` would create an unwanted dependency.
+2. Add validation issue schema.
+3. Add optional `locale`, `params`, and `issues`.
+
+Prefer keeping `@mina/contracts` independent from `@mina/i18n` if that avoids a contracts-to-runtime utility dependency. In that case, duplicate the supported locale enum in contracts and add a test to keep it aligned with `@mina/i18n`.
+
+### API Files
+
+Update:
+
+```text
+apps/api/package.json
+apps/api/src/app/create-app.ts
+apps/api/src/app/openapi.ts
+apps/api/src/lib/http/http-error.ts
+apps/api/src/modules/accounts/accounts.service.ts
+apps/api/src/modules/accounts/auth-middleware.ts
+apps/api/src/modules/accounts/authorization.ts
+apps/api/src/modules/tasks/config/validation-error.ts
+apps/api/src/modules/tasks/config/task-config-assembler.ts
+apps/api/src/modules/workflows/validation.ts
+```
+
+Add tests near existing request-level tests:
+
+```text
+apps/api/src/index.test.ts
+apps/api/src/lib/http/http-error.test.ts
+apps/api/src/modules/accounts/accounts.service.test.ts
+```
+
+Do not migrate every task and workflow error in the first API phase. Migrate route/root errors, auth errors, and validation errors first; then migrate durable task/workflow errors in the follow-up phase.
+
+### Web Files
+
+Update:
+
+```text
+apps/web/package.json
+apps/web/src/app/providers.tsx
+apps/web/src/app/app-shell.tsx
+apps/web/src/lib/api-client.ts
+apps/web/src/lib/http.ts
+apps/web/src/features/auth/components/auth-gate.tsx
+apps/web/src/features/canvas/components/canvas-page.tsx
+apps/web/src/features/projects/components/projects-page.tsx
+apps/web/src/features/plaza/components/plaza-page.tsx
+```
+
+Add:
+
+```text
+apps/web/src/app/i18n-provider.tsx
+apps/web/src/app/locale-storage.ts
+apps/web/src/app/locale-switcher.tsx
+```
+
+If these components become feature-specific, place only the reusable locale runtime in `src/app` and keep the visual switcher close to the app shell/auth gate. Do not put locale state in a feature folder because it is an app-level concern.
+
+### Documentation Files
+
+After code lands, update:
+
+```text
+docs/architecture.md
+docs/setup-and-operations.md
+docs/development-standards.md
+```
+
+Do not update those docs before implementation unless the team wants this design to be accepted as the new standard.
+
 ## Migration Plan
 
 ### Phase 1: Shared I18n Infrastructure
@@ -1012,22 +1156,22 @@ Recommended new development standards:
 
 ## Implementation Checklist
 
-1. Add `@mina/i18n` package and compile scripts.
-2. Add shared English and Simplified Chinese catalogs.
-3. Export locale schemas, locale helpers, and formatter helpers.
-4. Add API locale middleware.
-5. Update API error contract and OpenAPI schema.
-6. Refactor `HttpError` and root error handling.
-7. Localize not found, internal errors, auth errors, and validation errors.
-8. Add web locale provider and switchers.
-9. Send selected locale from web API client.
-10. Migrate auth gate and app shell copy.
-11. Migrate primary route copy.
-12. Migrate workflow canvas copy.
-13. Normalize durable task/workflow errors.
-14. Add API and web tests for both locales.
-15. Update architecture, operations, and standards docs.
-16. Run `bun run check`.
+1. Done: Add `@mina/i18n` package and compile scripts.
+2. Done: Add shared English and Simplified Chinese catalogs.
+3. Done: Export locale schemas, locale helpers, and formatter helpers.
+4. Done: Add API locale middleware.
+5. Done: Update API error contract and OpenAPI schema.
+6. Done: Refactor `HttpError` and root error handling.
+7. Done: Localize not found, internal errors, auth errors, and validation errors.
+8. Done: Add web locale provider and switchers.
+9. Done: Send selected locale from web API client.
+10. Done: Migrate auth gate and app shell copy.
+11. Done: Migrate primary route copy.
+12. Done: Migrate workflow canvas copy.
+13. Done: Normalize durable task/workflow errors.
+14. Done: Add API and web tests for both locales.
+15. Done: Update architecture, operations, standards, and HelloAgents wiki docs.
+16. Verification: run `bun run check`, `bun run build`, and `bun run check:boundaries` during final implementation verification.
 
 ## Risks and Mitigations
 

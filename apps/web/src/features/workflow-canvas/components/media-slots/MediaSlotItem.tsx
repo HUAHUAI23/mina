@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { NodeMediaSlotItem as NodeMediaSlotItemType } from '@mina/contracts/modules/media'
 import { cn } from '@mina/ui/lib/utils'
 
+import { useMessages } from '../../../../app/i18n-provider'
 import { getMediaObject } from '../../api/media-queries'
 import { getTask } from '../../api/workflow-queries'
 import { mediaKeys, taskKeys } from '../../api/workflow-keys'
@@ -44,6 +45,7 @@ export function MediaSlotItem({
   showIndex = true,
   showRemove = true,
 }: MediaSlotItemProps) {
+  const m = useMessages()
   const nodeOutputSource = isNodeOutput(item.source) ? item.source : undefined
   const sourceNode = useCanvasNode(nodeOutputSource?.nodeId ?? '')
   const sourceMediaView =
@@ -83,7 +85,7 @@ export function MediaSlotItem({
       data-first={isFirst ? 'true' : undefined}
       data-mina-canvas-ignore="true"
       data-missing={hasUpstreamMedia ? undefined : 'true'}
-      title="Drag to reorder"
+      title={m.workflow_canvas_drag_to_reorder()}
     >
       <div className={cn(slotThumbClassName, !hasUpstreamMedia && missingSlotThumbClassName)}>
         {localPreview ? (
@@ -97,7 +99,7 @@ export function MediaSlotItem({
       </div>
       {showRemove ? (
         <button
-          aria-label="Remove"
+          aria-label={m.workflow_canvas_remove()}
           className={slotCloseClassName}
           onClick={(event) => {
             event.stopPropagation()

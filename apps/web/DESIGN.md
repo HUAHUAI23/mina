@@ -2,9 +2,9 @@
 
 ## 1. Overview & Creative North Star
 ### The Creative North Star: "The Ethereal Canvas"
-This design system rejects the "boxed-in" nature of traditional SaaS dashboards. Inspired by the quiet sophistication of high-end editorial portfolios, it treats the screen as an expansive, breathing workspace. By utilizing a "Floating UI" architecture, we remove the friction of heavy sidebars and rigid grids, replacing them with independent, intelligent modules that appear to hover over a limitless surface. 
+This design system rejects the "boxed-in" nature of traditional SaaS dashboards. Inspired by the quiet sophistication of high-end editorial portfolios, it treats the screen as an expansive, breathing workspace. By utilizing a "Floating UI" architecture, we remove the friction of heavy sidebars and rigid grids, replacing them with independent, intelligent modules that sit over a limitless surface.
 
-The aesthetic is defined by **intentional asymmetry**, **tonal depth**, and **extreme legibility**. We move beyond generic "flat" design by using glassmorphism and soft ambient lighting to create a sense of tactile premium quality.
+The aesthetic is defined by **intentional asymmetry**, **tonal depth**, and **extreme legibility**. We move beyond generic "flat" design through carefully layered surface tones, restrained borders, and static shadows rather than expensive blur or compositing effects.
 
 ---
 
@@ -18,12 +18,12 @@ The palette is a curated spectrum of Zinc grays and pure neutrals, designed to l
 Treat the UI as a physical stack of semi-translucent materials.
 - **Base Layer:** `surface` (#f9f9fa).
 - **Secondary Content Areas:** `surface-container-low` (#f2f4f5).
-- **Active Floating Cards:** `surface-container-highest` (#dde3e7) with a 60-80% opacity and `backdrop-filter: blur(12px)`.
+- **Active Floating Cards:** `surface-container-highest` (#dde3e7) with solid or lightly translucent fills, static shadows, and no backdrop blur.
 - **Nesting:** To highlight a search bar within a floating sidebar, use `surface-container-lowest` (#ffffff) to make it "pop" from the container.
 
-### The "Glass & Gradient" Rule
-Standard flat fills are for utilities; "The Ethereal Canvas" uses texture for emotion. 
-- **Glassmorphism:** Use semi-transparent white/zinc backgrounds for navigation and toolbars to allow the background context to bleed through.
+### The "Tonal & Gradient" Rule
+Standard flat fills are for utilities; "The Ethereal Canvas" uses tone for hierarchy.
+- **Layered Surfaces:** Use opaque or lightly translucent white/zinc backgrounds for navigation and toolbars. Do not use `backdrop-filter`, `filter: blur()`, masks, or blend modes.
 - **Signature Polish:** For primary actions, use a subtle linear gradient from `primary` (#5f5e61) to `primary-dim` (#535252). This adds a microscopic "beveled" feel that feels expensive.
 
 ---
@@ -58,7 +58,7 @@ If a boundary is absolutely required for accessibility, use a **Ghost Border**: 
 
 ### Floating Navigation Cards
 Instead of sidebars, use "Islands."
-- **Styling:** `rounded-xl` or `rounded-2xl`, `surface-container-lowest` background at 90% opacity, `backdrop-filter: blur(20px)`.
+- **Styling:** `rounded-xl` or `rounded-2xl`, `surface-container-lowest` background, subtle static shadow, and no backdrop blur.
 - **Layout:** Positioned at the screen edges with a minimum margin of `spacing-4` (1.4rem).
 
 ### Buttons
@@ -75,7 +75,7 @@ Instead of sidebars, use "Islands."
 - **No Dividers:** Forbid the use of horizontal rules. Separate list items using `spacing-2` (0.7rem) or a subtle change in background hover state (`surface-container-highest`).
 
 ### Floating Action Bars
-A custom component for tool selections (inspired by creative suites). A vertical or horizontal bar with `rounded-full` corners, utilizing the "Glassmorphism" rule to feel light and un-intrusive.
+A custom component for tool selections (inspired by creative suites). A vertical or horizontal bar with `rounded-full` corners, using the tonal surface rule to feel light and un-intrusive.
 
 ---
 

@@ -4,6 +4,7 @@ import type { NodeMediaSlots } from '@mina/contracts/modules/media'
 import type { WorkflowNodeType } from '@mina/contracts/modules/canvas'
 import { cn } from '@mina/ui/lib/utils'
 
+import { useMessages } from '../../../../app/i18n-provider'
 import {
   defaultMediaSlotForNodeType,
   type MediaSlotDescriptor,
@@ -87,8 +88,9 @@ export function MediaSlotList({
   uploading,
   variant = 'block',
 }: MediaSlotListProps) {
-  const slotPolicy = mediaSlotsForNodeType(nodeType, modelSpec?.mediaCapabilities)
-  const defaultSlot = defaultMediaSlotForNodeType(nodeType, modelSpec?.mediaCapabilities)
+  const m = useMessages()
+  const slotPolicy = mediaSlotsForNodeType(nodeType, modelSpec?.mediaCapabilities, m)
+  const defaultSlot = defaultMediaSlotForNodeType(nodeType, modelSpec?.mediaCapabilities, m)
   const selectedSlot = useCanvasUiStore((state) => state.selectedSlotByComposerId[composerId])
   const setSelectedSlot = useCanvasUiStore((state) => state.setComposerSelectedSlot)
   const [expandedSlot, setExpandedSlot] = useState<MediaSlotName | undefined>()
@@ -159,7 +161,7 @@ export function MediaSlotList({
             variant === 'collapsed' && 'hidden',
           )}
           role="tablist"
-          aria-label="Media slot"
+          aria-label={m.workflow_canvas_media_slot()}
         >
           {slotPolicy.map((descriptor) => (
             <button

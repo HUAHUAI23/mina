@@ -6,8 +6,10 @@ import type {
   WorkflowSummary,
   WorkflowRun,
 } from '@mina/contracts/modules/workflows'
+import type { MinaLocale } from '@mina/i18n'
 
 import { HttpError } from '../../lib/http/http-error'
+import { localizeErrorDetails } from '../../lib/http/localized-error'
 import type { TaskConfigAssembler } from '../tasks/config/task-config-assembler'
 import type { TasksService } from '../tasks/tasks.service'
 import {
@@ -85,10 +87,16 @@ export class WorkflowRunsService {
     const nodeMap = getNodeMap(workflow.nodes)
     const selectedNode = nodeMap.get(input.selectedNodeId)
     if (!selectedNode) {
-      throw new HttpError(404, 'WORKFLOW_NODE_NOT_FOUND', 'Selected workflow node not found.')
+      throw new HttpError(404, 'WORKFLOW_NODE_NOT_FOUND', {
+        fallbackMessage: 'Selected workflow node not found.',
+        messageKey: 'api_error_workflow_node_not_found',
+      })
     }
     if (selectedNode.data.nodeType !== 'flow_group' && !isExecutableNode(selectedNode)) {
-      throw new HttpError(422, 'WORKFLOW_NODE_NOT_EXECUTABLE', 'Selected workflow node is not executable.')
+      throw new HttpError(422, 'WORKFLOW_NODE_NOT_EXECUTABLE', {
+        fallbackMessage: 'Selected workflow node is not executable.',
+        messageKey: 'api_error_workflow_node_not_executable',
+      })
     }
 
     const target = this.resolveRunTarget(workflow, selectedNode)
@@ -139,7 +147,10 @@ export class WorkflowRunsService {
   async cancelRun(runId: string): Promise<void> {
     const run = await this.getRun(runId)
     if (run.status !== 'running' && run.status !== 'queued') {
-      throw new HttpError(409, 'WORKFLOW_RUN_NOT_CANCELLABLE', 'Only queued or running workflow runs can be cancelled.')
+      throw new HttpError(409, 'WORKFLOW_RUN_NOT_CANCELLABLE', {
+        fallbackMessage: 'Only queued or running workflow runs can be cancelled.',
+        messageKey: 'api_error_workflow_run_not_cancellable',
+      })
     }
 
     const cancelled = await this.repositories.runs.cancelRun(runId, nowIso())
@@ -156,7 +167,10 @@ export class WorkflowRunsService {
   async getRun(runId: string): Promise<WorkflowRun> {
     const run = await this.repositories.runs.findRunById(runId)
     if (!run) {
-      throw new HttpError(404, 'WORKFLOW_RUN_NOT_FOUND', 'Workflow run not found.')
+      throw new HttpError(404, 'WORKFLOW_RUN_NOT_FOUND', {
+        fallbackMessage: 'Workflow run not found.',
+        messageKey: 'api_error_workflow_run_not_found',
+      })
     }
     return run
   }
@@ -165,8 +179,34 @@ export class WorkflowRunsService {
     return this.tasksService.getTaskForAccount(accountId, taskId)
   }
 
+  async getTaskLocalized(accountId: string, taskId: string, locale: MinaLocale): Promise<Task> {
+    return this.tasksService.getTaskForAccountLocalized(accountId, taskId, locale)
+  }
+
   async listRuns(workflowId?: string): Promise<WorkflowRun[]> {
     return this.repositories.runs.listRuns(workflowId)
+  }
+
+  async listRunsLocalized(workflowId: string | undefined, locale: MinaLocale): Promise<WorkflowRun[]> {
+    return (await this.listRuns(workflowId)).map((run) => this.localizeRun(run, locale))
+  }
+
+  localizeRun(run: WorkflowRun, locale: MinaLocale): WorkflowRun {
+    return {
+      ...run,
+      ...(run.error ? { error: localizeErrorDetails(run.error, locale) } : {}),
+      nodeStates: Object.fromEntries(
+        Object.entries(run.nodeStates).map(([nodeId, state]) => [
+          nodeId,
+          state.error
+            ? {
+                ...state,
+                error: localizeErrorDetails(state.error, locale),
+              }
+            : state,
+        ]),
+      ),
+    }
   }
 
   async reconcileRunningRuns(): Promise<WorkflowRun[]> {
@@ -270,13 +310,19 @@ export class WorkflowRunsService {
         throw new HttpError(
           422,
           'WORKFLOW_ISOLATED_RUN_OUTPUT_SELECTOR',
-          'Ordinary canvas execution requires current media selectors.',
+          {
+            fallbackMessage: 'Ordinary canvas execution requires current media selectors.',
+            messageKey: 'api_error_workflow_isolated_run_output_selector',
+          },
         )
       }
 
       const sourceNode = nodeMap.get(item.source.nodeId)
       if (!sourceNode || !isMediaWorkflowNode(sourceNode) || !sourceNode.data.mediaView?.taskId) {
-        throw new HttpError(422, 'WORKFLOW_UPSTREAM_OUTPUT_MISSING', 'Required upstream MediaView output is missing.')
+        throw new HttpError(422, 'WORKFLOW_UPSTREAM_OUTPUT_MISSING', {
+          fallbackMessage: 'Required upstream MediaView output is missing.',
+          messageKey: 'api_error_workflow_upstream_output_missing',
+        })
       }
 
       const output = await this.tasksService.getTaskOutputForAccount(workflow.accountId, sourceNode.data.mediaView.taskId)
@@ -285,10 +331,16 @@ export class WorkflowRunsService {
         : undefined
       const expectedKind = slotToResourceKind(item.slot)
       if (!resource) {
-        throw new HttpError(422, 'WORKFLOW_UPSTREAM_OUTPUT_MISSING', 'Required upstream MediaView output is missing.')
+        throw new HttpError(422, 'WORKFLOW_UPSTREAM_OUTPUT_MISSING', {
+          fallbackMessage: 'Required upstream MediaView output is missing.',
+          messageKey: 'api_error_workflow_upstream_output_missing',
+        })
       }
       if (resource.kind !== expectedKind) {
-        throw new HttpError(422, 'WORKFLOW_UPSTREAM_OUTPUT_KIND_MISMATCH', 'Upstream output kind does not match target slot.')
+        throw new HttpError(422, 'WORKFLOW_UPSTREAM_OUTPUT_KIND_MISMATCH', {
+          fallbackMessage: 'Upstream output kind does not match target slot.',
+          messageKey: 'api_error_workflow_upstream_output_kind_mismatch',
+        })
       }
     }
   }

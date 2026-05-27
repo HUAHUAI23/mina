@@ -128,7 +128,11 @@ export class DrizzleWorkflowRunNodeStateRepository implements WorkflowRunNodeSta
       .update(workflowRunNodeStates)
       .set({
         status: 'failed',
-        error: input.error,
+        error: input.error.message,
+        errorCode: input.error.code,
+        errorMessageKey: input.error.messageKey ?? null,
+        errorParams: input.error.params ?? null,
+        errorDebugMessage: input.error.debugMessage ?? null,
         completedAt: new Date(input.completedAt),
         updatedAt: new Date(input.completedAt),
       })

@@ -10,6 +10,7 @@ import type { FormApi, FormValidateOrFn } from '@tanstack/react-form'
 import type { MediaSlotName, NodeMediaSlotItem, NodeMediaSlots } from '@mina/contracts/modules/media'
 import type { TaskDraftConfig } from '@mina/contracts/modules/tasks'
 
+import { useMessages } from '../../../app/i18n-provider'
 import { uploadMediaObject } from '../api/media-mutations'
 import type { MediaGenerationCanvasNode } from '../domain/canvas-node-types'
 import {
@@ -25,10 +26,7 @@ import {
 } from '../forms/model-compatibility'
 import { formValueToTask, taskToFormValue, type NodeTaskFormValue } from '../forms/model-form-utils'
 import { resolveClientModel } from '../forms/registry/client-model-registry'
-import {
-  validateNodeTaskFormDraftValue,
-  validateNodeTaskFormSubmitValue,
-} from '../forms/validation'
+import { createNodeTaskValidators } from '../forms/validation'
 import { useCanvasStore } from '../store/canvas-store'
 import type { ComposerDraftState } from '../store/canvas-ui-store'
 import { useCanvasUiStore } from '../store/canvas-ui-store'
@@ -99,14 +97,6 @@ const cloneTaskValue = (value: NodeTaskFormValue): NodeTaskFormValue => ({
 })
 
 const cloneMediaSlots = (slots: NodeMediaSlots): NodeMediaSlots => structuredClone(slots)
-
-const nodeTaskValidators = {
-  onChange: validateNodeTaskFormDraftValue,
-  onSubmit: validateNodeTaskFormSubmitValue,
-} satisfies {
-  onChange: FormValidateOrFn<NodeTaskFormValue>
-  onSubmit: FormValidateOrFn<NodeTaskFormValue>
-}
 
 const taskMediaCapabilities = (task: Pick<TaskDraftConfig, 'kind' | 'model' | 'provider'> | undefined) =>
   task ? resolveClientModel({ kind: task.kind, model: task.model, provider: task.provider })?.mediaCapabilities : undefined
@@ -195,16 +185,18 @@ function NodeTargetProvider({
   node,
   onRun,
 }: Extract<MediaTaskFormProviderProps, { kind: 'node' }>) {
+  const m = useMessages()
   const [uploading, setUploading] = useState(false)
   const setNodeTaskConfig = useCanvasStore((state) => state.setNodeTaskConfig)
 
   const mediaSlots = node.data.mediaSlots ?? emptyMediaSlots
   const task = node.data.config.task
   const defaultValues = useMemo(
-    () => (task ? formValueWithCompatibleModel(taskToFormValue(task), mediaSlots) : defaultFormValueForKind(node.data.nodeType, mediaSlots)),
-    [mediaSlots, node.data.nodeType, task],
+    () => (task ? formValueWithCompatibleModel(taskToFormValue(task), mediaSlots, m) : defaultFormValueForKind(node.data.nodeType, mediaSlots, m)),
+    [m, mediaSlots, node.data.nodeType, task],
   )
-  const transform = useCompatibleFormTransform(mediaSlots)
+  const transform = useCompatibleFormTransform(mediaSlots, m)
+  const nodeTaskValidators = useMemo(() => createNodeTaskValidators(m), [m])
   const form = useNodeTaskAppForm({
     defaultValues,
     formId: `node-task:${node.id}`,
@@ -315,11 +307,13 @@ function DraftTargetProvider({
   draft,
   onSubmitDraft,
 }: Extract<MediaTaskFormProviderProps, { kind: 'draft' }>) {
+  const m = useMessages()
   const setDraftTask = useCanvasUiStore((state) => state.setDraftTask)
 
   const mediaSlots = draft.mediaSlots ?? emptyMediaSlots
-  const defaultValues = useMemo(() => formValueWithCompatibleModel(draft.task, mediaSlots), [draft.task, mediaSlots])
-  const transform = useCompatibleFormTransform(mediaSlots)
+  const defaultValues = useMemo(() => formValueWithCompatibleModel(draft.task, mediaSlots, m), [draft.task, m, mediaSlots])
+  const transform = useCompatibleFormTransform(mediaSlots, m)
+  const nodeTaskValidators = useMemo(() => createNodeTaskValidators(m), [m])
   const form = useNodeTaskAppForm({
     defaultValues,
     formId: 'node-task:draft',
@@ -365,6 +359,7 @@ function DraftTargetProvider({
 }
 
 function useDraftMediaSlotsBinding(draft: ComposerDraftState): MediaSlotsBinding {
+  const m = useMessages()
   const beginUpload = useCanvasUiStore((state) => state.beginDraftUpload)
   const completeUpload = useCanvasUiStore((state) => state.completeDraftUpload)
   const failUpload = useCanvasUiStore((state) => state.failDraftUpload)
@@ -372,7 +367,7 @@ function useDraftMediaSlotsBinding(draft: ComposerDraftState): MediaSlotsBinding
   const setDraftMediaSlots = useCanvasUiStore((state) => state.setDraftMediaSlots)
 
   const updateDraftSlots = (task: NodeTaskFormValue, nextSlots: NodeMediaSlots) => {
-    setDraftMediaSlots(normalizeMediaSlotsForNodeType(task.kind, nextSlots, taskMediaCapabilities(task)))
+    setDraftMediaSlots(normalizeMediaSlotsForNodeType(task.kind, nextSlots, taskMediaCapabilities(task), m))
   }
 
   const uploadAndAttach = async (
@@ -381,8 +376,8 @@ function useDraftMediaSlotsBinding(draft: ComposerDraftState): MediaSlotsBinding
       | { file: File; kind: 'replace'; slot: MediaSlotName; slotItemId: string; uploadId: string },
   ) => {
     const currentDraft = useCanvasUiStore.getState().composerDraft
-    if (!isMediaSlotAllowedForNodeType(currentDraft.task.kind, input.slot, taskMediaCapabilities(currentDraft.task))) {
-      setDraftError('Media slot is not compatible with the selected model type.')
+    if (!isMediaSlotAllowedForNodeType(currentDraft.task.kind, input.slot, taskMediaCapabilities(currentDraft.task), m)) {
+      setDraftError(m.workflow_canvas_error_media_slot_incompatible())
       return
     }
     beginUpload(input.uploadId, input.slot)
@@ -406,7 +401,7 @@ function useDraftMediaSlotsBinding(draft: ComposerDraftState): MediaSlotsBinding
       )
       completeUpload(input.uploadId)
     } catch (error) {
-      failUpload(input.uploadId, error instanceof Error ? error.message : 'Unable to attach media.')
+      failUpload(input.uploadId, error instanceof Error ? error.message : m.workflow_canvas_error_attach_media())
     }
   }
 
@@ -441,11 +436,11 @@ function useDraftMediaSlotsBinding(draft: ComposerDraftState): MediaSlotsBinding
   }
 }
 
-function useCompatibleFormTransform(mediaSlots: NodeMediaSlots) {
+function useCompatibleFormTransform(mediaSlots: NodeMediaSlots, m: ReturnType<typeof useMessages>) {
   return useCallback((formApi: unknown) => {
     const nodeTaskFormApi = formApi as NodeTaskFormBaseApi
     const currentValue = nodeTaskFormApi.state.values
-    const nextValue = formValueWithCompatibleModel(currentValue, mediaSlots)
+    const nextValue = formValueWithCompatibleModel(currentValue, mediaSlots, m)
     if (
       nextValue.kind === currentValue.kind &&
       nextValue.provider === currentValue.provider &&
@@ -455,7 +450,7 @@ function useCompatibleFormTransform(mediaSlots: NodeMediaSlots) {
     }
     nodeTaskFormApi.state.values = nextValue
     return nodeTaskFormApi
-  }, [mediaSlots])
+  }, [m, mediaSlots])
 }
 
 const isEditablePasteTarget = (target: EventTarget | null): boolean => {
@@ -474,7 +469,8 @@ function MediaTaskPasteTarget({
   nodeType: MediaGenerationCanvasNode['data']['nodeType']
   onAddUpload(slot: MediaSlotName, file: File, options?: { position?: 'end' | 'start' }): void
 }) {
-  const defaultSlot = defaultMediaSlotForNodeType(nodeType)
+  const m = useMessages()
+  const defaultSlot = defaultMediaSlotForNodeType(nodeType, undefined, m)
 
   return (
     <div

@@ -1,11 +1,12 @@
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
+import type { LocalizedErrorDetails } from '@mina/contracts/schemas/api-error'
 import type { WorkflowRunMode, WorkflowRunStatus } from '@mina/contracts/modules/workflows'
 
 export interface WorkflowRunRecord {
   accountId: string
   completedAt?: string
   createdAt: string
-  error?: string
+  error?: LocalizedErrorDetails
   id: string
   runMode: WorkflowRunMode
   scopeGroupNodeId?: string

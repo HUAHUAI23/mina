@@ -1,5 +1,6 @@
 import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import type { WorkflowRun, WorkflowRunNodeState } from '@mina/contracts/modules/workflows'
+import { createLocalizedErrorDetails } from '../../lib/http/localized-error'
 
 import { getNodeMap, isDescendantOf, isExecutableNode } from './graph'
 
@@ -38,6 +39,12 @@ export const succeededRun = (run: WorkflowRun): WorkflowRun => {
 
 export const failedRun = (run: WorkflowRun, message: string, nodeId?: string): WorkflowRun => {
   const failedAt = nowIso()
+  const error = createLocalizedErrorDetails({
+    code: 'WORKFLOW_RUN_FAILED',
+    debugMessage: message,
+    fallbackMessage: message,
+    messageKey: 'api_error_workflow_run_failed',
+  })
   const failedNodeStates =
     nodeId && run.nodeStates[nodeId]
       ? {
@@ -45,7 +52,7 @@ export const failedRun = (run: WorkflowRun, message: string, nodeId?: string): W
           [nodeId]: {
             ...run.nodeStates[nodeId],
             status: 'failed' as const,
-            error: message,
+            error,
             completedAt: failedAt,
           },
         }
@@ -55,7 +62,7 @@ export const failedRun = (run: WorkflowRun, message: string, nodeId?: string): W
     ...run,
     nodeStates: failedNodeStates,
     status: 'failed',
-    error: message,
+    error,
     completedAt: failedAt,
     updatedAt: failedAt,
   }

@@ -2,6 +2,7 @@ import { useStore } from '@tanstack/react-form'
 import type { DeepKeys } from '@tanstack/react-form'
 import { Zap } from 'lucide-react'
 
+import { useMessages } from '../../../../app/i18n-provider'
 import { AdvancedConfigGroup } from '../../forms/field-groups/AdvancedConfigGroup'
 import { ModelConfigToolbar } from '../../forms/field-groups/ModelConfigToolbar'
 import {
@@ -173,6 +174,7 @@ function ComposerPromptSection({
   nodeType: ReturnType<typeof useMediaTaskForm>['nodeType']
   onExpand?: (() => void) | undefined
 }) {
+  const m = useMessages()
   const { form } = useMediaTaskForm()
   if (mode === 'collapsed') {
     return (
@@ -180,9 +182,9 @@ function ComposerPromptSection({
         {(field) => (
           <div onFocusCapture={onExpand} onPointerDown={onExpand}>
             <field.TextField
-              ariaLabel="Prompt"
+              ariaLabel={m.workflow_canvas_prompt()}
               inputClassName={collapsedPromptInputClassName}
-              placeholder={currentValue.kind === 'video_generation' ? 'Describe the motion' : 'Describe the image'}
+              placeholder={currentValue.kind === 'video_generation' ? m.workflow_canvas_prompt_placeholder_video() : m.workflow_canvas_prompt_placeholder_image()}
             />
           </div>
         )}
@@ -191,12 +193,12 @@ function ComposerPromptSection({
   }
 
   return (
-    <section className="mina-wc-prompt-section relative min-w-0" aria-label="Prompt">
+    <section className="mina-wc-prompt-section relative min-w-0" aria-label={m.workflow_canvas_prompt()}>
       <form.AppField name="prompt">
         {(field) => (
           <field.TextField
             multiline
-            placeholder={nodeType === 'video_generation' ? 'Describe the motion' : 'Describe the image'}
+            placeholder={nodeType === 'video_generation' ? m.workflow_canvas_prompt_placeholder_video() : m.workflow_canvas_prompt_placeholder_image()}
             textareaClassName={composerPromptTextareaClassName}
           />
         )}
@@ -214,12 +216,13 @@ function ComposerConfigSection({
   runError?: string | undefined
   running?: boolean | undefined
 }) {
+  const m = useMessages()
   const { composerId, form } = useMediaTaskForm()
   const advancedOpen = useCanvasUiStore((state) => state.advancedOpenByComposerId[composerId] ?? false)
   const setComposerAdvancedOpen = useCanvasUiStore((state) => state.setComposerAdvancedOpen)
 
   return (
-    <section className={configSectionClassName} aria-label="Model configuration">
+    <section className={configSectionClassName} aria-label={m.workflow_canvas_model_configuration()}>
       <ModelConfigToolbar
         advancedOpen={advancedOpen}
         canSubmit={modelState.canSubmit}
@@ -256,6 +259,7 @@ export function MediaComposerShell({
   running,
   submitDisabled,
 }: MediaComposerShellProps) {
+  const m = useMessages()
   const { form, mediaActions, nodeType } = useMediaTaskForm()
   const modelState = useComposerModel({ modelScope, submitDisabled })
   const { canSubmit, currentValue, generationMode, spec } = modelState
@@ -263,26 +267,26 @@ export function MediaComposerShell({
   if (!spec) {
     return (
       <div className="p-2.5 text-[0.74rem] font-bold text-foreground-quaternary">
-        No registered {currentValue.kind} models are available for {generationMode}.
+        {m.workflow_canvas_no_models_available({ kind: currentValue.kind, mode: generationMode })}
       </div>
     )
   }
 
   if (mode === 'collapsed') {
     return (
-      <section aria-label="Draft composer" className={collapsedShellClassName}>
+      <section aria-label={m.workflow_canvas_draft_composer()} className={collapsedShellClassName}>
         <div className="relative min-w-0" onPointerDown={onExpand}>
           <ComposerMediaSection modelSpec={spec} onExpand={onExpand} variant="collapsed" />
         </div>
         <ComposerPromptSection currentValue={currentValue} mode="collapsed" nodeType={nodeType} onExpand={onExpand} />
         <button
-          aria-label="Run prompt"
+          aria-label={m.workflow_canvas_run_prompt()}
           className={collapsedRunButtonClassName}
           disabled={!canSubmit || running}
           onClick={() => {
             void form.handleSubmit()
           }}
-          title={mediaActions.uploading ? 'Uploading' : 'Run prompt'}
+          title={mediaActions.uploading ? m.workflow_canvas_uploading() : m.workflow_canvas_run_prompt()}
           type="button"
         >
           <Zap aria-hidden="true" size={20} />
@@ -293,7 +297,7 @@ export function MediaComposerShell({
   }
 
   return (
-    <section aria-label="Node composer" className={composerCardClassName}>
+    <section aria-label={m.workflow_canvas_node_composer()} className={composerCardClassName}>
       <div className={composerBodyClassName}>
         <div className={attachmentLayerClassName}>
           <ComposerMediaSection modelSpec={spec} variant="attachment" />

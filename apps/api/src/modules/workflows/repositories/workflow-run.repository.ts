@@ -1,3 +1,4 @@
+import type { LocalizedErrorDetails } from '@mina/contracts/schemas/api-error'
 import type { WorkflowRun } from '@mina/contracts/modules/workflows'
 
 import type {
@@ -40,7 +41,7 @@ export interface MarkRunTerminalInput {
 }
 
 export interface MarkRunFailedInput extends MarkRunTerminalInput {
-  error: string
+  error: LocalizedErrorDetails
 }
 
 export interface WorkflowRunRepository {

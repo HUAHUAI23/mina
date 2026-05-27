@@ -821,7 +821,7 @@ describe('WorkflowsService execution semantics', () => {
     const run = await workflowsService.createRun(workflow.id, { selectedNodeId: 'image' }, DEFAULT_ACCOUNT_ID)
 
     expect(run.status).toBe('failed')
-    expect(run.error).toContain('task kind does not match node type')
+    expect(run.error?.debugMessage ?? run.error?.message).toContain('task kind does not match node type')
   })
 
   test('flow group executes all roots and resolves selected run outputs by role and index', async () => {
@@ -1088,6 +1088,10 @@ describe('WorkflowsService execution semantics', () => {
 
     expect(failedRun?.status).toBe('failed')
     expect(failedRun?.nodeStates.image?.status).toBe('failed')
+    expect(failedRun?.error).toMatchObject({
+      code: 'WORKFLOW_RUN_FAILED',
+      messageKey: 'api_error_workflow_run_failed',
+    })
     const events = await workflowRunEventLog.listEvents(run.id)
     expect(events.map((event) => event.eventType)).toContain(
       'workflow.node.failed',
@@ -1095,5 +1099,43 @@ describe('WorkflowsService execution semantics', () => {
     expect(events.map((event) => event.eventType)).toContain(
       'workflow.run.failed',
     )
+  })
+
+  test('localizes persisted workflow and task errors at response time', async () => {
+    const failingProvider: TaskProvider = {
+      poll: async () => ({
+        code: 'PROVIDER_FAILED',
+        message: 'Provider failed.',
+        status: 'failed',
+      }),
+      start: async () => ({
+        code: 'PROVIDER_FAILED',
+        message: 'Provider failed.',
+        status: 'failed',
+      }),
+    }
+    const { tasksService, workflowsService } = createServices(failingProvider)
+    const workflow = await workflowsService.createWorkflow({
+      name: 'localized workflow failure',
+      nodes: [imageNode('image', 1)],
+      edges: [],
+    }, DEFAULT_ACCOUNT_ID)
+
+    const run = await workflowsService.createRun(workflow.id, { selectedNodeId: 'image' }, DEFAULT_ACCOUNT_ID)
+    await tasksService.startQueuedTasks()
+    await workflowsService.reconcileRunningRuns()
+
+    const localizedRun = await workflowsService.getRun(run.id, DEFAULT_ACCOUNT_ID, 'zh-Hans')
+    const nodeTask = (await workflowsService.getNodeTasks(workflow.id, 'image', DEFAULT_ACCOUNT_ID, 'zh-Hans'))[0]?.task
+
+    expect(localizedRun.error?.code).toBe('WORKFLOW_RUN_FAILED')
+    expect(localizedRun.error?.locale).toBe('zh-Hans')
+    expect(localizedRun.error?.message).toBe('一个或多个工作流节点失败。')
+    expect(localizedRun.nodeStates.image?.error?.locale).toBe('zh-Hans')
+    expect(localizedRun.nodeStates.image?.error?.message).toBe('dev 处理请求失败。')
+    expect(nodeTask?.error?.code).toBe('PROVIDER_FAILED')
+    expect(nodeTask?.error?.locale).toBe('zh-Hans')
+    expect(nodeTask?.error?.message).toBe('dev 处理请求失败。')
+    expect(nodeTask?.error?.debugMessage).toBe('Provider failed.')
   })
 })

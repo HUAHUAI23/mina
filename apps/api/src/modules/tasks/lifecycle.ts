@@ -1,5 +1,7 @@
 import type { NodeExecutionOutput, Task } from '@mina/contracts/modules/tasks'
+import { classifyTaskError } from '@mina/i18n'
 
+import { localizedErrorFromUnknown } from '../../lib/http/localized-error'
 import { actualCostFromUsage } from './pricing'
 import type { OutputPostProcessor } from './output/output-post-processor'
 import type { TaskOutputFinalizer } from './output/task-output-finalizer'
@@ -40,6 +42,12 @@ const nowIso = (): string => new Date().toISOString()
 
 const metadataPayload = (metadata: Record<string, unknown> | undefined): Record<string, unknown> =>
   metadata ? { providerMetadata: metadata } : {}
+
+const taskErrorOptions = (task: Task, code: string): ReturnType<typeof classifyTaskError> =>
+  classifyTaskError(code, {
+    model: task.model,
+    provider: task.provider,
+  })
 
 export class TaskLifecycle {
   constructor(private readonly dependencies: TaskLifecycleDependencies) {}
@@ -278,10 +286,12 @@ export class TaskLifecycle {
     const message = error instanceof Error ? error.message : 'Task provider polling failed.'
     const retried = await this.dependencies.taskRepository.update({
       ...task,
-      error: {
-        code: 'TASK_POLL_RETRY',
-        message,
-      },
+      error: localizedErrorFromUnknown(
+        'TASK_POLL_RETRY',
+        error,
+        'Task provider polling failed.',
+        taskErrorOptions(task, 'TASK_POLL_RETRY'),
+      ),
       lastPolledAt: timestamp,
       nextRetryAt: nextRetryAtFromTransportError(retryCount, this.dependencies.config.retry),
       retryCount,
@@ -304,10 +314,12 @@ export class TaskLifecycle {
     const message = error instanceof Error ? error.message : 'Task provider start failed.'
     const retried = await this.dependencies.taskRepository.update({
       ...task,
-      error: {
-        code: 'TASK_START_RETRY',
-        message,
-      },
+      error: localizedErrorFromUnknown(
+        'TASK_START_RETRY',
+        error,
+        'Task provider start failed.',
+        taskErrorOptions(task, 'TASK_START_RETRY'),
+      ),
       nextRetryAt: nextRetryAtFromTransportError(retryCount, this.dependencies.config.retry),
       retryCount,
       updatedAt: timestamp,
@@ -327,17 +339,15 @@ export class TaskLifecycle {
     providerMetadata?: Record<string, unknown>,
   ): Promise<Task> {
     const failedAt = nowIso()
-    const message = error instanceof Error ? error.message : String(error || 'Task execution failed.')
+    const fallbackMessage = String(error || 'Task execution failed.')
+    const message = error instanceof Error ? error.message : fallbackMessage
     const { nextRetryAt: _nextRetryAt, ...taskWithoutRetry } = task
     const failed = await this.dependencies.taskRepository.update({
       ...taskWithoutRetry,
       status: 'failed',
       ...(providerStatus ? { providerStatus } : {}),
       ...(providerMetadata ? { providerMetadata } : {}),
-      error: {
-        code,
-        message,
-      },
+      error: localizedErrorFromUnknown(code, error, fallbackMessage, taskErrorOptions(task, code)),
       completedAt: failedAt,
       ...(task.mode === 'async'
         ? { lastPolledAt: failedAt }

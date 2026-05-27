@@ -45,6 +45,12 @@ All repository-facing project text should remain in English:
 8. Keep external generation providers behind the task provider registry; provider adapters must return pending results for in-progress async work instead of throwing.
 9. Do not call external generation providers directly from workflow routes or request-time workflow reconciliation. Create durable queued tasks and let the scheduler/worker path start and poll them.
 10. Use task idempotency keys for client-submitted task retries instead of creating duplicate provider jobs.
+11. API errors must expose stable `error.code` values. Treat localized `error.message` as display text only.
+12. Throw `HttpError` with English `fallbackMessage`, a semantic code, and a catalog `messageKey` whenever the error is user-facing.
+13. Keep translation params primitive and safe to expose. Do not put secrets, stack traces, raw provider payloads, presigned URLs, SQL text, or credential-bearing URLs in `params`.
+14. Use `apiValidator` for route validation so schema failures become `VALIDATION_FAILED` responses with structured `issues`.
+15. Persist durable task/workflow errors as semantic code, message key, primitive params, and debug fallback text. Do not persist localized strings in business state.
+16. Provider adapters and task lifecycle code should classify known provider failures into Mina/provider error categories and keep raw provider details in logs or debug fields.
 
 ## Frontend Rules
 
@@ -62,6 +68,21 @@ All repository-facing project text should remain in English:
 12. Prefer Tailwind's named scale and modern shorthand over arbitrary values: use classes such as `space-y-px`, `mt-px`, `rounded-sm`, `bg-linear-to-t`, and `border-(--token)` when they express the value cleanly. Arbitrary values are acceptable for project-specific geometry, CSS functions, third-party variables, or exact design values that do not fit the scale.
 13. Keep Tailwind class names statically discoverable. For variants selected by data or props, map complete class strings instead of constructing class fragments dynamically.
 14. Avoid high-cost GPU/compositing effects in app UI: do not use `backdrop-blur`, `filter: blur()`, `drop-shadow()`, `mix-blend-mode`, `mask-image`, or decorative opacity-plus-transform animations. Use flat color, borders, rings, and static shadows instead. React Flow transforms required for pan/zoom, node positioning, edge labels, and drag geometry are allowed as runtime interaction mechanics.
+15. User-visible UI text should use locale-bound messages from `useMessages()`. Do not add new hardcoded copy in JSX except brand names, user-authored data, provider/model identifiers, route paths, or test-only fixtures.
+16. Use `I18nProvider` and `useI18n` for the current locale. Do not add feature-local locale state for global language selection, Paraglide global locale overrides, or route remount keys to force translated UI updates.
+17. Send the current locale to API calls through the shared client header behavior instead of per-feature request code.
+18. Use `@mina/i18n` formatter helpers for visible dates, times, and numbers. Keep API/storage timestamps as ISO strings.
+19. Keep locale switches layout-stable. Do not clear React Query caches, reset auth state, or rewrite routes solely because the locale changed.
+
+## Internationalization Rules
+
+1. `@mina/i18n` owns the first shared `en` and `zh-Hans` catalogs.
+2. Add messages with semantic keys such as `workflow_canvas_run_button`, not English-text-derived identifiers.
+3. Keep punctuation and surrounding words inside translations. Use params instead of string concatenation for variable content.
+4. In web UI code, import messages through `apps/web/src/app/i18n-provider.tsx` (`useMessages()`) or the focused `apps/web/src/lib/i18n-messages.ts` adapter. Do not import `@mina/i18n/messages` directly outside that adapter, and do not import another package's internal `src/*` files.
+5. Compile Paraglide output with `bun run i18n:compile` after catalog edits. Package scripts that depend on generated messages should run this step automatically.
+6. When removing components, screens, routes, API errors, or other user-visible copy, delete the corresponding message keys from every locale catalog in the same change. Do not leave unused or stale translations behind.
+7. Do not add locale-prefixed routes or database-backed user locale preferences without an explicit product and routing design update.
 
 ## Environment Rules
 

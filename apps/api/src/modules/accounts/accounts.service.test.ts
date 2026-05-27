@@ -42,6 +42,7 @@ describe('AccountsService', () => {
       }),
     ).rejects.toMatchObject({
       code: 'ACCOUNT_NOT_INITIALIZED',
+      messageKey: 'api_error_account_not_initialized',
       status: 409,
     })
   })
