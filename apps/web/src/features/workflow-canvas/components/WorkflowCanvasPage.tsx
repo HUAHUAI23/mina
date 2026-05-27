@@ -163,7 +163,7 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
 
       <header className={headerClassName}>
         <div className={titleGroupClassName}>
-          <Link aria-label={m.workflow_canvas_back_to_list()} className={backLinkClassName} to="/canvas">
+          <Link aria-label={m.workflow_canvas_back_to_list()} className={backLinkClassName} to="/projects">
             <ArrowLeft aria-hidden="true" size={17} />
           </Link>
           <div className={titleCopyClassName}>

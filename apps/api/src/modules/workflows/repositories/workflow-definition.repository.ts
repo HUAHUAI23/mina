@@ -16,4 +16,5 @@ export interface WorkflowDefinitionRepository {
   findById(id: string): Promise<WorkflowMetadata | undefined>
   list(accountId?: string): Promise<WorkflowMetadata[]>
   touch(id: string, timestamp: string, version: number): Promise<WorkflowMetadata>
+  updateName(id: string, name: string, timestamp: string): Promise<WorkflowMetadata | undefined>
 }

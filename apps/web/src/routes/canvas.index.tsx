@@ -1,7 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-
-import { CanvasPage } from '../features/canvas/components/canvas-page'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/canvas/')({
-  component: CanvasPage,
+  beforeLoad: () => {
+    throw redirect({ to: '/projects' })
+  },
 })

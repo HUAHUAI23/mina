@@ -1,12 +1,17 @@
 import type { PropsWithChildren } from 'react'
-import { Archive, Compass, FolderOpen, LayoutGrid, Lightbulb, LogOut } from 'lucide-react'
+import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Archive, CirclePlus, Compass, FolderOpen, Layers, Lightbulb, LogOut } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Link, useLocation } from '@tanstack/react-router'
+import { formatDateTime } from '@mina/i18n'
 
 import { cn } from '@mina/ui/lib/utils'
 
 import { useAuth } from '../features/auth/components/auth-provider'
-import { useMessages } from './i18n-provider'
+import { listWorkflows } from '../features/canvas/api/workflow-list.client'
+import { workflowKeys } from '../features/workflow-canvas/api/workflow-keys'
+import { useI18n } from './i18n-provider'
 import { LocaleSwitcher } from './locale-switcher'
 import { POINTER_BACKGROUND_CSS_VARS } from './pointer-background-geometry'
 import { usePointerBackground } from './use-pointer-background'
@@ -23,24 +28,8 @@ const navigationItems: NavigationItem[] = [
   { icon: Compass, label: (m) => m.app_nav_plaza(), routeEnabled: true, to: '/' },
   { icon: Lightbulb, label: (m) => m.app_nav_ideas(), to: '/' },
   { icon: FolderOpen, label: (m) => m.app_nav_projects(), routeEnabled: true, to: '/projects' },
-  { icon: LayoutGrid, label: (m) => m.app_nav_canvas(), routeEnabled: true, to: '/canvas' },
   { icon: Archive, label: (m) => m.app_nav_asset_hub(), to: '/' },
 ]
-
-const recentProjects = [
-  {
-    id: 'neon-nights',
-    name: 'Neon Nights OST',
-    tone: 'dark',
-    updatedAt: '2h ago',
-  },
-  {
-    id: 'urban-decay',
-    name: 'Urban Decay Doc',
-    tone: 'light',
-    updatedAt: '1d ago',
-  },
-] as const
 
 const shellClassName = [
   'mina-app-shell-background relative grid h-dvh w-screen overflow-hidden text-foreground',
@@ -57,12 +46,25 @@ const navIslandClassName = [
 const brandMarkClassName = 'flex size-10 items-center justify-center rounded-[9px] bg-foreground text-primary-foreground'
 const navLinkClassName = 'flex min-h-11 items-center gap-3.5 rounded-lg px-4 text-foreground-tertiary hover:bg-surface-container-low hover:text-foreground'
 const activeNavLinkClassName = 'bg-surface-container-low text-foreground font-[750] shadow-[inset_0_0_0_1px_var(--outline-ghost)]'
+const recentCanvasLimit = 4
 
 export function AppShell({ children }: PropsWithChildren) {
-  const m = useMessages()
+  const { locale, messages: m } = useI18n()
   const { pathname } = useLocation()
-  const { logout, user } = useAuth()
+  const { isAuthenticated, logout, user } = useAuth()
   const pointerBackgroundHandlers = usePointerBackground()
+  const recentCanvasesQuery = useQuery({
+    enabled: isAuthenticated,
+    queryFn: listWorkflows,
+    queryKey: workflowKeys.list(),
+  })
+  const recentCanvases = useMemo(
+    () =>
+      [...(recentCanvasesQuery.data?.items ?? [])]
+        .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+        .slice(0, recentCanvasLimit),
+    [recentCanvasesQuery.data?.items],
+  )
   const displayName = user?.displayName || user?.username || user?.email || 'MINA User'
   const initials = displayName
     .split(/\s+/)
@@ -71,7 +73,6 @@ export function AppShell({ children }: PropsWithChildren) {
     .map((part) => part[0]?.toUpperCase())
     .join('')
     .slice(0, 2)
-  const profileLabel = user?.role === 'admin' ? m.app_profile_admin() : m.app_profile_creative_director()
 
   return (
     <main
@@ -92,7 +93,7 @@ export function AppShell({ children }: PropsWithChildren) {
           <h2 className="m-0 text-[0.68rem] font-extrabold uppercase tracking-[0.32em] text-foreground-quaternary max-md:hidden">
             {m.app_nav_heading()}
           </h2>
-          <nav className="grid gap-2 max-lg:flex max-lg:gap-1.5 max-lg:overflow-x-auto">
+          <nav className="grid min-w-0 gap-2 max-lg:flex max-lg:gap-1.5 max-lg:overflow-x-auto">
             {navigationItems.map(({ icon: Icon, label: getLabel, routeEnabled = false, to }) => {
               const active = routeEnabled && (pathname === to || (to !== '/' && pathname.startsWith(to)))
               const label = getLabel(m)
@@ -114,37 +115,49 @@ export function AppShell({ children }: PropsWithChildren) {
 
         <section className="grid gap-[17px] max-lg:hidden">
           <h2 className="m-0 text-[0.68rem] font-extrabold uppercase tracking-[0.32em] text-foreground-quaternary">
-            {m.app_recent_projects()}
+            {m.app_recent()}
           </h2>
           <div className="grid gap-2">
-            {recentProjects.map((project) => (
-              <a className="flex min-w-0 items-center gap-3 rounded-md py-1" href="/" key={project.id}>
+            {recentCanvases.map((workflow) => (
+              <Link
+                className="flex min-w-0 items-center gap-3 rounded-md py-1"
+                draggable={false}
+                key={workflow.id}
+                params={{ workflowId: workflow.id }}
+                to="/canvas/$workflowId"
+              >
                 <span
-                  className={cn(
-                    'font-display flex size-10 flex-none items-center justify-center rounded-lg bg-surface-container-low text-[0.38rem] font-extrabold tracking-[0.08em] text-primary-foreground',
-                    project.tone === 'dark' && 'bg-foreground',
-                  )}
+                  className="flex size-10 flex-none items-center justify-center rounded-lg bg-surface-container-low text-foreground-tertiary"
                   aria-hidden="true"
                 >
-                  {project.tone === 'dark' ? 'MINA' : null}
+                  <Layers size={17} strokeWidth={2.2} />
                 </span>
                 <span className="group grid min-w-0 gap-0.5">
                   <strong className="truncate text-[0.78rem] leading-tight text-foreground-secondary group-hover:text-foreground">
-                    {project.name}
+                    {workflow.name}
                   </strong>
-                  <span className="truncate text-[0.68rem] text-foreground-quaternary">{project.updatedAt}</span>
+                  <span className="truncate text-[0.68rem] text-foreground-quaternary">
+                    {formatDateTime(workflow.updatedAt, locale)}
+                  </span>
                 </span>
-              </a>
+              </Link>
             ))}
+            {!recentCanvasesQuery.isLoading && recentCanvases.length === 0 ? (
+              <p className="m-0 rounded-md bg-surface-container-low px-3 py-2 text-[0.72rem] font-bold text-foreground-quaternary">
+                {m.app_recent_empty()}
+              </p>
+            ) : null}
           </div>
         </section>
 
-        <button
-          className="mt-auto min-h-11 rounded-lg border-0 bg-foreground px-4 text-[0.76rem] font-extrabold uppercase tracking-[0.12em] text-primary-foreground hover:bg-foreground-secondary max-lg:m-0 max-lg:px-[18px] max-md:hidden"
-          type="button"
+        <Link
+          className="mt-auto flex min-h-11 items-center justify-center gap-2 rounded-lg border-0 bg-foreground px-4 text-[0.76rem] font-extrabold uppercase tracking-[0.12em] text-primary-foreground hover:bg-foreground-secondary max-lg:m-0 max-lg:px-[18px] max-md:hidden"
+          search={{ action: 'create-canvas' }}
+          to="/projects"
         >
-          {m.app_new_project()}
-        </button>
+          <CirclePlus aria-hidden="true" size={16} />
+          {m.app_new_canvas()}
+        </Link>
       </aside>
 
       <section
@@ -155,9 +168,8 @@ export function AppShell({ children }: PropsWithChildren) {
           <div aria-hidden="true" />
           <div className="flex items-center gap-3.5">
             <LocaleSwitcher className="max-md:h-10 max-md:px-2.5" compact />
-            <div className="grid justify-items-end gap-px max-md:hidden">
+            <div className="grid justify-items-end max-md:hidden">
               <strong className="text-[0.82rem] leading-tight">{displayName}</strong>
-              <span className="text-[0.72rem] text-foreground-tertiary">{profileLabel}</span>
             </div>
             <div
               className="flex h-11 w-11 items-center justify-center rounded-full bg-foreground text-[0.78rem] font-extrabold text-primary-foreground"

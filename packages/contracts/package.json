@@ -28,6 +28,10 @@
       "types": "./src/modules/pricing/pricing.schemas.ts",
       "default": "./src/modules/pricing/pricing.schemas.ts"
     },
+    "./modules/projects": {
+      "types": "./src/modules/projects/project.schemas.ts",
+      "default": "./src/modules/projects/project.schemas.ts"
+    },
     "./modules/tasks": {
       "types": "./src/modules/tasks/task.schemas.ts",
       "default": "./src/modules/tasks/task.schemas.ts"

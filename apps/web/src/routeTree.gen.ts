@@ -12,7 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as CanvasRouteImport } from './routes/canvas'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ProjectsIndexRouteImport } from './routes/projects.index'
 import { Route as CanvasIndexRouteImport } from './routes/canvas.index'
+import { Route as ProjectsProjectIdRouteImport } from './routes/projects.$projectId'
 import { Route as CanvasWorkflowIdRouteImport } from './routes/canvas.$workflowId'
 
 const ProjectsRoute = ProjectsRouteImport.update({
@@ -30,10 +32,20 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProjectsRoute,
+} as any)
 const CanvasIndexRoute = CanvasIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => CanvasRoute,
+} as any)
+const ProjectsProjectIdRoute = ProjectsProjectIdRouteImport.update({
+  id: '/$projectId',
+  path: '/$projectId',
+  getParentRoute: () => ProjectsRoute,
 } as any)
 const CanvasWorkflowIdRoute = CanvasWorkflowIdRouteImport.update({
   id: '/$workflowId',
@@ -44,42 +56,61 @@ const CanvasWorkflowIdRoute = CanvasWorkflowIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/canvas': typeof CanvasRouteWithChildren
-  '/projects': typeof ProjectsRoute
+  '/projects': typeof ProjectsRouteWithChildren
   '/canvas/$workflowId': typeof CanvasWorkflowIdRoute
+  '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/canvas/': typeof CanvasIndexRoute
+  '/projects/': typeof ProjectsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/projects': typeof ProjectsRoute
   '/canvas/$workflowId': typeof CanvasWorkflowIdRoute
+  '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/canvas': typeof CanvasIndexRoute
+  '/projects': typeof ProjectsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/canvas': typeof CanvasRouteWithChildren
-  '/projects': typeof ProjectsRoute
+  '/projects': typeof ProjectsRouteWithChildren
   '/canvas/$workflowId': typeof CanvasWorkflowIdRoute
+  '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/canvas/': typeof CanvasIndexRoute
+  '/projects/': typeof ProjectsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/canvas' | '/projects' | '/canvas/$workflowId' | '/canvas/'
+  fullPaths:
+    | '/'
+    | '/canvas'
+    | '/projects'
+    | '/canvas/$workflowId'
+    | '/projects/$projectId'
+    | '/canvas/'
+    | '/projects/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/projects' | '/canvas/$workflowId' | '/canvas'
+  to:
+    | '/'
+    | '/canvas/$workflowId'
+    | '/projects/$projectId'
+    | '/canvas'
+    | '/projects'
   id:
     | '__root__'
     | '/'
     | '/canvas'
     | '/projects'
     | '/canvas/$workflowId'
+    | '/projects/$projectId'
     | '/canvas/'
+    | '/projects/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CanvasRoute: typeof CanvasRouteWithChildren
-  ProjectsRoute: typeof ProjectsRoute
+  ProjectsRoute: typeof ProjectsRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -105,12 +136,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/projects/': {
+      id: '/projects/'
+      path: '/'
+      fullPath: '/projects/'
+      preLoaderRoute: typeof ProjectsIndexRouteImport
+      parentRoute: typeof ProjectsRoute
+    }
     '/canvas/': {
       id: '/canvas/'
       path: '/'
       fullPath: '/canvas/'
       preLoaderRoute: typeof CanvasIndexRouteImport
       parentRoute: typeof CanvasRoute
+    }
+    '/projects/$projectId': {
+      id: '/projects/$projectId'
+      path: '/$projectId'
+      fullPath: '/projects/$projectId'
+      preLoaderRoute: typeof ProjectsProjectIdRouteImport
+      parentRoute: typeof ProjectsRoute
     }
     '/canvas/$workflowId': {
       id: '/canvas/$workflowId'
@@ -135,10 +180,24 @@ const CanvasRouteChildren: CanvasRouteChildren = {
 const CanvasRouteWithChildren =
   CanvasRoute._addFileChildren(CanvasRouteChildren)
 
+interface ProjectsRouteChildren {
+  ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
+  ProjectsIndexRoute: typeof ProjectsIndexRoute
+}
+
+const ProjectsRouteChildren: ProjectsRouteChildren = {
+  ProjectsProjectIdRoute: ProjectsProjectIdRoute,
+  ProjectsIndexRoute: ProjectsIndexRoute,
+}
+
+const ProjectsRouteWithChildren = ProjectsRoute._addFileChildren(
+  ProjectsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CanvasRoute: CanvasRouteWithChildren,
-  ProjectsRoute: ProjectsRoute,
+  ProjectsRoute: ProjectsRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

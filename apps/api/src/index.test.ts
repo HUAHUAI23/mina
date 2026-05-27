@@ -11,6 +11,7 @@ import type { MediaObjectResponse } from '@mina/contracts/modules/media/media-ob
 import type {
   CancelWorkflowRunResponse,
   DeleteWorkflowResponse,
+  UpdateWorkflowInput,
   WorkflowListResponse,
   WorkflowNodeTaskHistoryResponse,
   WorkflowResponse,
@@ -551,6 +552,16 @@ describe('mina api', () => {
       const detailPayload = (await detailResponse.json()) as WorkflowResponse
       expect(detailResponse.status).toBe(200)
       expect(detailPayload.item.id).toBe(workflowPayload.item.id)
+
+      const updateInput = { name: 'Renamed route workflow' } satisfies UpdateWorkflowInput
+      const updateResponse = await app.request(`/api/workflows/${workflowPayload.item.id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify(updateInput),
+      })
+      const updatePayload = (await updateResponse.json()) as WorkflowResponse
+      expect(updateResponse.status).toBe(200)
+      expect(updatePayload.item.name).toBe(updateInput.name)
 
       const nodeTasksResponse = await app.request(`/api/workflows/${workflowPayload.item.id}/nodes/image/tasks`, { headers })
       const nodeTasksPayload = (await nodeTasksResponse.json()) as WorkflowNodeTaskHistoryResponse

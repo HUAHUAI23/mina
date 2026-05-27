@@ -88,4 +88,16 @@ export class DrizzleWorkflowDefinitionRepository implements WorkflowDefinitionRe
     }
     return summaryFromRow(row)
   }
+
+  async updateName(id: string, name: string, timestamp: string): Promise<WorkflowSummary | undefined> {
+    const [row] = await this.db
+      .update(workflows)
+      .set({
+        name,
+        updatedAt: new Date(timestamp),
+      })
+      .where(and(eq(workflows.id, id), isNull(workflows.deletedAt)))
+      .returning()
+    return row ? summaryFromRow(row) : undefined
+  }
 }

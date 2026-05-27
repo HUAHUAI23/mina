@@ -49,6 +49,10 @@ export const apiErrorMessageKeys = [
   'api_error_task_poll_retry_exhausted',
   'api_error_workflow_node_failed',
   'api_error_workflow_run_failed',
+  'api_error_project_not_found',
+  'api_error_project_workflow_not_found',
+  'api_error_project_distinct_workflows_required',
+  'api_error_workflow_already_in_project',
 ] as const
 
 export type ApiErrorMessageKey = (typeof apiErrorMessageKeys)[number]
@@ -113,6 +117,10 @@ const apiErrorMessageByKey = {
   api_error_task_poll_retry_exhausted: m.api_error_task_poll_retry_exhausted,
   api_error_workflow_node_failed: m.api_error_workflow_node_failed,
   api_error_workflow_run_failed: m.api_error_workflow_run_failed,
+  api_error_project_not_found: m.api_error_project_not_found,
+  api_error_project_workflow_not_found: m.api_error_project_workflow_not_found,
+  api_error_project_distinct_workflows_required: m.api_error_project_distinct_workflows_required,
+  api_error_workflow_already_in_project: m.api_error_workflow_already_in_project,
 } satisfies Record<ApiErrorMessageKey, ApiMessageFunction>
 
 export const apiErrorMessageKeyByCode = {
@@ -132,6 +140,9 @@ export const apiErrorMessageKeyByCode = {
   MEDIA_UPLOAD_KEY_MISMATCH: 'api_error_media_upload_key_mismatch',
   MEDIA_UPLOAD_TOO_LARGE: 'api_error_media_upload_too_large',
   PRICING_RULE_NOT_FOUND: 'api_error_pricing_rule_not_found',
+  PROJECT_DISTINCT_WORKFLOWS_REQUIRED: 'api_error_project_distinct_workflows_required',
+  PROJECT_NOT_FOUND: 'api_error_project_not_found',
+  PROJECT_WORKFLOW_NOT_FOUND: 'api_error_project_workflow_not_found',
   TASK_CONFIG_INVALID: 'api_error_task_config_invalid',
   TASK_EXPIRED: 'api_error_task_expired',
   TASK_MODEL_UNSUPPORTED: 'api_error_task_model_unsupported',
@@ -164,6 +175,7 @@ export const apiErrorMessageKeyByCode = {
   WORKFLOW_RUN_NOT_FOUND: 'api_error_workflow_run_not_found',
   WORKFLOW_UPSTREAM_OUTPUT_KIND_MISMATCH: 'api_error_workflow_upstream_output_kind_mismatch',
   WORKFLOW_UPSTREAM_OUTPUT_MISSING: 'api_error_workflow_upstream_output_missing',
+  WORKFLOW_ALREADY_IN_PROJECT: 'api_error_workflow_already_in_project',
 } satisfies Record<string, ApiErrorMessageKey>
 
 export type KnownApiErrorCode = keyof typeof apiErrorMessageKeyByCode

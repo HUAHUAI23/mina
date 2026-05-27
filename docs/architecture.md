@@ -196,6 +196,7 @@ Mina now has backend contracts and API services for the generation workflow core
 - `media`: managed media object persistence for user uploads, workflow slot inputs, mirrored provider outputs, derived previews, storage usage, and object storage key ownership.
 - `tasks`: durable image/video generation task lifecycle, including standalone task submission, sync image tasks, async video tasks, input/output resource snapshots, output media finalization, idempotent client submission, and task cancellation.
 - `pricing`: model and pricing-key aware estimates for token, image-count, and duration billing.
+- `projects`: account-scoped collections of workflow canvases. Each workflow can belong to at most one project through `project_workflows`; creating a project from two canvases and adding a canvas to a project are validated server-side and exposed through `/api/projects`.
 - `workflows`: normalized React Flow-compatible workflow definitions, ordered node `mediaSlots`, ordinary canvas node execution, flow-group DAG execution, row-level node run states, scheduler leases, and run cancellation.
 
 The workflow module keeps public services small and splits stable internal rules by responsibility:
@@ -213,9 +214,9 @@ The workflow module keeps public services small and splits stable internal rules
 - `validation.ts`: persisted canvas validation, media slot/edge consistency checks, and flow-group scope/cycle validation.
 - `group-conversion.ts`: pure helper for converting `flow_group` nodes to visual-only `node_group` nodes and downgrading `run_output` media slot sources to `current_media`.
 
-The application runtime is PostgreSQL-only for business persistence. `createAppDependencies()` wires account, pricing, media, task, workflow, and event services to Drizzle repositories backed by the PostgreSQL schema in `apps/api/src/db/schema.ts`. Unit and route tests use fakes under `apps/api/src/test` rather than production in-memory repositories.
+The application runtime is PostgreSQL-only for business persistence. `createAppDependencies()` wires account, pricing, project, media, task, workflow, and event services to Drizzle repositories backed by the PostgreSQL schema in `apps/api/src/db/schema.ts`. Unit and route tests use fakes under `apps/api/src/test` rather than production in-memory repositories.
 
-User ownership is represented by `users` and `accounts`. Product data that belongs to a tenant stores `account_id`; `tasks`, `task_resources`, `media_objects`, `workflows`, and `workflow_runs` reference `accounts.id`. Event and link tables remain subordinate to their parent task or workflow run records.
+User ownership is represented by `users` and `accounts`. Product data that belongs to a tenant stores `account_id`; `tasks`, `task_resources`, `media_objects`, `projects`, `workflows`, and `workflow_runs` reference `accounts.id`. Event and link tables remain subordinate to their parent task or workflow run records.
 
 Background work is handled by a Croner-backed `BackgroundTaskScheduler` when `MINA_SCHEDULER_ENABLED=true`. Each tick starts due `queued` tasks, polls due async provider tasks, and then reconciles running workflow runs. The Drizzle task repository claims due queued/running tasks with `FOR UPDATE SKIP LOCKED` before provider calls. Workflow reconciliation uses the same PostgreSQL coordination model: running workflow runs are claimed by `next_reconcile_at` and expired lease fields, then terminal/release updates include the lease token so another scheduler cannot finish a run it no longer owns.
 
@@ -305,7 +306,7 @@ The app-level provider chain includes `I18nProvider` outside auth/session provid
 
 The root route owns the persistent browser-sized application shell through `apps/web/src/app/app-shell.tsx`. The shell defines the floating navigation island, top bar, route frame, footer note, and overall viewport contract. Route components should fill the route frame and must not recreate the global app skeleton. The shell is locked to `100dvh` with `overflow: hidden` on the document root so normal route switches keep the same browser-screen proportion instead of making the page scroll.
 
-Current route content includes Plaza (`/`), Projects (`/projects`), and Canvas (`/canvas`). These route pages follow `apps/web/DESIGN.md` with editorial spacing, floating cards, tonal surface hierarchy, and controlled local scrolling inside the route frame. Route pages must not import page-specific shell chrome from static HTML mockups; the shared shell owns navigation, profile chrome, and screen proportions. The page avoids expensive visual effects such as `backdrop-filter`, `filter`, `drop-shadow`, `mix-blend-mode`, masks, and animation-heavy opacity/transform combinations.
+Current route content includes Plaza (`/`) and Projects (`/projects`). The Projects route uses one mixed resource grid: project folder cards appear first and ungrouped workflow canvas cards follow them. Dragging one canvas onto another creates a project, and dragging a canvas onto a project adds it. Clicking a project opens `/projects/$projectId`, a scoped project detail route that lists only that project's canvases and exposes the remove-from-project action. The workflow editor still lives at `/canvas/$workflowId`, while `/canvas` redirects to `/projects`. These route pages follow `apps/web/DESIGN.md` with editorial spacing, floating cards, tonal surface hierarchy, and controlled local scrolling inside the route frame. Route pages must not import page-specific shell chrome from static HTML mockups; the shared shell owns navigation, profile chrome, and screen proportions. The page avoids expensive visual effects such as `backdrop-filter`, `filter`, `drop-shadow`, `mix-blend-mode`, masks, and animation-heavy opacity/transform combinations.
 
 ## API Contract Boundary
 
@@ -336,7 +337,7 @@ The API uses Bun tests against `app.request(...)`, which allows route-level beha
 
 ## Planned Next Step for Database Work
 
-The account, task, pricing, media object, and workflow modules have Drizzle-backed schema coverage. The remaining persistence work is:
+The account, task, pricing, project, media object, and workflow modules have Drizzle-backed schema coverage. The remaining persistence work is:
 
 1. Add integration tests that run migrations against a disposable PostgreSQL database.
 2. Move the existing scheduler loop from the API process to a separate worker process if API-process scheduling is not enough operationally.

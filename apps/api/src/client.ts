@@ -20,10 +20,21 @@ import type {
   MediaObjectResponse,
 } from '@mina/contracts/modules/media/media-object'
 import type {
+  AddWorkflowToProjectInput,
+  CreateProjectFromWorkflowsInput,
+  CreateProjectInput,
+  DeleteProjectResponse,
+  ProjectResponse,
+  ProjectsOverviewResponse,
+  RemoveWorkflowFromProjectResponse,
+  UpdateProjectInput,
+} from '@mina/contracts/modules/projects'
+import type {
   CancelWorkflowRunResponse,
   CreateWorkflowInput,
   CreateWorkflowRunInput,
   DeleteWorkflowResponse,
+  UpdateWorkflowInput,
   WorkflowListResponse,
   WorkflowNodeTaskHistoryResponse,
   WorkflowResponse,
@@ -65,6 +76,26 @@ type ClientSchema = {
     $get: JsonEndpoint<{}, TaskListResponse>
     $post: JsonEndpoint<{ json: CreateTaskInput }, TaskResponse, 201>
   }
+  '/api/projects/overview': {
+    $get: JsonEndpoint<{}, ProjectsOverviewResponse>
+  }
+  '/api/projects': {
+    $post: JsonEndpoint<{ json: CreateProjectInput }, ProjectResponse, 201>
+  }
+  '/api/projects/from-workflows': {
+    $post: JsonEndpoint<{ json: CreateProjectFromWorkflowsInput }, ProjectResponse, 201>
+  }
+  '/api/projects/:id': {
+    $get: JsonEndpoint<{ param: { id: string } }, ProjectResponse>
+    $patch: JsonEndpoint<{ json: UpdateProjectInput; param: { id: string } }, ProjectResponse>
+    $delete: JsonEndpoint<{ param: { id: string } }, DeleteProjectResponse>
+  }
+  '/api/projects/:id/workflows': {
+    $post: JsonEndpoint<{ json: AddWorkflowToProjectInput; param: { id: string } }, ProjectResponse>
+  }
+  '/api/projects/:id/workflows/:workflowId': {
+    $delete: JsonEndpoint<{ param: { id: string; workflowId: string } }, RemoveWorkflowFromProjectResponse>
+  }
   '/api/tasks/models': {
     $get: JsonEndpoint<{}, TaskModelCatalogResponse>
   }
@@ -83,6 +114,7 @@ type ClientSchema = {
   }
   '/api/workflows/:id': {
     $get: JsonEndpoint<{ param: { id: string } }, WorkflowResponse>
+    $patch: JsonEndpoint<{ json: UpdateWorkflowInput; param: { id: string } }, WorkflowResponse>
     $delete: JsonEndpoint<{ param: { id: string } }, DeleteWorkflowResponse>
   }
   '/api/workflows/:id/nodes/:nodeId/tasks': {

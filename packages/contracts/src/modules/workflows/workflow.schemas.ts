@@ -61,6 +61,10 @@ export const CreateWorkflowSchema = z.object({
   edges: z.array(WorkflowCanvasEdgeSchema).default([]),
 })
 
+export const UpdateWorkflowSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+})
+
 export const WorkflowParamsSchema = z.object({
   id: z.string().min(1),
 })
@@ -111,6 +115,7 @@ export type CancelWorkflowRunResponse = z.infer<typeof CancelWorkflowRunResponse
 export type CreateWorkflowInput = z.infer<typeof CreateWorkflowSchema>
 export type CreateWorkflowRunInput = z.infer<typeof CreateWorkflowRunSchema>
 export type DeleteWorkflowResponse = z.infer<typeof DeleteWorkflowResponseSchema>
+export type UpdateWorkflowInput = z.infer<typeof UpdateWorkflowSchema>
 export type Workflow = z.infer<typeof WorkflowSchema>
 export type WorkflowListResponse = z.infer<typeof WorkflowListResponseSchema>
 export type WorkflowNodeTaskHistoryItem = z.infer<typeof WorkflowNodeTaskHistoryItemSchema>

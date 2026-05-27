@@ -5,6 +5,8 @@ import type { AccountsService } from '../modules/accounts/accounts.service'
 import { createHealthRoutes } from '../modules/health/health.routes'
 import { createMediaRoutes } from '../modules/media/media.routes'
 import type { MediaObjectService } from '../modules/media/media-object.service'
+import { createProjectsRoutes } from '../modules/projects/projects.routes'
+import type { ProjectsService } from '../modules/projects/projects.service'
 import type { TaskModelCatalogService } from '../modules/tasks/models/model-catalog.service'
 import { createTasksRoutes } from '../modules/tasks/tasks.routes'
 import { createWorkflowRunsRoutes } from '../modules/workflows/workflow-runs.routes'
@@ -20,6 +22,7 @@ export interface ApiRouterDependencies {
   accountsService: AccountsService
   mediaObjectService: MediaObjectService
   modelCatalogService: TaskModelCatalogService
+  projectsService: ProjectsService
   tasksService: TasksService
   workflowEventBus: WorkflowEventBus
   workflowYjsRoomService: WorkflowYjsRoomService
@@ -30,6 +33,7 @@ export const createApiRouter = ({
   accountsService,
   mediaObjectService,
   modelCatalogService,
+  projectsService,
   tasksService,
   workflowEventBus,
   workflowYjsRoomService,
@@ -40,6 +44,7 @@ export const createApiRouter = ({
     .route('/auth', createAccountsRoutes(accountsService))
     .route('/health', createHealthRoutes())
     .route('/', createMediaRoutes(mediaObjectService, accountsService))
+    .route('/projects', createProjectsRoutes(projectsService, accountsService))
     .route('/tasks', createTasksRoutes(tasksService, modelCatalogService, accountsService))
     .route('/workflows', createWorkflowsRoutes(workflowsService, accountsService))
     .route('/workflows', createWorkflowCollaborationRoutes(workflowsService, accountsService, workflowYjsRoomService))

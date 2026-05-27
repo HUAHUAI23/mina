@@ -409,6 +409,39 @@ export const workflows = pgTable(
   (table) => [index('workflows_account_updated_idx').on(table.accountId, table.updatedAt)],
 )
 
+export const projects = pgTable(
+  'projects',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    name: text('name').notNull(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    ...timestamps(),
+  },
+  (table) => [index('projects_account_updated_idx').on(table.accountId, table.updatedAt)],
+)
+
+export const projectWorkflows = pgTable(
+  'project_workflows',
+  {
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    workflowId: text('workflow_id')
+      .notNull()
+      .references(() => workflows.id),
+    sortOrder: integer('sort_order').notNull().default(0),
+    ...timestamps(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.workflowId] }),
+    uniqueIndex('project_workflows_workflow_uidx').on(table.workflowId),
+    index('project_workflows_project_sort_idx').on(table.projectId, table.sortOrder),
+  ],
+)
+
 export const workflowRuns = pgTable(
   'workflow_runs',
   {

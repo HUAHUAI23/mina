@@ -19,6 +19,7 @@ import {
   FakeMediaObjectRepository,
   FakeObjectStorage,
   FakePricingRepository,
+  FakeProjectRepository,
   FakeTaskEventLog,
   FakeTaskRepository,
   FakeWorkflowDefinitionRepository,
@@ -28,6 +29,7 @@ import {
   FakeWorkflowYjsRepository,
 } from './fakes'
 import { WorkflowYjsRoomService } from '../modules/workflows/collaboration/workflow-yjs-room.service'
+import { ProjectsService } from '../modules/projects/projects.service'
 
 export const createTestApp = () => {
   const accountsRepository = new FakeAccountsRepository()
@@ -79,11 +81,16 @@ export const createTestApp = () => {
     new FakeWorkflowRunEventLog(),
     workflowEventBus,
   )
+  const projectsService = new ProjectsService(
+    new FakeProjectRepository(workflowDefinitions),
+    workflowDefinitions,
+  )
 
   return createApp({
     accountsService: new AccountsService(accountsRepository),
     mediaObjectService,
     modelCatalogService,
+    projectsService,
     storage: new FakeObjectStorage(),
     tasksService,
     workflowEventBus,

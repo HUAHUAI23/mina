@@ -8,6 +8,8 @@ import { MediaObjectService } from '../modules/media/media-object.service'
 import { FetchRemoteMediaFetcher } from '../modules/media/remote-media-fetcher'
 import { DrizzlePricingRepository } from '../modules/pricing/pricing.drizzle-repository'
 import { PricingService } from '../modules/pricing/pricing.service'
+import { DrizzleProjectRepository } from '../modules/projects/projects.drizzle-repository'
+import { ProjectsService } from '../modules/projects/projects.service'
 import { TaskConfigAssembler } from '../modules/tasks/config/task-config-assembler'
 import { ModelRegistry } from '../modules/tasks/models/model-registry'
 import { TaskModelCatalogService } from '../modules/tasks/models/model-catalog.service'
@@ -36,6 +38,7 @@ export interface AppDependencies {
   accountsService: AccountsService
   mediaObjectService: MediaObjectService
   modelCatalogService: TaskModelCatalogService
+  projectsService: ProjectsService
   storage: ObjectStorage
   tasksService: TasksService
   workflowEventBus: InMemoryWorkflowEventBus
@@ -50,6 +53,7 @@ export const createAppDependencies = (): AppDependencies => {
   const repositories = {
     pricingRepository: new DrizzlePricingRepository(db),
     mediaObjectRepository: new DrizzleMediaObjectRepository(db),
+    projectRepository: new DrizzleProjectRepository(db),
     taskEventLog: new DrizzleTaskEventLog(db),
     taskRepository: new DrizzleTaskRepository(db),
     workflowRunEventLog: new DrizzleWorkflowRunEventLog(db),
@@ -103,11 +107,16 @@ export const createAppDependencies = (): AppDependencies => {
     repositories.workflowRunEventLog,
     workflowEventBus,
   )
+  const projectsService = new ProjectsService(
+    repositories.projectRepository,
+    repositories.workflowRepositories.definitions,
+  )
 
   return {
     accountsService: new AccountsService(accountsRepository),
     mediaObjectService,
     modelCatalogService,
+    projectsService,
     storage,
     tasksService,
     workflowEventBus,

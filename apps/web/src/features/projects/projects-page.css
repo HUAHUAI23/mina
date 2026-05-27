@@ -2,6 +2,12 @@
   background: color-mix(in oklch, var(--surface-container-high) 70%, var(--primary));
 }
 
+.mina-project-preview::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
 .mina-project-preview::before,
 .mina-project-preview[data-tone="forest"]::before {
   background:

@@ -1,6 +1,7 @@
 import type {
   CreateWorkflowInput,
   CreateWorkflowRunInput,
+  UpdateWorkflowInput,
   Workflow,
   WorkflowNodeTaskHistoryItem,
   WorkflowRun,
@@ -143,6 +144,18 @@ export class WorkflowsService {
 
   async listWorkflows(accountId: string): Promise<WorkflowSummary[]> {
     return this.repositories.definitions.list(accountId)
+  }
+
+  async updateWorkflow(id: string, input: UpdateWorkflowInput, accountId: string): Promise<Workflow> {
+    await this.getWorkflow(id, accountId)
+    const metadata = await this.repositories.definitions.updateName(id, input.name, nowIso())
+    if (!metadata) {
+      throw new HttpError(404, 'WORKFLOW_NOT_FOUND', {
+        fallbackMessage: 'Workflow not found.',
+        messageKey: 'api_error_workflow_not_found',
+      })
+    }
+    return this.workflowFromSnapshot(metadata, await this.workflowYjsRoomService.snapshotForWorkflow(metadata))
   }
 
   async createRun(

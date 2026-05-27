@@ -2,6 +2,7 @@ import {
   CreateWorkflowRunSchema,
   CreateWorkflowSchema,
   DeleteWorkflowResponseSchema,
+  UpdateWorkflowSchema,
   WorkflowNodeTaskHistoryResponseSchema,
   WorkflowParamsSchema,
 } from '@mina/contracts/modules/workflows'
@@ -32,6 +33,17 @@ export const createWorkflowsRoutes = (
       const { id } = c.req.valid('param')
       return c.json({ item: await workflowsService.getWorkflow(id, actor.accountId) })
     })
+    .patch(
+      '/:id',
+      apiValidator('param', WorkflowParamsSchema),
+      apiValidator('json', UpdateWorkflowSchema),
+      async (c) => {
+        const actor = await requireAuthActor(c, accountsService)
+        const { id } = c.req.valid('param')
+        const payload = c.req.valid('json')
+        return c.json({ item: await workflowsService.updateWorkflow(id, payload, actor.accountId) })
+      },
+    )
     .delete('/:id', apiValidator('param', WorkflowParamsSchema), async (c) => {
       const actor = await requireAuthActor(c, accountsService)
       const { id } = c.req.valid('param')
