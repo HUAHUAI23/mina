@@ -361,20 +361,10 @@
   width: 14px;
 }
 
-.mina-wc-minimap.react-flow__minimap,
-.mina-wc-minimap-fallback-panel.react-flow__panel {
-  background: color-mix(
-    in oklch,
-    var(--surface-container-lowest) 92%,
-    transparent
-  );
-  border-radius: 24px;
+.mina-wc-minimap-panel {
   bottom: 18px;
-  box-shadow:
-    0 24px 54px -34px color-mix(in oklch, var(--foreground) 22%, transparent),
-    inset 0 0 0 1px var(--outline-ghost);
   margin: 0;
-  padding: 6px;
+  position: absolute;
   right: 18px;
   z-index: 18;
 }
@@ -389,19 +379,23 @@
   box-shadow:
     0 24px 54px -34px color-mix(in oklch, var(--foreground) 22%, transparent),
     inset 0 0 0 1px var(--outline-ghost);
-  padding: 6px;
+  overflow: hidden;
+  padding: 1px;
 }
 
 .mina-wc-minimap.react-flow__minimap {
-  background: color-mix(
-    in oklch,
-    var(--surface-container-lowest) 92%,
-    transparent
-  );
+  background: var(--surface-container-low);
+  border: 0;
   border-radius: 18px;
+  bottom: auto;
+  display: block;
   height: 140px;
+  inset: auto;
   margin: 0;
   overflow: hidden;
+  padding: 0;
+  position: relative;
+  right: auto;
   width: 220px;
 }
 
@@ -411,6 +405,9 @@
     var(--surface-container-low);
   background-size: 20px 20px, auto;
   border-radius: 18px;
+  display: block;
+  height: 100%;
+  width: 100%;
 }
 
 .mina-wc-minimap-fallback {
@@ -461,8 +458,7 @@
     width: auto !important;
   }
 
-  .mina-wc-minimap.react-flow__minimap,
-  .mina-wc-minimap-fallback-panel.react-flow__panel {
+  .mina-wc-minimap-panel {
     display: none;
   }
 

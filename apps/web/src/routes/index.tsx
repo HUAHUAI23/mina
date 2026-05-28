@@ -1,7 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-
-import { PlazaPage } from '../features/plaza/components/plaza-page'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/')({
-  component: PlazaPage,
+  beforeLoad: () => {
+    throw redirect({ to: '/projects' })
+  },
 })

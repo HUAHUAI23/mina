@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { formatDateTime, formatNumber } from './format'
+import { formatDateTime, formatNumber, formatRelativeTime } from './format'
 import { normalizeLocale, resolveLocale } from './locale'
 
 describe('locale helpers', () => {
@@ -23,5 +23,6 @@ describe('locale helpers', () => {
     expect(formatDateTime('2026-05-26T12:30:00.000Z', 'zh-Hans')).toContain('2026')
     expect(formatNumber(1200, 'en')).toBe('1,200')
     expect(formatNumber(1200, 'zh-Hans')).toBe('1,200')
+    expect(formatRelativeTime('2025-05-26T12:30:00.000Z', 'en', '2026-05-26T12:30:00.000Z')).toBe('1 year ago')
   })
 })

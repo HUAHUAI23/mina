@@ -89,6 +89,21 @@ Shared i18n lives in `packages/i18n`.
 
 Current i18n non-goals are URL locale routing, database-backed user locale preferences, and future server-generated artifacts such as emails or exports.
 
+## Web UI Styling Quick Rules
+
+Web UI should be Tailwind-first. Keep ordinary layout, spacing, typography, colors, borders, radii, sizing, hover, focus, and disabled states in Tailwind utilities rather than handwritten CSS.
+
+Use Tailwind's named scale before arbitrary values:
+
+- Typography: use `text-xs`, `text-sm`, `text-base`, `text-xl`, and `text-2xl` instead of equivalent `text-[...]` values.
+- Colors: use theme or palette classes such as `text-brand-accent`, `bg-gray-100`, `text-foreground`, and `text-foreground-secondary` instead of raw hex utilities like `text-[#6911d4]` or `bg-[#f3f4f6]`. `#6911d4` is the product accent color and should be referenced through the shared brand-accent token.
+- Spacing and sizing: use scale classes such as `h-10`, `h-12`, `h-16`, `size-7`, `size-10`, `px-6`, `gap-20`, and `min-h-20` instead of equivalent arbitrary values.
+- State classes: avoid `!` modifiers for active or hover states. Prefer complete class mappings, `data-*` variants, or styling an inner element when global element CSS would otherwise win.
+- Effects: prefer `border-*`, `ring-1`, `ring-inset`, `ring-outline-ghost`, and named shadows such as `shadow-floating` before arbitrary `shadow-[...]` utilities.
+- Cleanup: when removing or replacing UI components, also remove unused class hooks, stale CSS imports, and empty feature CSS files in the same change.
+
+Arbitrary Tailwind values are allowed when they represent exact product geometry or CSS that has no clean scale equivalent, such as the 295px sidebar, 258px cards, 172px previews, custom grid tracks, `scrollbar-gutter`, and percentage-based preview art positioning. Convert measured pixel values to rem when preserving exact design geometry. Repeated product colors should become named tokens in `packages/ui/src/styles/globals.css`.
+
 ## Canvas Semantics
 
 Media edges always represent target media slots.

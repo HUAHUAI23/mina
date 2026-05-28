@@ -51,6 +51,7 @@
   --color-foreground-quaternary: var(--foreground-quaternary);
   --color-foreground-faint: var(--foreground-faint);
   --color-outline-ghost: var(--outline-ghost);
+  --color-brand-accent: var(--brand-accent);
   --color-canvas-dot: var(--canvas-dot);
   --shadow-floating: var(--shadow-floating);
   --radius-2xl: var(--radius-2xl);
@@ -83,12 +84,13 @@
   --surface-container-highest: oklch(0.88 0.008 247);
   --canvas-dot: oklch(0.9 0.01 247);
   --outline-ghost: oklch(0.68 0.006 247 / 18%);
+  --brand-accent: #6911d4;
   --shadow-floating: 0 20px 40px -10px oklch(0.26 0.01 247 / 8%);
   --card: var(--surface-container-lowest);
   --card-foreground: var(--foreground);
   --popover: var(--surface-container-lowest);
   --popover-foreground: var(--foreground);
-  --primary: oklch(0.43 0.005 286);
+  --primary: var(--brand-accent);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: var(--surface-container-low);
   --secondary-foreground: var(--foreground);

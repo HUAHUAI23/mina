@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { CSSProperties, DragEvent, FormEvent, ReactNode } from 'react'
 import {
   closestCenter,
@@ -15,17 +15,15 @@ import type { DragCancelEvent, DragEndEvent, DragOverEvent, DragStartEvent, Uniq
 import { CSS } from '@dnd-kit/utilities'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { formatDateTime } from '@mina/i18n'
+import { formatRelativeTime } from '@mina/i18n'
 import type { ProjectWithWorkflows } from '@mina/contracts/modules/projects'
 import type { WorkflowSummary } from '@mina/contracts/modules/workflows'
 import {
   ArrowLeft,
-  CirclePlus,
-  Folder,
   FolderMinus,
-  Layers,
   MoreVertical,
   Pencil,
+  Plus,
   Trash2,
 } from 'lucide-react'
 
@@ -52,12 +50,15 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@mina/ui/components/dropdown-menu'
 import { Input } from '@mina/ui/components/input'
+import { Skeleton } from '@mina/ui/components/skeleton'
 import { cn } from '@mina/ui/lib/utils'
 
-import '../projects-page.css'
 import { useI18n, useMessages } from '../../../app/i18n-provider'
 import { createWorkflow, deleteWorkflow, updateWorkflow } from '../../canvas/api/workflow-list.client'
 import { workflowKeys } from '../../workflow-canvas/api/workflow-keys'
@@ -65,6 +66,7 @@ import type { WebMessages } from '../../../lib/i18n-messages'
 import { getErrorMessage } from '../../../lib/http'
 import {
   addWorkflowToProject,
+  createProject,
   createProjectFromWorkflows,
   deleteProject,
   getProject,
@@ -89,34 +91,42 @@ type DropData =
       workflow: WorkflowSummary
     }
 
-const pageClassName = 'grid min-h-0 min-w-0 content-start gap-[22px] overflow-y-auto [scrollbar-gutter:stable] px-1 py-[clamp(18px,3dvh,32px)] pb-[18px]'
-const sectionClassName = 'grid gap-4'
-const detailTitleGroupClassName = 'flex min-w-0 items-center gap-3'
-const backLinkClassName = 'flex size-10 flex-none items-center justify-center rounded-full bg-surface-container-lowest text-foreground-tertiary shadow-[inset_0_0_0_1px_var(--outline-ghost)] hover:bg-foreground hover:text-primary-foreground'
-const projectGridClassName = 'grid items-start justify-start gap-[26px] [grid-template-columns:repeat(auto-fill,178px)] max-lg:[grid-template-columns:repeat(auto-fill,minmax(164px,1fr))] max-md:grid-cols-1'
-const folderCardClassName = 'relative z-0 flex h-[252px] min-w-0 flex-col justify-between rounded-2xl bg-surface-container-low p-5 shadow-sm'
-const canvasCardClassName = 'h-[252px] min-w-0 overflow-visible rounded-2xl bg-surface-container-lowest shadow-floating'
-const newCanvasCardClassName = 'flex min-h-[252px] min-w-0 flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-outline-ghost bg-transparent font-extrabold text-foreground-tertiary hover:border-foreground-quaternary hover:text-foreground disabled:cursor-not-allowed disabled:text-foreground-quaternary'
-const iconButtonClassName = 'size-8.5 rounded-full text-foreground-quaternary hover:bg-surface-container-low hover:text-foreground'
-const activeDropClassName = 'ring-2 ring-foreground/35 ring-offset-2 ring-offset-surface'
-const overlayClassName = 'w-[178px] overflow-hidden rounded-2xl bg-surface-container-lowest shadow-floating ring-2 ring-foreground/20'
-const canvasPreviewPillClassName = 'relative z-10 m-3 inline-flex rounded-full bg-surface-container-lowest/80 px-2.5 py-1 text-[0.62rem] font-extrabold uppercase tracking-[0.12em] text-foreground-tertiary'
+const pageClassName = 'grid h-full min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden bg-surface-container-lowest'
+const pageWithoutTabsClassName = 'grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-surface-container-lowest'
+const pageHeaderClassName = 'flex min-h-20 items-center justify-between gap-4 border-b border-outline-ghost px-6 max-md:min-h-16 max-md:px-5'
+const pageTitleClassName = 'font-display m-0 text-2xl leading-tight font-bold tracking-normal text-foreground max-md:text-xl'
+const headerActionButtonClassName = 'inline-flex h-10 items-center gap-1.5 rounded-md border-0 bg-gray-100 px-3.5 text-foreground hover:bg-gray-100 hover:text-brand-accent'
+const tabsClassName = 'flex min-h-16 items-end justify-between gap-6 border-b border-outline-ghost px-6 max-md:min-h-14 max-md:px-5'
+const tabListClassName = 'flex min-w-0 items-end gap-8'
+const activeTabClassName = 'relative flex h-16 items-center border-b-2 border-foreground px-0 text-base font-bold text-foreground max-md:h-14'
+const passiveTabClassName = 'flex h-16 items-center border-0 bg-transparent px-0 text-base font-bold text-foreground-secondary hover:text-brand-accent max-md:h-14'
+const contentClassName = 'min-h-0 min-w-0 overflow-y-auto px-6 py-6 [scrollbar-gutter:stable] max-md:px-5 max-md:py-6'
+const dashboardSectionsClassName = 'grid min-h-0 min-w-0 gap-20'
+const sectionClassName = 'grid gap-6 rounded-sm outline-none'
+const sectionHeaderClassName = 'flex min-w-0 items-end justify-between gap-4 max-md:items-start'
+const sectionTitleLineClassName = 'flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1'
+const sectionTitleClassName = 'font-display m-0 truncate text-base font-bold leading-tight text-foreground'
+const sectionMetaClassName = 'm-0 text-sm font-semibold leading-tight text-foreground-secondary'
+const canvasGridClassName = 'grid min-w-0 justify-start gap-x-9 gap-y-9 [grid-template-columns:repeat(auto-fill,16.125rem)] max-sm:grid-cols-1'
+const canvasCardClassName = 'group relative w-[16.125rem] min-w-0 rounded-md p-2 outline-none hover:bg-gray-100'
+const projectCardClassName = 'group relative w-[16.125rem] min-w-0 rounded-md p-2 outline-none hover:bg-gray-100'
+const overlayClassName = 'w-[16.125rem] rounded-md bg-surface-container-lowest shadow-floating'
+const activeDropClassName = 'ring-2 ring-brand-accent ring-offset-2 ring-offset-surface-container-lowest'
+const thumbnailClassName = 'relative h-[10.75rem] overflow-hidden rounded-md border border-outline-ghost bg-surface-container-low'
+const projectThumbnailClassName = 'relative h-[10.75rem] overflow-hidden rounded-md border border-outline-ghost bg-surface-container-low'
+const newCanvasCardClassName = 'group grid w-[16.125rem] min-w-0 rounded-md border border-dashed border-outline-ghost bg-transparent p-2 text-left outline-none hover:border-brand-accent/45 hover:bg-gray-100 hover:text-brand-accent focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface-container-lowest focus-visible:outline-none disabled:cursor-not-allowed disabled:text-foreground-quaternary'
+const iconButtonClassName = 'size-7 rounded-full text-foreground-tertiary hover:bg-gray-100 hover:text-brand-accent'
+const backLinkClassName = 'flex size-10 flex-none items-center justify-center rounded-md bg-surface-container-low text-foreground-tertiary hover:bg-foreground hover:text-primary-foreground'
 const dialogInputClassName = 'h-10 bg-surface-container-lowest'
 const preventNativeLinkDrag = (event: DragEvent<HTMLAnchorElement>) => event.preventDefault()
-
-type OverviewGridItem =
-  | {
-      project: ProjectWithWorkflows
-      type: 'project'
-    }
-  | {
-      type: 'workflow'
-      workflow: WorkflowSummary
-    }
 
 type NamingDialogState =
   | {
       kind: 'create-canvas'
+      name: string
+    }
+  | {
+      kind: 'create-empty-project'
       name: string
     }
   | {
@@ -137,6 +147,8 @@ type NamingDialogState =
     }
 
 const draggableId = (workflowId: string): string => `workflow:${workflowId}`
+const recentDraggableId = (workflowId: string): string => `workflow:recent:${workflowId}`
+const recentDropId = (workflowId: string): string => `workflow:recent-drop:${workflowId}`
 const projectDropId = (projectId: string): string => `project:${projectId}`
 
 const dragDataFromUnknown = (value: unknown): DragData | undefined => {
@@ -159,12 +171,20 @@ const dropDataFromUnknown = (value: unknown): DropData | undefined => {
   return undefined
 }
 
+const workflowIdFromIdentifier = (workflowId: UniqueIdentifier): string => {
+  const parts = String(workflowId).split(':')
+  if (parts[0] === 'workflow') {
+    return parts[parts.length - 1] ?? String(workflowId)
+  }
+  return String(workflowId)
+}
+
 const workflowById = (
   projects: ProjectWithWorkflows[],
   ungroupedWorkflows: WorkflowSummary[],
   workflowId: UniqueIdentifier,
 ): WorkflowSummary | undefined => {
-  const id = String(workflowId).replace(/^workflow:/, '')
+  const id = workflowIdFromIdentifier(workflowId)
   return [...ungroupedWorkflows, ...projects.flatMap((project) => project.workflows)].find((workflow) => workflow.id === id)
 }
 
@@ -183,7 +203,7 @@ const createAnnouncements = (m: WebMessages) => ({
       return m.projects_drag_cancel()
     }
     if (drop.type === 'project') {
-      return m.projects_drag_end_project({ title: workflow.name, project: drop.project.name })
+      return m.projects_drag_end_project({ project: drop.project.name, title: workflow.name })
     }
     if (workflow.id === drop.workflow.id) {
       return m.projects_drag_cancel()
@@ -197,7 +217,7 @@ const createAnnouncements = (m: WebMessages) => ({
       return undefined
     }
     if (drop.type === 'project') {
-      return m.projects_drag_over_project({ title: workflow.name, project: drop.project.name })
+      return m.projects_drag_over_project({ project: drop.project.name, title: workflow.name })
     }
     if (workflow.id === drop.workflow.id) {
       return undefined
@@ -210,50 +230,205 @@ const createAnnouncements = (m: WebMessages) => ({
   },
 })
 
-interface ProjectCardProps {
-  isOver: boolean
+const previewTones = ['paper', 'dashboard', 'icons', 'frames'] as const
+
+const previewToneForId = (id: string): (typeof previewTones)[number] => {
+  const total = Array.from(id).reduce((sum, char) => sum + char.charCodeAt(0), 0)
+  return previewTones[total % previewTones.length] ?? 'paper'
+}
+
+interface CanvasPreviewProps {
+  id: string
+  label: string
+}
+
+function CanvasPreview({ id, label }: CanvasPreviewProps) {
+  const tone = previewToneForId(id)
+  const isDashboard = tone === 'dashboard'
+  const isIcons = tone === 'icons'
+  const isFrames = tone === 'frames'
+
+  return (
+    <div className={thumbnailClassName} aria-label={label}>
+      <div className="absolute inset-0 bg-linear-to-br from-surface-container-lowest via-surface-container-low to-surface-container-high" />
+      <svg aria-hidden="true" className="absolute inset-0 size-full text-foreground-faint" fill="none" viewBox="0 0 242 172">
+        <path d="M26 39h190M26 86h190M26 133h190M73 18v136M121 18v136M169 18v136" stroke="currentColor" strokeOpacity="0.18" />
+        <path d="M37 116c32-53 53-49 75 1 19 42 46 43 87-12" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
+        <circle cx="76" cy="66" r="18" stroke="currentColor" strokeOpacity="0.55" strokeWidth="3" />
+      </svg>
+      <div className="absolute left-5 top-5 h-20 w-16 rounded-md bg-surface-container-lowest/72 ring-1 ring-outline-ghost ring-inset" />
+      <div className="absolute right-5 top-5 h-24 w-24 rounded-md bg-surface-container-lowest/78 ring-1 ring-outline-ghost ring-inset" />
+      <div className="absolute right-9 top-9 size-9 rounded-full bg-brand-accent/18" />
+      <div className="absolute right-16 top-16 h-8 w-11 rounded-sm bg-brand-accent/55" />
+      <div className="absolute inset-x-5 bottom-5 grid gap-2 rounded-md bg-surface-container-lowest/72 p-3 ring-1 ring-outline-ghost ring-inset">
+        <Skeleton className="h-2.5 w-28 rounded-full bg-surface-container-high" />
+        <Skeleton className="h-2 w-36 rounded-full bg-surface-container" />
+      </div>
+      {isDashboard ? (
+        <div className="absolute left-8 top-9 grid w-16 grid-cols-2 gap-1.5">
+          <span className="h-6 rounded-sm bg-brand-accent/70" />
+          <span className="h-6 rounded-sm bg-surface-container-highest" />
+          <span className="col-span-2 h-4 rounded-sm bg-foreground/55" />
+        </div>
+      ) : null}
+      {isIcons ? (
+        <div className="absolute left-9 top-10 grid grid-cols-2 gap-1.5 text-brand-accent">
+          <span className="size-5 rounded-full bg-current/75" />
+          <span className="size-5 rounded-sm bg-current/55" />
+          <span className="size-5 rounded-full border-2 border-current" />
+          <span className="size-5 rounded-sm bg-foreground-faint" />
+        </div>
+      ) : null}
+      {isFrames ? (
+        <div className="absolute left-8 top-8 flex gap-1.5">
+          <span className="h-12 w-6 rounded-sm bg-surface-container-lowest/85 ring-1 ring-outline-ghost ring-inset" />
+          <span className="h-12 w-6 rounded-sm bg-brand-accent/62 ring-1 ring-outline-ghost ring-inset" />
+          <span className="h-12 w-6 rounded-sm bg-surface-container-highest ring-1 ring-outline-ghost ring-inset" />
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+interface ProjectPreviewProps {
   m: WebMessages
   project: ProjectWithWorkflows
+}
+
+function ProjectPreview({ m, project }: ProjectPreviewProps) {
+  const previewWorkflows = project.workflows.slice(0, 3)
+  const layerCount = Math.max(previewWorkflows.length, 3)
+
+  return (
+    <div className={projectThumbnailClassName} aria-label={m.projects_canvas_preview_label()}>
+      <div className="absolute inset-0 bg-linear-to-br from-surface-container-lowest via-surface-container-low to-surface-container-high" />
+      <svg aria-hidden="true" className="absolute inset-0 size-full text-foreground-faint" fill="none" viewBox="0 0 242 172">
+        <path d="M30 128 78 82l31 22 28-24 76 57" stroke="currentColor" strokeLinecap="round" strokeOpacity="0.46" strokeWidth="3" />
+        <circle cx="190" cy="48" r="16" stroke="currentColor" strokeOpacity="0.46" strokeWidth="3" />
+      </svg>
+      <div className="absolute inset-x-5 top-5 flex items-center justify-between">
+        <Skeleton className="h-2.5 w-20 rounded-full bg-surface-container-highest/80" />
+        <span className="rounded-full bg-brand-accent/10 px-2.5 py-1 text-xs font-bold text-brand-accent ring-1 ring-brand-accent/10 ring-inset">
+          {project.workflows.length}
+        </span>
+      </div>
+      <div className="absolute inset-x-8 top-16 h-20">
+        {Array.from({ length: layerCount }).map((_, index) => (
+          <span
+            className={cn(
+              'absolute h-16 w-32 rounded-md bg-surface-container-lowest/78 ring-1 ring-outline-ghost ring-inset',
+              index === 0 && 'left-0 top-2',
+              index === 1 && 'left-8 top-0 bg-surface-container-lowest/88',
+              index === 2 && 'left-16 top-4 bg-brand-accent/12',
+            )}
+            key={index}
+          />
+        ))}
+      </div>
+      <div className="absolute inset-x-5 bottom-5 grid gap-2">
+        <Skeleton className="h-2.5 w-28 rounded-full bg-surface-container-high" />
+        <Skeleton className="h-2 w-20 rounded-full bg-surface-container" />
+      </div>
+    </div>
+  )
+}
+
+interface NewCanvasCardProps {
+  disabled: boolean
+  label: string
+  onClick(): void
+}
+
+function NewCanvasCard({ disabled, label, onClick }: NewCanvasCardProps) {
+  return (
+    <button className={newCanvasCardClassName} disabled={disabled} onClick={onClick} type="button">
+      <div className="relative h-[10.75rem] overflow-hidden rounded-md border border-dashed border-outline-ghost bg-surface-container-low/35 p-4 transition-colors group-hover:border-brand-accent/35 group-hover:bg-surface-container-lowest">
+        <svg aria-hidden="true" className="absolute inset-0 size-full text-foreground-faint/45" fill="none" viewBox="0 0 242 172">
+          <path d="M35 132 89 80l29 25 23-19 62 46" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
+          <circle cx="179" cy="58" r="12" stroke="currentColor" strokeWidth="3" />
+          <path d="M42 48h65M42 66h42" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
+        </svg>
+        <div className="absolute inset-4 rounded-md border border-dashed border-outline-ghost bg-surface-container-lowest/50 transition-colors group-hover:border-brand-accent/25" />
+        <div className="absolute left-7 top-7 size-3 rounded-full border border-brand-accent/45" />
+        <div className="absolute right-8 top-8 h-10 w-8 rounded-sm bg-brand-accent/12 ring-1 ring-brand-accent/10 ring-inset" />
+        <div className="absolute right-14 top-16 h-10 w-8 rounded-sm bg-surface-container-high ring-1 ring-outline-ghost ring-inset" />
+        <div className="absolute inset-x-7 bottom-7 grid gap-2">
+          <Skeleton className="h-2 w-24 rounded-full bg-surface-container-high" />
+          <Skeleton className="h-2 w-32 rounded-full bg-surface-container" />
+        </div>
+        <div className="absolute inset-0 grid place-items-center">
+          <span className="flex size-12 items-center justify-center rounded-full bg-surface-container-lowest text-brand-accent shadow-floating ring-1 ring-outline-ghost ring-inset transition-colors group-hover:bg-brand-accent group-hover:text-primary-foreground">
+            <Plus aria-hidden="true" size={24} />
+          </span>
+        </div>
+      </div>
+      <span className="mt-3 block px-1 text-xs font-bold text-foreground-tertiary group-hover:text-brand-accent">{label}</span>
+    </button>
+  )
+}
+
+const latestUpdatedAt = (workflows: WorkflowSummary[]): string | undefined =>
+  workflows.reduce<string | undefined>((latest, workflow) => {
+    if (!latest || Date.parse(workflow.updatedAt) > Date.parse(latest)) {
+      return workflow.updatedAt
+    }
+    return latest
+  }, undefined)
+
+interface ProjectCardProps {
+  locale: ReturnType<typeof useI18n>['locale']
+  m: WebMessages
+  project: ProjectWithWorkflows
+  isOver: boolean
+  mutationPending: boolean
   onDelete(project: ProjectWithWorkflows): void
   onRename(project: ProjectWithWorkflows): void
 }
 
-function ProjectCard({ isOver, m, onDelete, onRename, project }: ProjectCardProps) {
-  const { setNodeRef } = useDroppable({
+function ProjectCard({ isOver, locale, m, mutationPending, onDelete, onRename, project }: ProjectCardProps) {
+  const { setNodeRef: setDroppableNodeRef } = useDroppable({
     data: {
-      project,
       type: 'project',
+      project,
     } satisfies DropData,
+    disabled: mutationPending,
     id: projectDropId(project.id),
   })
 
   return (
-    <article
-      className={cn(folderCardClassName, isOver && activeDropClassName)}
-      ref={setNodeRef}
-    >
-      <div className="absolute inset-x-3.5 -top-2 -z-10 h-7 rounded-2xl bg-surface-container-high" aria-hidden="true" />
+    <article className={cn(projectCardClassName, isOver && activeDropClassName)} ref={setDroppableNodeRef}>
       <Link
         aria-label={m.projects_open_project({ title: project.name })}
-        className="absolute inset-0 z-10 rounded-2xl focus-visible:ring-2 focus-visible:ring-foreground/35 focus-visible:ring-offset-2 focus-visible:ring-offset-surface focus-visible:outline-none"
+        className="block rounded-md focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface-container-lowest focus-visible:outline-none"
         draggable={false}
         onDragStart={preventNativeLinkDrag}
         params={{ projectId: project.id }}
         to="/projects/$projectId"
-      />
-      <div
-        className="mina-project-folder-icon flex size-10.5 items-center justify-center rounded-xl bg-surface-container-lowest text-foreground-tertiary"
-        data-accent={project.workflows.length > 3 ? 'cool' : 'soft'}
       >
-        <Folder aria-hidden="true" size={26} fill="currentColor" strokeWidth={1.6} />
-      </div>
-      <div className="grid gap-2 text-left">
-        <h2 className="font-display m-0 text-[0.96rem] leading-[1.18] text-foreground">{project.name}</h2>
-        <div className="relative z-20 flex items-center justify-between gap-2">
-          <p className="mt-0 flex items-center gap-1.5 text-[0.66rem] uppercase text-foreground-tertiary">
-            <Layers aria-hidden="true" size={14} />
-            {m.projects_canvas_count({ count: project.workflows.length })}
+        <ProjectPreview m={m} project={project} />
+      </Link>
+      <div className="mt-3 flex min-w-0 items-start justify-between gap-2 px-1">
+        <Link
+          aria-label={m.projects_open_project({ title: project.name })}
+          className="grid min-w-0 gap-1 text-left"
+          draggable={false}
+          onDragStart={preventNativeLinkDrag}
+          params={{ projectId: project.id }}
+          to="/projects/$projectId"
+        >
+          <h3 className="font-display m-0 truncate text-base leading-tight font-semibold text-foreground">{project.name}</h3>
+          <p className="m-0 truncate text-sm font-semibold text-foreground-secondary">
+            {m.projects_document_count_meta({
+              count: project.workflows.length,
+              time: formatRelativeTime(project.updatedAt, locale),
+            })}
           </p>
+        </Link>
+        <div
+          className="flex flex-none items-center gap-1"
+          onKeyDown={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
           <ResourceActions
             deleteLabel={m.projects_delete_project()}
             editLabel={m.projects_rename_project()}
@@ -267,26 +442,170 @@ function ProjectCard({ isOver, m, onDelete, onRename, project }: ProjectCardProp
   )
 }
 
+interface ResourceGridProps {
+  isLoading: boolean
+  locale: ReturnType<typeof useI18n>['locale']
+  m: WebMessages
+  mutationPending: boolean
+  overId: UniqueIdentifier | null
+  projects: ProjectWithWorkflows[]
+  workflows: WorkflowSummary[]
+  onCreateCanvas(): void
+  onDeleteProject(project: ProjectWithWorkflows): void
+  onMoveToProject(project: ProjectWithWorkflows, workflow: WorkflowSummary): void
+  onDelete(workflow: WorkflowSummary): void
+  onRenameProject(project: ProjectWithWorkflows): void
+  onRename(workflow: WorkflowSummary): void
+}
+
+function ResourceGrid({
+  isLoading,
+  locale,
+  m,
+  mutationPending,
+  onCreateCanvas,
+  onDelete,
+  onDeleteProject,
+  onMoveToProject,
+  onRename,
+  onRenameProject,
+  overId,
+  projects,
+  workflows,
+}: ResourceGridProps) {
+  const itemCount = projects.length + workflows.length
+  const latest = latestUpdatedAt([
+    ...workflows,
+    ...projects.map((project) => ({
+      accountId: project.accountId,
+      createdAt: project.createdAt,
+      id: project.id,
+      name: project.name,
+      updatedAt: project.updatedAt,
+      version: 0,
+    })),
+  ])
+
+  return (
+    <section className={sectionClassName}>
+      <div className={sectionHeaderClassName}>
+        <div className={sectionTitleLineClassName}>
+          <h2 className={sectionTitleClassName}>{m.projects_recent_resources()}</h2>
+          {itemCount > 0 && latest ? (
+            <p className={sectionMetaClassName}>
+              {m.projects_document_count_meta({ count: itemCount, time: formatRelativeTime(latest, locale) })}
+            </p>
+          ) : null}
+        </div>
+      </div>
+
+      <div className={canvasGridClassName}>
+        {projects.map((project) => (
+          <ProjectCard
+            key={project.id}
+            isOver={overId === projectDropId(project.id)}
+            locale={locale}
+            m={m}
+            mutationPending={mutationPending}
+            onDelete={onDeleteProject}
+            onRename={onRenameProject}
+            project={project}
+          />
+        ))}
+        {workflows.map((workflow) => (
+          <DraggableWorkflowCard
+            disabled={mutationPending}
+            isOver={overId === draggableId(workflow.id)}
+            key={workflow.id}
+            locale={locale}
+            m={m}
+            moveProjects={projects}
+            onDelete={onDelete}
+            onMoveToProject={(project) => onMoveToProject(project, workflow)}
+            onRename={onRename}
+            workflow={workflow}
+          />
+        ))}
+        {!isLoading ? <NewCanvasCard disabled={mutationPending} label={m.projects_new_canvas()} onClick={onCreateCanvas} /> : null}
+      </div>
+    </section>
+  )
+}
+
+interface RecentCanvasSectionProps {
+  locale: ReturnType<typeof useI18n>['locale']
+  m: WebMessages
+  mutationPending: boolean
+  ungroupedWorkflowIds: ReadonlySet<string>
+  workflows: WorkflowSummary[]
+}
+
+function RecentCanvasSection({ locale, m, mutationPending, ungroupedWorkflowIds, workflows }: RecentCanvasSectionProps) {
+  return (
+    <section className={sectionClassName}>
+      <div className={canvasGridClassName}>
+        {workflows.map((workflow) =>
+          ungroupedWorkflowIds.has(workflow.id) ? (
+            <DraggableWorkflowCard
+              disabled={mutationPending}
+              dragId={recentDraggableId(workflow.id)}
+              dropDisabled
+              dropId={recentDropId(workflow.id)}
+              key={workflow.id}
+              locale={locale}
+              m={m}
+              workflow={workflow}
+            />
+          ) : (
+            <WorkflowCard
+              dropDisabled
+              dropId={recentDropId(workflow.id)}
+              key={workflow.id}
+              locale={locale}
+              m={m}
+              workflow={workflow}
+            />
+          ),
+        )}
+        {workflows.length === 0 ? (
+          <div className="grid min-h-40 content-center rounded-md border border-dashed border-outline-ghost bg-surface-container-low px-6 py-8 text-foreground-tertiary">
+            <h2 className="m-0 text-base font-bold text-foreground">{m.projects_empty_title()}</h2>
+            <p className="m-0 mt-1 text-sm leading-relaxed">{m.projects_empty_body()}</p>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  )
+}
+
 interface WorkflowCardProps {
   actionSlot?: ReactNode
+  dropDisabled?: boolean
+  dropId?: string
   isOver?: boolean
   locale: ReturnType<typeof useI18n>['locale']
   m: WebMessages
+  moveProjects?: ProjectWithWorkflows[] | undefined
   overlay?: boolean
   workflow: WorkflowSummary
   onDelete?(workflow: WorkflowSummary): void
+  onMoveToProject?: ((project: ProjectWithWorkflows, workflow: WorkflowSummary) => void) | undefined
   onRemoveFromProject?: ((workflow: WorkflowSummary) => void) | undefined
   onRename?(workflow: WorkflowSummary): void
 }
 
 function WorkflowCard({
   actionSlot,
+  dropDisabled = false,
+  dropId,
   isOver = false,
   locale,
   m,
+  moveProjects,
   overlay = false,
   workflow,
   onDelete,
+  onMoveToProject,
   onRemoveFromProject,
   onRename,
 }: WorkflowCardProps) {
@@ -295,38 +614,37 @@ function WorkflowCard({
       type: 'workflow',
       workflow,
     } satisfies DropData,
-    disabled: overlay,
-    id: draggableId(workflow.id),
+    disabled: overlay || dropDisabled,
+    id: dropId ?? draggableId(workflow.id),
   })
 
   return (
     <article
       className={cn(canvasCardClassName, isOver && activeDropClassName, overlay && overlayClassName)}
-      ref={overlay ? undefined : setDroppableNodeRef}
+      ref={overlay || dropDisabled ? undefined : setDroppableNodeRef}
     >
       <Link
         aria-label={m.projects_open_canvas({ title: workflow.name })}
+        className="block rounded-md focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface-container-lowest focus-visible:outline-none"
         draggable={false}
         onDragStart={preventNativeLinkDrag}
         params={{ workflowId: workflow.id }}
         to="/canvas/$workflowId"
       >
-        <div className="mina-project-preview relative min-h-[158px] overflow-hidden" aria-label={m.projects_canvas_preview_label()}>
-          <span className={canvasPreviewPillClassName}>{m.workflow_canvas_eyebrow()}</span>
-        </div>
+        <CanvasPreview id={workflow.id} label={m.projects_canvas_preview_label()} />
       </Link>
-      <div className="flex items-start justify-between gap-2 p-4">
+      <div className="mt-3 flex min-w-0 items-start justify-between gap-2 px-1">
         <Link
           aria-label={m.projects_open_canvas({ title: workflow.name })}
-          className="grid min-w-0 gap-2 text-left"
+          className="grid min-w-0 gap-1 text-left"
           draggable={false}
           onDragStart={preventNativeLinkDrag}
           params={{ workflowId: workflow.id }}
           to="/canvas/$workflowId"
         >
-          <h2 className="font-display m-0 truncate text-[0.96rem] leading-[1.18] text-foreground">{workflow.name}</h2>
-          <p className="m-0 truncate text-[0.66rem] uppercase text-foreground-tertiary">
-            {m.projects_updated_at({ date: formatDateTime(workflow.updatedAt, locale) })}
+          <h3 className="font-display m-0 truncate text-base leading-tight font-semibold text-foreground">{workflow.name}</h3>
+          <p className="m-0 truncate text-sm font-semibold text-foreground-secondary">
+            {formatRelativeTime(workflow.updatedAt, locale)}
           </p>
         </Link>
         {overlay ? null : actionSlot ?? (
@@ -334,7 +652,10 @@ function WorkflowCard({
             deleteLabel={m.projects_delete_canvas()}
             editLabel={m.projects_rename_canvas()}
             menuLabel={m.projects_more_actions({ title: workflow.name })}
+            moveLabel={m.projects_move_to_project()}
+            moveProjects={moveProjects}
             onDelete={onDelete ? () => onDelete(workflow) : undefined}
+            onMoveToProject={onMoveToProject ? (project) => onMoveToProject(project, workflow) : undefined}
             onRemoveFromProject={onRemoveFromProject ? () => onRemoveFromProject(workflow) : undefined}
             onRename={onRename ? () => onRename(workflow) : undefined}
             removeFromProjectLabel={m.projects_remove_from_project()}
@@ -347,16 +668,17 @@ function WorkflowCard({
 
 interface DraggableWorkflowCardProps extends Omit<WorkflowCardProps, 'actionSlot' | 'overlay'> {
   disabled?: boolean
+  dragId?: string
 }
 
-function DraggableWorkflowCard(props: DraggableWorkflowCardProps) {
+function DraggableWorkflowCard({ disabled = false, dragId, ...props }: DraggableWorkflowCardProps) {
   const { attributes, isDragging, listeners, setNodeRef, transform } = useDraggable({
     data: {
       type: 'workflow',
       workflow: props.workflow,
     } satisfies DragData,
-    disabled: props.disabled ?? false,
-    id: draggableId(props.workflow.id),
+    disabled,
+    id: dragId ?? draggableId(props.workflow.id),
   })
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -382,7 +704,10 @@ function DraggableWorkflowCard(props: DraggableWorkflowCardProps) {
               deleteLabel={props.m.projects_delete_canvas()}
               editLabel={props.m.projects_rename_canvas()}
               menuLabel={props.m.projects_more_actions({ title: props.workflow.name })}
+              moveLabel={props.m.projects_move_to_project()}
+              moveProjects={props.moveProjects}
               onDelete={props.onDelete ? () => props.onDelete?.(props.workflow) : undefined}
+              onMoveToProject={props.onMoveToProject ? (project) => props.onMoveToProject?.(project, props.workflow) : undefined}
               onRemoveFromProject={props.onRemoveFromProject ? () => props.onRemoveFromProject?.(props.workflow) : undefined}
               onRename={props.onRename ? () => props.onRename?.(props.workflow) : undefined}
               removeFromProjectLabel={props.m.projects_remove_from_project()}
@@ -399,8 +724,11 @@ interface ResourceActionsProps {
   deleteLabel: string
   editLabel: string
   menuLabel: string
+  moveLabel?: string
+  moveProjects?: ProjectWithWorkflows[] | undefined
   removeFromProjectLabel?: string
   onDelete?: (() => void) | undefined
+  onMoveToProject?: ((project: ProjectWithWorkflows) => void) | undefined
   onRemoveFromProject?: (() => void) | undefined
   onRename?: (() => void) | undefined
 }
@@ -409,11 +737,20 @@ function ResourceActions({
   deleteLabel,
   editLabel,
   menuLabel,
+  moveLabel,
+  moveProjects = [],
   onDelete,
+  onMoveToProject,
   onRemoveFromProject,
   onRename,
   removeFromProjectLabel,
 }: ResourceActionsProps) {
+  const canMoveToProject = Boolean(moveLabel && onMoveToProject && moveProjects.length > 0)
+
+  if (!onDelete && !onRemoveFromProject && !onRename && !canMoveToProject) {
+    return null
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -421,23 +758,38 @@ function ResourceActions({
           <MoreVertical aria-hidden="true" size={18} />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-36">
+      <DropdownMenuContent align="end" className="w-52">
         {onRename ? (
           <DropdownMenuItem onClick={onRename}>
             <Pencil aria-hidden="true" size={15} />
-            {editLabel}
+            <span className="min-w-0 truncate">{editLabel}</span>
           </DropdownMenuItem>
+        ) : null}
+        {canMoveToProject ? (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <FolderMinus aria-hidden="true" size={15} />
+              <span className="min-w-0 truncate">{moveLabel}</span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-52">
+              {moveProjects.map((project) => (
+                <DropdownMenuItem key={project.id} onClick={() => onMoveToProject?.(project)}>
+                  <span className="min-w-0 truncate">{project.name}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
         ) : null}
         {onRemoveFromProject && removeFromProjectLabel ? (
           <DropdownMenuItem onClick={onRemoveFromProject}>
             <FolderMinus aria-hidden="true" size={15} />
-            {removeFromProjectLabel}
+            <span className="min-w-0 truncate">{removeFromProjectLabel}</span>
           </DropdownMenuItem>
         ) : null}
         {onDelete ? (
           <DropdownMenuItem onClick={onDelete} variant="destructive">
             <Trash2 aria-hidden="true" size={15} />
-            {deleteLabel}
+            <span className="min-w-0 truncate">{deleteLabel}</span>
           </DropdownMenuItem>
         ) : null}
       </DropdownMenuContent>
@@ -463,7 +815,7 @@ function namingDialogCopy(m: WebMessages, state: NamingDialogState) {
       title: m.projects_name_canvas_title(),
     }
   }
-  if (state.kind === 'create-project') {
+  if (state.kind === 'create-empty-project' || state.kind === 'create-project') {
     return {
       description: m.projects_name_project_description(),
       submit: m.projects_create_project_submit(),
@@ -514,7 +866,7 @@ function NamingDialog({ error, m, onChangeName, onClose, onSubmit, pending, stat
               value={state.name}
             />
             {error ? (
-              <p className="m-0 text-[0.76rem] font-bold text-destructive" role="status">
+              <p className="m-0 text-xs font-bold text-destructive" role="status">
                 {getErrorMessage(error, m.projects_mutation_failed())}
               </p>
             ) : null}
@@ -569,7 +921,7 @@ function DeleteResourceDialog({ error, m, onClose, onConfirm, pending, state }: 
           </AlertDialogDescription>
         </AlertDialogHeader>
         {error ? (
-          <p className="m-0 text-[0.76rem] font-bold text-destructive" role="status">
+          <p className="m-0 text-xs font-bold text-destructive" role="status">
             {getErrorMessage(error, m.projects_mutation_failed())}
           </p>
         ) : null}
@@ -603,13 +955,10 @@ export function ProjectsPage({ initialAction }: ProjectsPageProps) {
   const projectsQuery = useQuery({ queryFn: getProjectsOverview, queryKey: projectKeys.overview() })
   const projects = projectsQuery.data?.projects ?? []
   const ungroupedWorkflows = projectsQuery.data?.ungroupedWorkflows ?? []
-  const overviewItems = useMemo<OverviewGridItem[]>(
-    () => [
-      ...projects.map((project) => ({ project, type: 'project' as const })),
-      ...ungroupedWorkflows.map((workflow) => ({ type: 'workflow' as const, workflow })),
-    ],
-    [projects, ungroupedWorkflows],
-  )
+  const ungroupedWorkflowIds = new Set(ungroupedWorkflows.map((workflow) => workflow.id))
+  const recentWorkflows = [...ungroupedWorkflows, ...projects.flatMap((project) => project.workflows)]
+    .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+    .slice(0, 6)
   const activeWorkflow = activeWorkflowId ? workflowById(projects, ungroupedWorkflows, activeWorkflowId) : undefined
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -633,6 +982,15 @@ export function ProjectsPage({ initialAction }: ProjectsPageProps) {
       void navigate({ to: '/canvas/$workflowId', params: { workflowId: response.item.id } })
     },
   })
+  const createEmptyProjectMutation = useMutation({
+    mutationFn: (name: string) => createProject({ name, workflowIds: [] }),
+    onSuccess: (response) => {
+      setNamingState(null)
+      void queryClient.invalidateQueries({ queryKey: projectKeys.overview() })
+      void queryClient.invalidateQueries({ queryKey: workflowKeys.list() })
+      void navigate({ to: '/projects/$projectId', params: { projectId: response.item.id } })
+    },
+  })
   const createProjectMutation = useMutation({
     mutationFn: (input: { name: string; source: WorkflowSummary; target: WorkflowSummary }) =>
       createProjectFromWorkflows({
@@ -649,7 +1007,8 @@ export function ProjectsPage({ initialAction }: ProjectsPageProps) {
   const addWorkflowMutation = useMutation({
     mutationFn: (input: { projectId: string; workflow: WorkflowSummary }) =>
       addWorkflowToProject(input.projectId, { workflowId: input.workflow.id }),
-    onSuccess: () => {
+    onSuccess: (_response, input) => {
+      void queryClient.invalidateQueries({ queryKey: projectKeys.detail(input.projectId) })
       void queryClient.invalidateQueries({ queryKey: projectKeys.overview() })
       void queryClient.invalidateQueries({ queryKey: workflowKeys.list() })
     },
@@ -688,16 +1047,18 @@ export function ProjectsPage({ initialAction }: ProjectsPageProps) {
   })
   const mutationError =
     createProjectMutation.error ??
-    addWorkflowMutation.error ??
+    createEmptyProjectMutation.error ??
     createCanvasMutation.error ??
+    addWorkflowMutation.error ??
     renameProjectMutation.error ??
     renameWorkflowMutation.error ??
     deleteProjectMutation.error ??
     deleteWorkflowMutation.error
   const mutationPending =
     createProjectMutation.isPending ||
-    addWorkflowMutation.isPending ||
+    createEmptyProjectMutation.isPending ||
     createCanvasMutation.isPending ||
+    addWorkflowMutation.isPending ||
     renameProjectMutation.isPending ||
     renameWorkflowMutation.isPending ||
     deleteProjectMutation.isPending ||
@@ -732,6 +1093,10 @@ export function ProjectsPage({ initialAction }: ProjectsPageProps) {
     }
     if (namingState.kind === 'create-canvas') {
       createCanvasMutation.mutate(name)
+      return
+    }
+    if (namingState.kind === 'create-empty-project') {
+      createEmptyProjectMutation.mutate(name)
       return
     }
     if (namingState.kind === 'create-project') {
@@ -776,6 +1141,9 @@ export function ProjectsPage({ initialAction }: ProjectsPageProps) {
       handleAddToProject(drop.project.id, source)
       return
     }
+    if (source.id === drop.workflow.id) {
+      return
+    }
     handleCreateProjectWith(source, drop.workflow)
   }
 
@@ -786,6 +1154,30 @@ export function ProjectsPage({ initialAction }: ProjectsPageProps) {
 
   return (
     <div className={pageClassName}>
+      <header className={pageHeaderClassName}>
+        <h1 className={pageTitleClassName}>{m.app_nav_projects()}</h1>
+        <button
+          className={headerActionButtonClassName}
+          disabled={createEmptyProjectMutation.isPending}
+          onClick={() => setNamingState({ kind: 'create-empty-project', name: '' })}
+          type="button"
+        >
+          <Plus aria-hidden="true" size={14} />
+          <span className="text-sm font-medium">{m.projects_new_project()}</span>
+        </button>
+      </header>
+
+      <div className={tabsClassName}>
+        <div className={tabListClassName}>
+          <button className={activeTabClassName} type="button">
+            {m.projects_recent_tab()}
+          </button>
+        </div>
+        <button className={passiveTabClassName} type="button">
+          {m.projects_deleted_tab()}
+        </button>
+      </div>
+
       <DndContext
         accessibility={{
           announcements: createAnnouncements(m),
@@ -801,56 +1193,38 @@ export function ProjectsPage({ initialAction }: ProjectsPageProps) {
         onDragStart={handleDragStart}
         sensors={sensors}
       >
-        <div className={sectionClassName}>
-          <div className={projectGridClassName}>
-            {overviewItems.map((item) =>
-              item.type === 'project' ? (
-                <ProjectCard
-                  isOver={overId === projectDropId(item.project.id)}
-                  key={item.project.id}
-                  m={m}
-                  onDelete={(project) => setDeleteState({ id: project.id, kind: 'project', name: project.name })}
-                  onRename={(project) => setNamingState({ kind: 'rename-project', name: project.name, project })}
-                  project={item.project}
-                />
-              ) : (
-                <DraggableWorkflowCard
-                  disabled={mutationPending}
-                  isOver={overId === draggableId(item.workflow.id)}
-                  key={item.workflow.id}
-                  locale={locale}
-                  m={m}
-                  onDelete={(workflow) => setDeleteState({ id: workflow.id, kind: 'workflow', name: workflow.name })}
-                  onRename={(workflow) => setNamingState({ kind: 'rename-workflow', name: workflow.name, workflow })}
-                  workflow={item.workflow}
-                />
-              ),
-            )}
-            <button
-              className={newCanvasCardClassName}
-              disabled={createCanvasMutation.isPending}
-              onClick={() => setNamingState({ kind: 'create-canvas', name: '' })}
-              type="button"
-            >
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-container-lowest">
-                <CirclePlus aria-hidden="true" size={24} />
-              </span>
-              {m.projects_new_canvas()}
-            </button>
-            {!projectsQuery.isLoading && projects.length === 0 && ungroupedWorkflows.length === 0 ? (
-              <div className="grid min-h-[252px] content-center gap-2 rounded-2xl border border-outline-ghost bg-surface-container-lowest p-5 text-foreground-tertiary">
-                <h2 className="font-display m-0 text-[0.96rem] leading-[1.18] text-foreground">{m.projects_empty_title()}</h2>
-                <p className="m-0 text-[0.78rem] leading-relaxed">{m.projects_empty_body()}</p>
-              </div>
-            ) : null}
+        <div className={contentClassName}>
+          <div className={dashboardSectionsClassName}>
+            <RecentCanvasSection
+              locale={locale}
+              m={m}
+              mutationPending={mutationPending}
+              ungroupedWorkflowIds={ungroupedWorkflowIds}
+              workflows={recentWorkflows}
+            />
+            <ResourceGrid
+              isLoading={projectsQuery.isLoading}
+              locale={locale}
+              m={m}
+              mutationPending={mutationPending}
+              overId={overId}
+              projects={projects}
+              onCreateCanvas={() => setNamingState({ kind: 'create-canvas', name: '' })}
+              onDelete={(workflow) => setDeleteState({ id: workflow.id, kind: 'workflow', name: workflow.name })}
+              onDeleteProject={(project) => setDeleteState({ id: project.id, kind: 'project', name: project.name })}
+              onMoveToProject={(project, workflow) => handleAddToProject(project.id, workflow)}
+              onRename={(workflow) => setNamingState({ kind: 'rename-workflow', name: workflow.name, workflow })}
+              onRenameProject={(project) => setNamingState({ kind: 'rename-project', name: project.name, project })}
+              workflows={ungroupedWorkflows}
+            />
           </div>
-        </div>
 
-        {mutationError ? (
-          <p className="m-0 text-[0.76rem] font-bold text-destructive" role="status">
-            {getErrorMessage(mutationError, m.projects_mutation_failed())}
-          </p>
-        ) : null}
+          {mutationError ? (
+            <p className="m-0 mt-6 text-xs font-bold text-destructive" role="status">
+              {getErrorMessage(mutationError, m.projects_mutation_failed())}
+            </p>
+          ) : null}
+        </div>
 
         <DragOverlay dropAnimation={null}>
           {activeWorkflow ? (
@@ -864,12 +1238,12 @@ export function ProjectsPage({ initialAction }: ProjectsPageProps) {
         </DragOverlay>
       </DndContext>
       <NamingDialog
-        error={createCanvasMutation.error ?? createProjectMutation.error ?? renameProjectMutation.error ?? renameWorkflowMutation.error}
+        error={createCanvasMutation.error ?? createEmptyProjectMutation.error ?? createProjectMutation.error ?? renameProjectMutation.error ?? renameWorkflowMutation.error}
         m={m}
         onChangeName={(name) => setNamingState((state) => state ? { ...state, name } : state)}
         onClose={() => setNamingState(null)}
         onSubmit={handleNamingSubmit}
-        pending={createCanvasMutation.isPending || createProjectMutation.isPending || renameProjectMutation.isPending || renameWorkflowMutation.isPending}
+        pending={createCanvasMutation.isPending || createEmptyProjectMutation.isPending || createProjectMutation.isPending || renameProjectMutation.isPending || renameWorkflowMutation.isPending}
         state={namingState}
       />
       <DeleteResourceDialog
@@ -908,6 +1282,19 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps) {
       void queryClient.invalidateQueries({ queryKey: workflowKeys.list() })
     },
   })
+  const createProjectCanvasMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const workflow = await createWorkflow({ name, nodes: [], edges: [] })
+      await addWorkflowToProject(projectId, { workflowId: workflow.item.id })
+      return workflow
+    },
+    onSuccess: () => {
+      setNamingState(null)
+      void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) })
+      void queryClient.invalidateQueries({ queryKey: projectKeys.overview() })
+      void queryClient.invalidateQueries({ queryKey: workflowKeys.list() })
+    },
+  })
   const renameWorkflowMutation = useMutation({
     mutationFn: (input: { workflowId: string; name: string }) => updateWorkflow(input.workflowId, { name: input.name }),
     onSuccess: () => {
@@ -926,15 +1313,30 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps) {
       void queryClient.invalidateQueries({ queryKey: workflowKeys.list() })
     },
   })
-  const mutationError = removeWorkflowMutation.error ?? renameWorkflowMutation.error ?? deleteWorkflowMutation.error
-  const mutationPending = removeWorkflowMutation.isPending || renameWorkflowMutation.isPending || deleteWorkflowMutation.isPending
+  const mutationError =
+    createProjectCanvasMutation.error ??
+    removeWorkflowMutation.error ??
+    renameWorkflowMutation.error ??
+    deleteWorkflowMutation.error
+  const mutationPending =
+    createProjectCanvasMutation.isPending ||
+    removeWorkflowMutation.isPending ||
+    renameWorkflowMutation.isPending ||
+    deleteWorkflowMutation.isPending
 
   const handleNamingSubmit = () => {
-    if (!namingState || namingState.kind !== 'rename-workflow' || mutationPending) {
+    if (!namingState || mutationPending) {
       return
     }
     const name = namingState.name.trim()
     if (!name) {
+      return
+    }
+    if (namingState.kind === 'create-canvas') {
+      createProjectCanvasMutation.mutate(name)
+      return
+    }
+    if (namingState.kind !== 'rename-workflow') {
       return
     }
     renameWorkflowMutation.mutate({ workflowId: namingState.workflow.id, name })
@@ -949,73 +1351,97 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps) {
 
   if (projectQuery.isLoading) {
     return (
-      <div className={pageClassName}>
-        <p className="m-0 text-[0.76rem] font-bold text-foreground-quaternary" role="status">
-          {m.projects_loading_project()}
-        </p>
+      <div className={pageWithoutTabsClassName}>
+        <header className={pageHeaderClassName}>
+          <p className="m-0 text-sm font-bold text-foreground-quaternary" role="status">
+            {m.projects_loading_project()}
+          </p>
+        </header>
       </div>
     )
   }
 
   if (projectQuery.isError || !project) {
     return (
-      <div className={pageClassName}>
-        <div className={detailTitleGroupClassName}>
-          <Link aria-label={m.projects_back_to_projects()} className={backLinkClassName} to="/projects">
-            <ArrowLeft aria-hidden="true" size={17} />
-          </Link>
-          <p className="m-0 text-[0.76rem] font-bold text-destructive" role="status">
-            {getErrorMessage(projectQuery.error, m.projects_project_unavailable())}
-          </p>
-        </div>
+      <div className={pageWithoutTabsClassName}>
+        <header className={pageHeaderClassName}>
+          <div className="flex min-w-0 items-center gap-3">
+            <Link aria-label={m.projects_back_to_projects()} className={backLinkClassName} to="/projects">
+              <ArrowLeft aria-hidden="true" size={17} />
+            </Link>
+            <p className="m-0 text-sm font-bold text-destructive" role="status">
+              {getErrorMessage(projectQuery.error, m.projects_project_unavailable())}
+            </p>
+          </div>
+        </header>
       </div>
     )
   }
 
   return (
-    <div className={pageClassName}>
-      <Link aria-label={m.projects_back_to_projects()} className={backLinkClassName} to="/projects">
-        <ArrowLeft aria-hidden="true" size={17} />
-      </Link>
-
-      <div className={sectionClassName}>
-        <div className={projectGridClassName}>
-          {project.workflows.map((workflow) => (
-            <WorkflowCard
-              key={workflow.id}
-              locale={locale}
-              m={m}
-              onDelete={(item) => setDeleteState({ id: item.id, kind: 'workflow', name: item.name })}
-              onRemoveFromProject={(item) => {
-                if (!removeWorkflowMutation.isPending) {
-                  removeWorkflowMutation.mutate(item)
-                }
-              }}
-              onRename={(item) => setNamingState({ kind: 'rename-workflow', name: item.name, workflow: item })}
-              workflow={workflow}
-            />
-          ))}
-          {project.workflows.length === 0 ? (
-            <div className="grid min-h-[252px] content-center gap-2 rounded-2xl border border-outline-ghost bg-surface-container-lowest p-5 text-foreground-tertiary">
-              <h2 className="font-display m-0 text-[0.96rem] leading-[1.18] text-foreground">{m.projects_empty_project_title()}</h2>
-              <p className="m-0 text-[0.78rem] leading-relaxed">{m.projects_empty_project_body()}</p>
-            </div>
-          ) : null}
+    <div className={pageWithoutTabsClassName}>
+      <header className={pageHeaderClassName}>
+        <div className="flex min-w-0 items-center gap-3">
+          <Link aria-label={m.projects_back_to_projects()} className={backLinkClassName} to="/projects">
+            <ArrowLeft aria-hidden="true" size={17} />
+          </Link>
+          <h1 className={pageTitleClassName}>{project.name}</h1>
         </div>
+      </header>
+
+      <div className={contentClassName}>
+        <section className={sectionClassName}>
+          <div className={sectionHeaderClassName}>
+            <div className={sectionTitleLineClassName}>
+              <h2 className={sectionTitleClassName}>{project.name}</h2>
+              <p className={sectionMetaClassName}>
+                {m.projects_document_count_meta({
+                  count: project.workflows.length,
+                  time: formatRelativeTime(project.updatedAt, locale),
+                })}
+              </p>
+            </div>
+          </div>
+
+          <div className={canvasGridClassName}>
+            {project.workflows.map((workflow) => (
+              <WorkflowCard
+                dropDisabled
+                key={workflow.id}
+                locale={locale}
+                m={m}
+                onDelete={(item) => setDeleteState({ id: item.id, kind: 'workflow', name: item.name })}
+                onRemoveFromProject={(item) => {
+                  if (!removeWorkflowMutation.isPending) {
+                    removeWorkflowMutation.mutate(item)
+                  }
+                }}
+                onRename={(item) => setNamingState({ kind: 'rename-workflow', name: item.name, workflow: item })}
+                workflow={workflow}
+              />
+            ))}
+            <NewCanvasCard
+              disabled={mutationPending}
+              label={m.projects_new_canvas()}
+              onClick={() => setNamingState({ kind: 'create-canvas', name: '' })}
+            />
+          </div>
+        </section>
+
+        {mutationError ? (
+          <p className="m-0 mt-6 text-xs font-bold text-destructive" role="status">
+            {getErrorMessage(mutationError, m.projects_mutation_failed())}
+          </p>
+        ) : null}
       </div>
 
-      {mutationError ? (
-        <p className="m-0 text-[0.76rem] font-bold text-destructive" role="status">
-          {getErrorMessage(mutationError, m.projects_mutation_failed())}
-        </p>
-      ) : null}
       <NamingDialog
-        error={renameWorkflowMutation.error}
+        error={createProjectCanvasMutation.error ?? renameWorkflowMutation.error}
         m={m}
         onChangeName={(name) => setNamingState((state) => state ? { ...state, name } : state)}
         onClose={() => setNamingState(null)}
         onSubmit={handleNamingSubmit}
-        pending={renameWorkflowMutation.isPending}
+        pending={createProjectCanvasMutation.isPending || renameWorkflowMutation.isPending}
         state={namingState}
       />
       <DeleteResourceDialog

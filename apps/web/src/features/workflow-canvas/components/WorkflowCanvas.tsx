@@ -1,11 +1,10 @@
-import { Profiler, memo, useCallback, useEffect, useMemo, useRef } from 'react'
+import { Profiler, memo, useCallback, useEffect, useMemo, useRef, type CSSProperties } from 'react'
 import {
   Background,
   BackgroundVariant,
   ConnectionMode,
   Controls,
   MiniMap,
-  Panel,
   ReactFlow,
   ReactFlowProvider,
 } from '@xyflow/react'
@@ -66,6 +65,12 @@ const nodeTypes = {
 
 const MINIMAP_INTERACTION_DISABLED_NODE_THRESHOLD = 3_000
 const MINIMAP_FALLBACK_NODE_THRESHOLD = 5_000
+const MINIMAP_WIDTH = 220
+const MINIMAP_HEIGHT = 140
+const MINIMAP_STYLE = {
+  width: MINIMAP_WIDTH,
+  height: MINIMAP_HEIGHT,
+} satisfies CSSProperties
 
 const getMiniMapNodeColor = (node: WorkflowFlowNode): string => {
   switch (node.type) {
@@ -234,26 +239,27 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
               variant={BackgroundVariant.Dots}
             />
             <Controls className="mina-wc-controls" position="bottom-right" showInteractive={false} />
-            {shouldRenderMiniMapFallback ? (
-              <Panel className="mina-wc-minimap-fallback-panel" position="bottom-right">
-                <div className="mina-wc-minimap-frame">
+            <div className="mina-wc-minimap-panel">
+              <div className="mina-wc-minimap-frame">
+                {shouldRenderMiniMapFallback ? (
                   <div className="mina-wc-minimap-fallback" role="status">
                     <span className="mina-wc-minimap-fallback-label">{m.workflow_canvas_minimap_suspended()}</span>
                     <strong>{formatNumber(nodeCount, locale)}</strong>
                     <span>{m.workflow_canvas_nodes()}</span>
                   </div>
-                </div>
-              </Panel>
-            ) : (
-              <MiniMap
-                className="mina-wc-minimap"
-                maskColor="color-mix(in oklch, var(--surface-container-lowest) 72%, transparent)"
-                nodeColor={getMiniMapNodeColor}
-                pannable={isMiniMapInteractive}
-                position="bottom-right"
-                zoomable={isMiniMapInteractive}
-              />
-            )}
+                ) : (
+                  <MiniMap
+                    className="mina-wc-minimap"
+                    maskColor="color-mix(in oklch, var(--surface-container-lowest) 72%, transparent)"
+                    nodeColor={getMiniMapNodeColor}
+                    pannable={isMiniMapInteractive}
+                    position="top-left"
+                    style={MINIMAP_STYLE}
+                    zoomable={isMiniMapInteractive}
+                  />
+                )}
+              </div>
+            </div>
             <CanvasDock onRunNode={onRunNode} runError={runError} runningNodeId={runningNodeId} />
           </ReactFlow>
         </div>
