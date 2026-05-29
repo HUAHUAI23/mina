@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import type { CSSProperties, DragEvent, ReactNode, SubmitEvent } from 'react'
 import {
   closestCenter,
@@ -13,8 +12,7 @@ import {
 } from '@dnd-kit/core'
 import type { DragCancelEvent, DragEndEvent, DragOverEvent, DragStartEvent, UniqueIdentifier } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useNavigate } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import { formatRelativeTime } from '@mina/i18n'
 import type { ProjectWithWorkflows } from '@mina/contracts/modules/projects'
 import type { WorkflowSummary } from '@mina/contracts/modules/workflows'
@@ -60,36 +58,25 @@ import { Skeleton } from '@mina/ui/components/skeleton'
 import { cn } from '@mina/ui/lib/utils'
 
 import { useI18n, useMessages } from '../../../app/i18n-provider'
-import { createWorkflow, deleteWorkflow, updateWorkflow } from '../../canvas/api/workflow-list.client'
-import { workflowKeys } from '../../workflow-canvas/api/workflow-keys'
 import type { WebMessages } from '../../../lib/i18n-messages'
 import { getErrorMessage } from '../../../lib/http'
 import {
-  addWorkflowToProject,
-  createProject,
-  createProjectFromWorkflows,
-  deleteProject,
-  getProject,
-  getProjectsOverview,
-  removeWorkflowFromProject,
-  updateProject,
-} from '../api/projects.client'
-import { projectKeys } from '../api/project-keys'
-
-type DragData = {
-  type: 'workflow'
-  workflow: WorkflowSummary
-}
-
-type DropData =
-  | {
-      type: 'project'
-      project: ProjectWithWorkflows
-    }
-  | {
-      type: 'workflow'
-      workflow: WorkflowSummary
-    }
+  dragDataFromUnknown,
+  draggableId,
+  dropDataFromUnknown,
+  latestUpdatedAt,
+  projectDropId,
+  recentDraggableId,
+  recentDropId,
+} from '../domain/project-board'
+import type {
+  DeleteDialogState,
+  NamingDialogState,
+  ProjectWorkflowDragData as DragData,
+  ProjectWorkflowDropData as DropData,
+} from '../domain/project-board'
+import { useProjectDetailController } from '../hooks/use-project-detail-controller'
+import { useProjectsPageController } from '../hooks/use-projects-page-controller'
 
 const pageClassName = 'grid h-full min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden bg-surface-container-lowest'
 const pageWithoutTabsClassName = 'grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-surface-container-lowest'
@@ -119,77 +106,6 @@ const iconButtonClassName = 'size-7 rounded-full text-foreground-tertiary hover:
 const backLinkClassName = 'flex size-10 flex-none items-center justify-center rounded-md bg-surface-container-low text-foreground-tertiary hover:bg-foreground hover:text-primary-foreground'
 const dialogInputClassName = 'h-10 bg-surface-container-lowest'
 const preventNativeLinkDrag = (event: DragEvent<HTMLAnchorElement>) => event.preventDefault()
-
-type NamingDialogState =
-  | {
-      kind: 'create-canvas'
-      name: string
-    }
-  | {
-      kind: 'create-empty-project'
-      name: string
-    }
-  | {
-      kind: 'create-project'
-      name: string
-      source: WorkflowSummary
-      target: WorkflowSummary
-    }
-  | {
-      kind: 'rename-project'
-      name: string
-      project: ProjectWithWorkflows
-    }
-  | {
-      kind: 'rename-workflow'
-      name: string
-      workflow: WorkflowSummary
-    }
-
-const draggableId = (workflowId: string): string => `workflow:${workflowId}`
-const recentDraggableId = (workflowId: string): string => `workflow:recent:${workflowId}`
-const recentDropId = (workflowId: string): string => `workflow:recent-drop:${workflowId}`
-const projectDropId = (projectId: string): string => `project:${projectId}`
-
-const dragDataFromUnknown = (value: unknown): DragData | undefined => {
-  if (!value || typeof value !== 'object' || !('type' in value) || value.type !== 'workflow' || !('workflow' in value)) {
-    return undefined
-  }
-  return value as DragData
-}
-
-const dropDataFromUnknown = (value: unknown): DropData | undefined => {
-  if (!value || typeof value !== 'object' || !('type' in value)) {
-    return undefined
-  }
-  if (value.type === 'project' && 'project' in value) {
-    return value as DropData
-  }
-  if (value.type === 'workflow' && 'workflow' in value) {
-    return value as DropData
-  }
-  return undefined
-}
-
-const workflowIdFromIdentifier = (workflowId: UniqueIdentifier): string => {
-  const parts = String(workflowId).split(':')
-  if (parts[0] === 'workflow') {
-    return parts[parts.length - 1] ?? String(workflowId)
-  }
-  return String(workflowId)
-}
-
-const workflowById = (
-  projects: ProjectWithWorkflows[],
-  ungroupedWorkflows: WorkflowSummary[],
-  workflowId: UniqueIdentifier,
-): WorkflowSummary | undefined => {
-  const id = workflowIdFromIdentifier(workflowId)
-  return [...ungroupedWorkflows, ...projects.flatMap((project) => project.workflows)].find((workflow) => workflow.id === id)
-}
-
-const defaultProjectName = (source: WorkflowSummary, target: WorkflowSummary): string =>
-  `${target.name} + ${source.name}`.slice(0, 120)
 
 const createAnnouncements = (m: WebMessages) => ({
   onDragCancel({ active }: DragCancelEvent) {
@@ -366,14 +282,6 @@ function NewCanvasCard({ disabled, label, onClick }: NewCanvasCardProps) {
     </button>
   )
 }
-
-const latestUpdatedAt = (workflows: WorkflowSummary[]): string | undefined =>
-  workflows.reduce<string | undefined>((latest, workflow) => {
-    if (!latest || Date.parse(workflow.updatedAt) > Date.parse(latest)) {
-      return workflow.updatedAt
-    }
-    return latest
-  }, undefined)
 
 interface ProjectCardProps {
   locale: ReturnType<typeof useI18n>['locale']
@@ -885,12 +793,6 @@ function NamingDialog({ error, m, onChangeName, onClose, onSubmit, pending, stat
   )
 }
 
-interface DeleteDialogState {
-  kind: 'project' | 'workflow'
-  name: string
-  id: string
-}
-
 interface DeleteResourceDialogProps {
   error?: unknown
   m: WebMessages
@@ -944,213 +846,13 @@ interface ProjectsPageProps {
 }
 
 export function ProjectsPage({ initialAction }: ProjectsPageProps) {
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const { locale } = useI18n()
   const m = useMessages()
-  const [activeWorkflowId, setActiveWorkflowId] = useState<UniqueIdentifier | null>(null)
-  const [deleteState, setDeleteState] = useState<DeleteDialogState | null>(null)
-  const [namingState, setNamingState] = useState<NamingDialogState | null>(null)
-  const [overId, setOverId] = useState<UniqueIdentifier | null>(null)
-  const projectsQuery = useQuery({ queryFn: getProjectsOverview, queryKey: projectKeys.overview() })
-  const projects = projectsQuery.data?.projects ?? []
-  const ungroupedWorkflows = projectsQuery.data?.ungroupedWorkflows ?? []
-  const ungroupedWorkflowIds = new Set(ungroupedWorkflows.map((workflow) => workflow.id))
-  const recentWorkflows = [...ungroupedWorkflows, ...projects.flatMap((project) => project.workflows)]
-    .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
-    .slice(0, 6)
-  const activeWorkflow = activeWorkflowId ? workflowById(projects, ungroupedWorkflows, activeWorkflowId) : undefined
+  const controller = useProjectsPageController({ initialAction })
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor),
   )
-
-  useEffect(() => {
-    if (initialAction !== 'create-canvas') {
-      return
-    }
-    setNamingState((state) => state ?? { kind: 'create-canvas', name: '' })
-    void navigate({ replace: true, search: {}, to: '/projects' })
-  }, [initialAction, navigate])
-
-  const createCanvasMutation = useMutation({
-    mutationFn: (name: string) => createWorkflow({ name, nodes: [], edges: [] }),
-    onSuccess: (response) => {
-      setNamingState(null)
-      void queryClient.invalidateQueries({ queryKey: projectKeys.overview() })
-      void queryClient.invalidateQueries({ queryKey: workflowKeys.list() })
-      void navigate({ to: '/canvas/$workflowId', params: { workflowId: response.item.id } })
-    },
-  })
-  const createEmptyProjectMutation = useMutation({
-    mutationFn: (name: string) => createProject({ name, workflowIds: [] }),
-    onSuccess: (response) => {
-      setNamingState(null)
-      void queryClient.invalidateQueries({ queryKey: projectKeys.overview() })
-      void queryClient.invalidateQueries({ queryKey: workflowKeys.list() })
-      void navigate({ to: '/projects/$projectId', params: { projectId: response.item.id } })
-    },
-  })
-  const createProjectMutation = useMutation({
-    mutationFn: (input: { name: string; source: WorkflowSummary; target: WorkflowSummary }) =>
-      createProjectFromWorkflows({
-        name: input.name,
-        sourceWorkflowId: input.source.id,
-        targetWorkflowId: input.target.id,
-      }),
-    onSuccess: () => {
-      setNamingState(null)
-      void queryClient.invalidateQueries({ queryKey: projectKeys.overview() })
-      void queryClient.invalidateQueries({ queryKey: workflowKeys.list() })
-    },
-  })
-  const addWorkflowMutation = useMutation({
-    mutationFn: (input: { projectId: string; workflow: WorkflowSummary }) =>
-      addWorkflowToProject(input.projectId, { workflowId: input.workflow.id }),
-    onSuccess: (_response, input) => {
-      void queryClient.invalidateQueries({ queryKey: projectKeys.detail(input.projectId) })
-      void queryClient.invalidateQueries({ queryKey: projectKeys.overview() })
-      void queryClient.invalidateQueries({ queryKey: workflowKeys.list() })
-    },
-  })
-  const renameProjectMutation = useMutation({
-    mutationFn: (input: { projectId: string; name: string }) => updateProject(input.projectId, { name: input.name }),
-    onSuccess: (_response, input) => {
-      setNamingState(null)
-      void queryClient.invalidateQueries({ queryKey: projectKeys.detail(input.projectId) })
-      void queryClient.invalidateQueries({ queryKey: projectKeys.overview() })
-    },
-  })
-  const renameWorkflowMutation = useMutation({
-    mutationFn: (input: { workflowId: string; name: string }) => updateWorkflow(input.workflowId, { name: input.name }),
-    onSuccess: () => {
-      setNamingState(null)
-      void queryClient.invalidateQueries({ queryKey: projectKeys.overview() })
-      void queryClient.invalidateQueries({ queryKey: workflowKeys.list() })
-    },
-  })
-  const deleteProjectMutation = useMutation({
-    mutationFn: (projectId: string) => deleteProject(projectId),
-    onSuccess: () => {
-      setDeleteState(null)
-      void queryClient.invalidateQueries({ queryKey: projectKeys.overview() })
-      void queryClient.invalidateQueries({ queryKey: workflowKeys.list() })
-    },
-  })
-  const deleteWorkflowMutation = useMutation({
-    mutationFn: (workflowId: string) => deleteWorkflow(workflowId),
-    onSuccess: () => {
-      setDeleteState(null)
-      void queryClient.invalidateQueries({ queryKey: projectKeys.overview() })
-      void queryClient.invalidateQueries({ queryKey: workflowKeys.list() })
-    },
-  })
-  const mutationError =
-    createProjectMutation.error ??
-    createEmptyProjectMutation.error ??
-    createCanvasMutation.error ??
-    addWorkflowMutation.error ??
-    renameProjectMutation.error ??
-    renameWorkflowMutation.error ??
-    deleteProjectMutation.error ??
-    deleteWorkflowMutation.error
-  const mutationPending =
-    createProjectMutation.isPending ||
-    createEmptyProjectMutation.isPending ||
-    createCanvasMutation.isPending ||
-    addWorkflowMutation.isPending ||
-    renameProjectMutation.isPending ||
-    renameWorkflowMutation.isPending ||
-    deleteProjectMutation.isPending ||
-    deleteWorkflowMutation.isPending
-
-  const handleCreateProjectWith = (source: WorkflowSummary, target: WorkflowSummary) => {
-    if (source.id === target.id || mutationPending) {
-      return
-    }
-    setNamingState({
-      kind: 'create-project',
-      name: defaultProjectName(source, target),
-      source,
-      target,
-    })
-  }
-
-  const handleAddToProject = (projectId: string, workflow: WorkflowSummary) => {
-    if (mutationPending) {
-      return
-    }
-    addWorkflowMutation.mutate({ projectId, workflow })
-  }
-
-  const handleNamingSubmit = () => {
-    if (!namingState || mutationPending) {
-      return
-    }
-    const name = namingState.name.trim()
-    if (!name) {
-      return
-    }
-    if (namingState.kind === 'create-canvas') {
-      createCanvasMutation.mutate(name)
-      return
-    }
-    if (namingState.kind === 'create-empty-project') {
-      createEmptyProjectMutation.mutate(name)
-      return
-    }
-    if (namingState.kind === 'create-project') {
-      createProjectMutation.mutate({ name, source: namingState.source, target: namingState.target })
-      return
-    }
-    if (namingState.kind === 'rename-project') {
-      renameProjectMutation.mutate({ projectId: namingState.project.id, name })
-      return
-    }
-    renameWorkflowMutation.mutate({ workflowId: namingState.workflow.id, name })
-  }
-
-  const handleDeleteConfirm = () => {
-    if (!deleteState || mutationPending) {
-      return
-    }
-    if (deleteState.kind === 'project') {
-      deleteProjectMutation.mutate(deleteState.id)
-      return
-    }
-    deleteWorkflowMutation.mutate(deleteState.id)
-  }
-
-  const handleDragStart = ({ active }: DragStartEvent) => {
-    setActiveWorkflowId(active.id)
-  }
-
-  const handleDragOver = ({ over }: DragOverEvent) => {
-    setOverId(over?.id ?? null)
-  }
-
-  const handleDragEnd = ({ active, over }: DragEndEvent) => {
-    setActiveWorkflowId(null)
-    setOverId(null)
-    const source = dragDataFromUnknown(active.data.current)?.workflow
-    const drop = dropDataFromUnknown(over?.data.current)
-    if (!source || !drop || mutationPending) {
-      return
-    }
-    if (drop.type === 'project') {
-      handleAddToProject(drop.project.id, source)
-      return
-    }
-    if (source.id === drop.workflow.id) {
-      return
-    }
-    handleCreateProjectWith(source, drop.workflow)
-  }
-
-  const handleDragCancel = () => {
-    setActiveWorkflowId(null)
-    setOverId(null)
-  }
 
   return (
     <div className={pageClassName}>
@@ -1158,8 +860,8 @@ export function ProjectsPage({ initialAction }: ProjectsPageProps) {
         <h1 className={pageTitleClassName}>{m.app_nav_projects()}</h1>
         <button
           className={headerActionButtonClassName}
-          disabled={createEmptyProjectMutation.isPending}
-          onClick={() => setNamingState({ kind: 'create-empty-project', name: '' })}
+          disabled={controller.createEmptyProjectPending}
+          onClick={controller.openCreateProjectDialog}
           type="button"
         >
           <Plus aria-hidden="true" size={14} />
@@ -1187,10 +889,10 @@ export function ProjectsPage({ initialAction }: ProjectsPageProps) {
         }}
         autoScroll={false}
         collisionDetection={closestCenter}
-        onDragCancel={handleDragCancel}
-        onDragEnd={handleDragEnd}
-        onDragOver={handleDragOver}
-        onDragStart={handleDragStart}
+        onDragCancel={controller.handleDragCancel}
+        onDragEnd={controller.handleDragEnd}
+        onDragOver={controller.handleDragOver}
+        onDragStart={controller.handleDragStart}
         sensors={sensors}
       >
         <div className={contentClassName}>
@@ -1198,61 +900,61 @@ export function ProjectsPage({ initialAction }: ProjectsPageProps) {
             <RecentCanvasSection
               locale={locale}
               m={m}
-              mutationPending={mutationPending}
-              ungroupedWorkflowIds={ungroupedWorkflowIds}
-              workflows={recentWorkflows}
+              mutationPending={controller.mutationPending}
+              ungroupedWorkflowIds={controller.ungroupedWorkflowIds}
+              workflows={controller.recentWorkflows}
             />
             <ResourceGrid
-              isLoading={projectsQuery.isLoading}
+              isLoading={controller.projectsQuery.isLoading}
               locale={locale}
               m={m}
-              mutationPending={mutationPending}
-              overId={overId}
-              projects={projects}
-              onCreateCanvas={() => setNamingState({ kind: 'create-canvas', name: '' })}
-              onDelete={(workflow) => setDeleteState({ id: workflow.id, kind: 'workflow', name: workflow.name })}
-              onDeleteProject={(project) => setDeleteState({ id: project.id, kind: 'project', name: project.name })}
-              onMoveToProject={(project, workflow) => handleAddToProject(project.id, workflow)}
-              onRename={(workflow) => setNamingState({ kind: 'rename-workflow', name: workflow.name, workflow })}
-              onRenameProject={(project) => setNamingState({ kind: 'rename-project', name: project.name, project })}
-              workflows={ungroupedWorkflows}
+              mutationPending={controller.mutationPending}
+              overId={controller.overId}
+              projects={controller.projects}
+              onCreateCanvas={controller.openCreateCanvasDialog}
+              onDelete={controller.openDeleteWorkflowDialog}
+              onDeleteProject={controller.openDeleteProjectDialog}
+              onMoveToProject={(project, workflow) => controller.addWorkflowToExistingProject(project.id, workflow)}
+              onRename={controller.openRenameWorkflowDialog}
+              onRenameProject={controller.openRenameProjectDialog}
+              workflows={controller.ungroupedWorkflows}
             />
           </div>
 
-          {mutationError ? (
+          {controller.mutationError ? (
             <p className="m-0 mt-6 text-xs font-bold text-destructive" role="status">
-              {getErrorMessage(mutationError, m.projects_mutation_failed())}
+              {getErrorMessage(controller.mutationError, m.projects_mutation_failed())}
             </p>
           ) : null}
         </div>
 
         <DragOverlay dropAnimation={null}>
-          {activeWorkflow ? (
+          {controller.activeWorkflow ? (
             <WorkflowCard
               locale={locale}
               m={m}
               overlay
-              workflow={activeWorkflow}
+              workflow={controller.activeWorkflow}
             />
           ) : null}
         </DragOverlay>
       </DndContext>
       <NamingDialog
-        error={createCanvasMutation.error ?? createEmptyProjectMutation.error ?? createProjectMutation.error ?? renameProjectMutation.error ?? renameWorkflowMutation.error}
+        error={controller.namingError}
         m={m}
-        onChangeName={(name) => setNamingState((state) => state ? { ...state, name } : state)}
-        onClose={() => setNamingState(null)}
-        onSubmit={handleNamingSubmit}
-        pending={createCanvasMutation.isPending || createEmptyProjectMutation.isPending || createProjectMutation.isPending || renameProjectMutation.isPending || renameWorkflowMutation.isPending}
-        state={namingState}
+        onChangeName={controller.setNamingName}
+        onClose={controller.closeNamingDialog}
+        onSubmit={controller.submitNamingDialog}
+        pending={controller.namingPending}
+        state={controller.namingState}
       />
       <DeleteResourceDialog
-        error={deleteProjectMutation.error ?? deleteWorkflowMutation.error}
+        error={controller.deleteError}
         m={m}
-        onClose={() => setDeleteState(null)}
-        onConfirm={handleDeleteConfirm}
-        pending={deleteProjectMutation.isPending || deleteWorkflowMutation.isPending}
-        state={deleteState}
+        onClose={controller.closeDeleteDialog}
+        onConfirm={controller.confirmDelete}
+        pending={controller.deletePending}
+        state={controller.deleteState}
       />
     </div>
   )
@@ -1263,93 +965,12 @@ interface ProjectDetailPageProps {
 }
 
 export function ProjectDetailPage({ projectId }: ProjectDetailPageProps) {
-  const queryClient = useQueryClient()
   const { locale } = useI18n()
   const m = useMessages()
-  const [deleteState, setDeleteState] = useState<DeleteDialogState | null>(null)
-  const [namingState, setNamingState] = useState<NamingDialogState | null>(null)
-  const projectQuery = useQuery({
-    queryFn: () => getProject(projectId),
-    queryKey: projectKeys.detail(projectId),
-  })
-  const project = projectQuery.data?.item
+  const controller = useProjectDetailController(projectId)
+  const project = controller.project
 
-  const removeWorkflowMutation = useMutation({
-    mutationFn: (workflow: WorkflowSummary) => removeWorkflowFromProject(projectId, workflow.id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) })
-      void queryClient.invalidateQueries({ queryKey: projectKeys.overview() })
-      void queryClient.invalidateQueries({ queryKey: workflowKeys.list() })
-    },
-  })
-  const createProjectCanvasMutation = useMutation({
-    mutationFn: async (name: string) => {
-      const workflow = await createWorkflow({ name, nodes: [], edges: [] })
-      await addWorkflowToProject(projectId, { workflowId: workflow.item.id })
-      return workflow
-    },
-    onSuccess: () => {
-      setNamingState(null)
-      void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) })
-      void queryClient.invalidateQueries({ queryKey: projectKeys.overview() })
-      void queryClient.invalidateQueries({ queryKey: workflowKeys.list() })
-    },
-  })
-  const renameWorkflowMutation = useMutation({
-    mutationFn: (input: { workflowId: string; name: string }) => updateWorkflow(input.workflowId, { name: input.name }),
-    onSuccess: () => {
-      setNamingState(null)
-      void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) })
-      void queryClient.invalidateQueries({ queryKey: projectKeys.overview() })
-      void queryClient.invalidateQueries({ queryKey: workflowKeys.list() })
-    },
-  })
-  const deleteWorkflowMutation = useMutation({
-    mutationFn: (workflowId: string) => deleteWorkflow(workflowId),
-    onSuccess: () => {
-      setDeleteState(null)
-      void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) })
-      void queryClient.invalidateQueries({ queryKey: projectKeys.overview() })
-      void queryClient.invalidateQueries({ queryKey: workflowKeys.list() })
-    },
-  })
-  const mutationError =
-    createProjectCanvasMutation.error ??
-    removeWorkflowMutation.error ??
-    renameWorkflowMutation.error ??
-    deleteWorkflowMutation.error
-  const mutationPending =
-    createProjectCanvasMutation.isPending ||
-    removeWorkflowMutation.isPending ||
-    renameWorkflowMutation.isPending ||
-    deleteWorkflowMutation.isPending
-
-  const handleNamingSubmit = () => {
-    if (!namingState || mutationPending) {
-      return
-    }
-    const name = namingState.name.trim()
-    if (!name) {
-      return
-    }
-    if (namingState.kind === 'create-canvas') {
-      createProjectCanvasMutation.mutate(name)
-      return
-    }
-    if (namingState.kind !== 'rename-workflow') {
-      return
-    }
-    renameWorkflowMutation.mutate({ workflowId: namingState.workflow.id, name })
-  }
-
-  const handleDeleteConfirm = () => {
-    if (!deleteState || deleteState.kind !== 'workflow' || mutationPending) {
-      return
-    }
-    deleteWorkflowMutation.mutate(deleteState.id)
-  }
-
-  if (projectQuery.isLoading) {
+  if (controller.projectQuery.isLoading) {
     return (
       <div className={pageWithoutTabsClassName}>
         <header className={pageHeaderClassName}>
@@ -1361,7 +982,7 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps) {
     )
   }
 
-  if (projectQuery.isError || !project) {
+  if (controller.projectQuery.isError || !project) {
     return (
       <div className={pageWithoutTabsClassName}>
         <header className={pageHeaderClassName}>
@@ -1370,7 +991,7 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps) {
               <ArrowLeft aria-hidden="true" size={17} />
             </Link>
             <p className="m-0 text-sm font-bold text-destructive" role="status">
-              {getErrorMessage(projectQuery.error, m.projects_project_unavailable())}
+              {getErrorMessage(controller.projectQuery.error, m.projects_project_unavailable())}
             </p>
           </div>
         </header>
@@ -1410,47 +1031,43 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps) {
                 key={workflow.id}
                 locale={locale}
                 m={m}
-                onDelete={(item) => setDeleteState({ id: item.id, kind: 'workflow', name: item.name })}
-                onRemoveFromProject={(item) => {
-                  if (!removeWorkflowMutation.isPending) {
-                    removeWorkflowMutation.mutate(item)
-                  }
-                }}
-                onRename={(item) => setNamingState({ kind: 'rename-workflow', name: item.name, workflow: item })}
+                onDelete={controller.openDeleteWorkflowDialog}
+                onRemoveFromProject={controller.removeWorkflow}
+                onRename={controller.openRenameWorkflowDialog}
                 workflow={workflow}
               />
             ))}
             <NewCanvasCard
-              disabled={mutationPending}
+              disabled={controller.mutationPending}
               label={m.projects_new_canvas()}
-              onClick={() => setNamingState({ kind: 'create-canvas', name: '' })}
+              onClick={controller.openCreateCanvasDialog}
             />
           </div>
         </section>
 
-        {mutationError ? (
+        {controller.mutationError ? (
           <p className="m-0 mt-6 text-xs font-bold text-destructive" role="status">
-            {getErrorMessage(mutationError, m.projects_mutation_failed())}
+            {getErrorMessage(controller.mutationError, m.projects_mutation_failed())}
           </p>
         ) : null}
       </div>
 
       <NamingDialog
-        error={createProjectCanvasMutation.error ?? renameWorkflowMutation.error}
+        error={controller.namingError}
         m={m}
-        onChangeName={(name) => setNamingState((state) => state ? { ...state, name } : state)}
-        onClose={() => setNamingState(null)}
-        onSubmit={handleNamingSubmit}
-        pending={createProjectCanvasMutation.isPending || renameWorkflowMutation.isPending}
-        state={namingState}
+        onChangeName={controller.setNamingName}
+        onClose={controller.closeNamingDialog}
+        onSubmit={controller.submitNamingDialog}
+        pending={controller.namingPending}
+        state={controller.namingState}
       />
       <DeleteResourceDialog
-        error={deleteWorkflowMutation.error}
+        error={controller.deleteError}
         m={m}
-        onClose={() => setDeleteState(null)}
-        onConfirm={handleDeleteConfirm}
-        pending={deleteWorkflowMutation.isPending}
-        state={deleteState}
+        onClose={controller.closeDeleteDialog}
+        onConfirm={controller.confirmDelete}
+        pending={controller.deletePending}
+        state={controller.deleteState}
       />
     </div>
   )

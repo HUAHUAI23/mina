@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { PropsWithChildren } from 'react'
-import { ArrowLeft, ChevronDown, CreditCard, Database, LogOut, Search, User } from 'lucide-react'
+import { ChevronDown, ChevronLeft, LogOut, Search } from 'lucide-react'
 import { Link, useLocation, useNavigate } from '@tanstack/react-router'
 
 import {
@@ -14,6 +14,7 @@ import {
 import { cn } from '@mina/ui/lib/utils'
 
 import { useAuth } from '../features/auth/components/auth-provider'
+import { useRefreshAuthenticatedUser } from '../features/account/hooks/use-refresh-authenticated-user'
 import { useI18n } from './i18n-provider'
 import type { WebMessages } from '../lib/i18n-messages'
 
@@ -53,7 +54,11 @@ const workspaceButtonClassName = [
 ].join(' ')
 
 const navLinkClassName = [
-  'group flex h-9 w-full min-w-0 items-center rounded-none px-5 text-left text-sm font-bold',
+  'group flex h-11 w-full min-w-0 items-center gap-2 rounded-none px-5 text-left text-sm font-normal',
+].join(' ')
+const accountBackButtonClassName = [
+  'flex h-16 w-full min-w-0 items-center gap-2 border-0 bg-transparent px-3.5 text-left text-sm font-normal',
+  'text-foreground hover:bg-transparent hover:text-brand-accent',
 ].join(' ')
 
 const activeNavLinkClassName = 'bg-gray-100 hover:bg-gray-100'
@@ -62,6 +67,11 @@ const disabledNavLinkClassName = 'cursor-not-allowed hover:bg-transparent'
 const disabledNavTextClassName = 'text-foreground'
 const inactiveNavLinkClassName = 'hover:bg-gray-100'
 const inactiveNavTextClassName = 'text-foreground group-hover:text-brand-accent'
+const accountMenuSurfaceClassName = 'bg-gray-100'
+const accountMenuItemClassName = [
+  'h-14 cursor-pointer rounded-md px-6 text-base font-normal text-foreground',
+  'hover:bg-gray-200 hover:text-foreground focus:bg-gray-200 focus:text-foreground',
+].join(' ')
 const defaultPanelPath = '/projects'
 
 const isAccountPath = (path: string): boolean => path === '/account' || path.startsWith('/account/')
@@ -75,6 +85,7 @@ export function AppShell({ children }: PropsWithChildren) {
   const { logout, user } = useAuth()
   const accountMode = isAccountPath(pathname)
   const [panelPath, setPanelPath] = useState(defaultPanelPath)
+  useRefreshAuthenticatedUser()
   const displayName = user?.displayName || user?.username || user?.email || m.app_default_user()
   const initials = displayName
     .split(/\s+/)
@@ -83,7 +94,6 @@ export function AppShell({ children }: PropsWithChildren) {
     .map((part) => part[0]?.toUpperCase())
     .join('')
     .slice(0, 2)
-  const sidebarNavigation = accountMode ? accountNavigationItems : navigationItems
   const navLabel = accountMode ? m.account_nav_label() : m.app_nav_label()
   const handleBackToPanel = () => {
     navigate({ href: panelPath })
@@ -107,27 +117,20 @@ export function AppShell({ children }: PropsWithChildren) {
       <aside aria-label={navLabel} className={sidebarClassName}>
         <div className="grid gap-7 max-lg:grid-cols-2 max-lg:items-center max-md:grid-cols-1">
           {accountMode ? (
-            <button className={workspaceButtonClassName} onClick={handleBackToPanel} type="button">
-              <span className="flex min-w-0 items-center gap-3">
-                <span
-                  className="flex size-7 flex-none items-center justify-center rounded-sm border border-foreground-faint bg-surface-container-lowest text-foreground-secondary"
-                  aria-hidden="true"
-                >
-                  <ArrowLeft size={15} />
-                </span>
-                <span className="truncate text-sm font-medium">{m.account_back_to_panel()}</span>
-              </span>
+            <button className={accountBackButtonClassName} onClick={handleBackToPanel} type="button">
+              <ChevronLeft aria-hidden="true" className="flex-none text-foreground-tertiary" size={17} />
+              <span className="truncate">{m.account_back_to_panel()}</span>
             </button>
           ) : (
             <button className={workspaceButtonClassName} type="button">
               <span className="flex min-w-0 items-center gap-3">
                 <span
-                  className="flex size-7 flex-none items-center justify-center rounded-sm border border-foreground-faint bg-surface-container-lowest text-xs font-black text-foreground-secondary"
+                  className="flex size-7 flex-none items-center justify-center rounded-sm border border-foreground-faint bg-surface-container-lowest text-xs font-normal text-foreground-secondary"
                   aria-hidden="true"
                 >
                   M
                 </span>
-                <span className="truncate text-sm font-medium">{m.app_workspace_name()}</span>
+                <span className="truncate text-sm font-normal">{m.app_workspace_name()}</span>
               </span>
               <ChevronDown aria-hidden="true" className="flex-none text-foreground-tertiary" size={17} />
             </button>
@@ -150,8 +153,8 @@ export function AppShell({ children }: PropsWithChildren) {
           ) : null}
         </div>
 
-        <nav className="-mx-5 mt-6 grid gap-3 max-lg:mt-5 max-lg:flex max-lg:overflow-x-auto" aria-label={navLabel}>
-          {sidebarNavigation.map(({ disabled = false, label: getLabel, to }) => {
+        <nav className={cn('-mx-5 grid gap-2 max-lg:flex max-lg:overflow-x-auto', accountMode ? 'mt-8' : 'mt-6 max-lg:mt-5')} aria-label={navLabel}>
+          {(accountMode ? accountNavigationItems : navigationItems).map(({ disabled = false, label: getLabel, to }) => {
             const active = !disabled && (pathname === to || pathname.startsWith(`${to}/`))
             const label = getLabel(m)
 
@@ -184,69 +187,59 @@ export function AppShell({ children }: PropsWithChildren) {
         <div className="mt-auto grid gap-3 pt-6 max-lg:hidden">
           <section className="grid gap-3 rounded-md border border-brand-accent/20 bg-gray-100 p-4">
             <div className="grid gap-0.5">
-              <p className="m-0 text-sm font-bold text-foreground-secondary">{m.app_subscription_label()}</p>
-              <strong className="text-base leading-tight">{m.app_subscription_plan()}</strong>
+              <p className="m-0 text-sm font-normal text-foreground-secondary">{m.app_subscription_label()}</p>
+              <span className="text-base font-normal leading-tight">{m.app_subscription_plan()}</span>
             </div>
             <div className="h-px bg-brand-accent/20" aria-hidden="true" />
             <p className="m-0 text-sm leading-snug text-foreground-secondary">{m.app_subscription_body()}</p>
             <button
-              className="h-8 justify-self-start rounded-md border-0 bg-brand-accent px-3.5 text-xs font-black text-primary-foreground hover:bg-brand-accent/90"
+              className="h-8 justify-self-start rounded-md border-0 bg-brand-accent px-3.5 text-xs font-normal text-primary-foreground hover:bg-brand-accent/90"
               type="button"
             >
               {m.app_subscription_upgrade()}
             </button>
           </section>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                className="flex min-h-14 w-full items-center gap-3 border-0 border-t border-outline-ghost bg-transparent pt-3 text-left text-foreground hover:text-brand-accent"
-                type="button"
-              >
-                <span
-                  className="flex size-10 flex-none items-center justify-center overflow-hidden rounded-full bg-foreground text-xs font-extrabold text-primary-foreground"
-                  aria-hidden="true"
+          <div className="-mx-5 -mb-5">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="flex h-[67px] w-full items-center gap-4 border-0 border-t border-outline-ghost bg-gray-100 px-8 text-left text-foreground hover:bg-gray-200 hover:text-foreground"
+                  type="button"
                 >
-                  {user?.avatarUrl ? <img alt="" className="size-full object-cover" src={user.avatarUrl} /> : initials || 'M'}
-                </span>
-                <strong className="min-w-0 flex-1 truncate text-sm leading-tight">{displayName}</strong>
-                <ChevronDown aria-hidden="true" className="flex-none text-foreground-tertiary" size={16} />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="start"
-              className="w-64 rounded-md border border-outline-ghost bg-surface-container-lowest p-2 shadow-floating"
-              side="top"
-              sideOffset={10}
-            >
-              <DropdownMenuItem asChild className="h-9 cursor-pointer px-3 font-bold hover:text-brand-accent focus:text-brand-accent">
-                <Link to="/account/profile">
-                  <User aria-hidden="true" size={16} />
-                  {m.account_menu_your_account()}
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild className="h-9 cursor-pointer px-3 font-bold hover:text-brand-accent focus:text-brand-accent">
-                <Link to="/account/storage">
-                  <Database aria-hidden="true" size={16} />
-                  {m.account_menu_storage()}
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild className="h-9 cursor-pointer px-3 font-bold hover:text-brand-accent focus:text-brand-accent">
-                <Link to="/account/billing">
-                  <CreditCard aria-hidden="true" size={16} />
-                  {m.account_menu_billing()}
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="h-9 cursor-pointer px-3 font-bold text-foreground hover:text-brand-accent focus:text-brand-accent"
-                onSelect={handleLogout}
+                  <span
+                    className="flex size-10 flex-none items-center justify-center overflow-hidden rounded-full bg-foreground text-base font-normal text-primary-foreground"
+                    aria-hidden="true"
+                  >
+                    {user?.avatarUrl ? <img alt="" className="size-full object-cover" src={user.avatarUrl} /> : initials || 'M'}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-base font-normal leading-tight">{displayName}</span>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                alignOffset={20}
+                className={cn('w-[calc(var(--radix-dropdown-menu-trigger-width)_-_2.5rem)] rounded-md border border-outline-ghost p-3 shadow-floating', accountMenuSurfaceClassName)}
+                side="top"
+                sideOffset={10}
               >
-                <LogOut aria-hidden="true" size={16} />
-                {m.app_sign_out()}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuItem asChild className={accountMenuItemClassName}>
+                  <Link to="/account/profile">{m.account_menu_your_account()}</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className={accountMenuItemClassName}>
+                  <Link to="/account/storage">{m.account_menu_storage()}</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className={accountMenuItemClassName}>
+                  <Link to="/account/billing">{m.account_menu_billing()}</Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className={accountMenuItemClassName} onSelect={handleLogout}>
+                  <LogOut aria-hidden="true" size={18} />
+                  {m.app_sign_out()}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </aside>
 

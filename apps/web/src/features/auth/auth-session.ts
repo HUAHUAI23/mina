@@ -5,6 +5,14 @@ const AUTH_SESSION_STORAGE_KEY = 'mina.auth.session'
 
 const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
 
+const toStoredAuthSession = (authSession: AuthResponse): AuthResponse => {
+  const { avatarUrl, ...user } = authSession.user
+  return {
+    ...authSession,
+    user,
+  }
+}
+
 export const readStoredAuthSession = (): AuthResponse | null => {
   if (!canUseStorage()) {
     return null
@@ -29,7 +37,7 @@ export const readStoredAuthSession = (): AuthResponse | null => {
       return null
     }
 
-    return parsedSession.data
+    return toStoredAuthSession(parsedSession.data)
   } catch {
     window.localStorage.removeItem(AUTH_SESSION_STORAGE_KEY)
     return null
@@ -43,7 +51,7 @@ export const storeAuthSession = (authSession: AuthResponse): void => {
     return
   }
 
-  window.localStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(authSession))
+  window.localStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(toStoredAuthSession(authSession)))
 }
 
 export const clearStoredAuthSession = (): void => {

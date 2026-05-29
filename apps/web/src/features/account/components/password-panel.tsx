@@ -1,9 +1,8 @@
 import type { SubmitEvent } from 'react'
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { KeyRound } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
 
-import { Button } from '@mina/ui/components/button'
 import { Input } from '@mina/ui/components/input'
 
 import { useMessages } from '../../../app/i18n-provider'
@@ -12,82 +11,166 @@ import { changeAccountPassword } from '../api/account.client'
 import { AccountPageShell } from './account-page-shell'
 
 interface PasswordFormState {
+  confirmPassword: string
   currentPassword: string
   newPassword: string
 }
 
 const initialForm: PasswordFormState = {
+  confirmPassword: '',
   currentPassword: '',
   newPassword: '',
+}
+
+type PasswordField = 'confirmPassword' | 'currentPassword' | 'newPassword'
+
+interface PasswordInputFieldProps {
+  autoComplete: string
+  hidePasswordLabel: string
+  label: string
+  name: PasswordField
+  onChange(value: string): void
+  onToggle(): void
+  show: boolean
+  showPasswordLabel: string
+  value: string
+}
+
+function PasswordInputField({
+  autoComplete,
+  hidePasswordLabel,
+  label,
+  name,
+  onChange,
+  onToggle,
+  show,
+  showPasswordLabel,
+  value,
+}: PasswordInputFieldProps) {
+  return (
+    <label className="grid gap-2">
+      <span className="text-sm font-normal text-foreground">{label}</span>
+      <span className="relative block">
+        <Input
+          autoComplete={autoComplete}
+          className="h-11 rounded-lg border-0 bg-gray-100 px-4 pr-12 text-base font-normal text-foreground placeholder:text-foreground-tertiary focus-visible:ring-0"
+          maxLength={256}
+          minLength={8}
+          name={name}
+          onChange={(event) => onChange(event.target.value)}
+          required
+          type={show ? 'text' : 'password'}
+          value={value}
+        />
+        <button
+          aria-label={show ? hidePasswordLabel : showPasswordLabel}
+          className="absolute top-1/2 right-3 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-full border-0 bg-transparent text-foreground-secondary hover:text-foreground"
+          onClick={onToggle}
+          type="button"
+        >
+          {show ? <EyeOff aria-hidden="true" size={20} /> : <Eye aria-hidden="true" size={20} />}
+        </button>
+      </span>
+    </label>
+  )
 }
 
 export function PasswordPanel() {
   const m = useMessages()
   const [form, setForm] = useState<PasswordFormState>(initialForm)
+  const [visibleFields, setVisibleFields] = useState<Record<PasswordField, boolean>>({
+    confirmPassword: false,
+    currentPassword: false,
+    newPassword: false,
+  })
+  const [formError, setFormError] = useState<string | undefined>(undefined)
 
   const mutation = useMutation({
     mutationFn: changeAccountPassword,
-    onSuccess: () => setForm(initialForm),
+    onSuccess: () => {
+      setForm(initialForm)
+      setFormError(undefined)
+    },
   })
 
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
-    mutation.mutate(form)
+    if (form.newPassword !== form.confirmPassword) {
+      setFormError(m.account_password_mismatch())
+      return
+    }
+    setFormError(undefined)
+    mutation.mutate({
+      currentPassword: form.currentPassword,
+      newPassword: form.newPassword,
+    })
   }
 
   return (
     <AccountPageShell description={m.account_password_description()} title={m.account_password_title()}>
-      <section className="grid gap-6 rounded-md border border-outline-ghost bg-surface-container-lowest p-6 shadow-floating max-md:p-5">
-        <div className="flex items-center gap-3 text-brand-accent">
-          <span className="flex size-9 items-center justify-center rounded-md bg-brand-accent/10">
-            <KeyRound aria-hidden="true" size={18} />
-          </span>
-          <strong className="text-sm font-bold text-foreground">{m.account_password_panel_title()}</strong>
-        </div>
+      <section className="mx-auto grid w-full max-w-2xl gap-6">
+        <h2 className="m-0 text-left text-3xl font-normal leading-tight text-foreground">{m.account_password_panel_title()}</h2>
 
-        <form className="grid gap-5" onSubmit={handleSubmit}>
-          <label className="grid gap-2">
-            <span className="text-sm font-bold text-foreground-secondary">{m.account_password_current_label()}</span>
-            <Input
-              autoComplete="current-password"
-              className="h-10 bg-surface-container-lowest"
-              maxLength={256}
-              minLength={8}
-              onChange={(event) => setForm((value) => ({ ...value, currentPassword: event.target.value }))}
-              required
-              type="password"
-              value={form.currentPassword}
-            />
-          </label>
-          <label className="grid gap-2">
-            <span className="text-sm font-bold text-foreground-secondary">{m.account_password_new_label()}</span>
-            <Input
-              autoComplete="new-password"
-              className="h-10 bg-surface-container-lowest"
-              maxLength={256}
-              minLength={8}
-              onChange={(event) => setForm((value) => ({ ...value, newPassword: event.target.value }))}
-              required
-              type="password"
-              value={form.newPassword}
-            />
-          </label>
+        <form className="grid gap-6" onSubmit={handleSubmit}>
+          <PasswordInputField
+            autoComplete="current-password"
+            hidePasswordLabel={m.auth_hide_password()}
+            label={m.account_password_current_label()}
+            name="currentPassword"
+            onChange={(currentPassword) => setForm((value) => ({ ...value, currentPassword }))}
+            onToggle={() => setVisibleFields((value) => ({ ...value, currentPassword: !value.currentPassword }))}
+            show={visibleFields.currentPassword}
+            showPasswordLabel={m.auth_show_password()}
+            value={form.currentPassword}
+          />
+          <PasswordInputField
+            autoComplete="new-password"
+            hidePasswordLabel={m.auth_hide_password()}
+            label={m.account_password_new_label()}
+            name="newPassword"
+            onChange={(newPassword) => setForm((value) => ({ ...value, newPassword }))}
+            onToggle={() => setVisibleFields((value) => ({ ...value, newPassword: !value.newPassword }))}
+            show={visibleFields.newPassword}
+            showPasswordLabel={m.auth_show_password()}
+            value={form.newPassword}
+          />
+          <PasswordInputField
+            autoComplete="new-password"
+            hidePasswordLabel={m.auth_hide_password()}
+            label={m.account_password_confirm_label()}
+            name="confirmPassword"
+            onChange={(confirmPassword) => setForm((value) => ({ ...value, confirmPassword }))}
+            onToggle={() => setVisibleFields((value) => ({ ...value, confirmPassword: !value.confirmPassword }))}
+            show={visibleFields.confirmPassword}
+            showPasswordLabel={m.auth_show_password()}
+            value={form.confirmPassword}
+          />
+
+          {formError ? (
+            <p className="m-0 rounded-md bg-destructive/10 p-3 text-sm font-normal text-destructive">
+              {formError}
+            </p>
+          ) : null}
 
           {mutation.isError ? (
-            <p className="m-0 rounded-md bg-destructive/10 p-3 text-sm font-semibold text-destructive">
+            <p className="m-0 rounded-md bg-destructive/10 p-3 text-sm font-normal text-destructive">
               {getErrorMessage(mutation.error)}
             </p>
           ) : null}
 
           {mutation.isSuccess ? (
-            <p className="m-0 rounded-md bg-brand-accent/10 p-3 text-sm font-semibold text-brand-accent">
+            <p className="m-0 rounded-md bg-brand-accent/10 p-3 text-sm font-normal text-brand-accent">
               {m.account_password_saved()}
             </p>
           ) : null}
 
-          <Button className="h-10 justify-self-start rounded-md px-4" disabled={mutation.isPending} type="submit">
+          <button
+            className="mt-6 h-11 rounded-lg border-0 bg-gray-100 px-4 text-base font-normal text-foreground-tertiary hover:bg-brand-accent hover:text-primary-foreground disabled:cursor-not-allowed disabled:text-foreground-quaternary disabled:hover:bg-gray-100 disabled:hover:text-foreground-quaternary"
+            disabled={mutation.isPending}
+            type="submit"
+          >
             {mutation.isPending ? m.account_saving() : m.account_password_submit()}
-          </Button>
+          </button>
         </form>
       </section>
     </AccountPageShell>

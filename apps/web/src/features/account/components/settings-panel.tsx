@@ -1,6 +1,7 @@
+import type { SubmitEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { MinaLocale } from '@mina/i18n'
-import { Languages } from 'lucide-react'
 
 import {
   Select,
@@ -28,6 +29,12 @@ export function SettingsPanel() {
   const { locale, messages: m, setLocale } = useI18n()
   const queryClient = useQueryClient()
   const { updateAuthenticatedUser } = useAuth()
+  const [selectedLocale, setSelectedLocale] = useState<MinaLocale>(locale)
+  const [lastSavedLocale, setLastSavedLocale] = useState<MinaLocale>(locale)
+
+  useEffect(() => {
+    setSelectedLocale(locale)
+  }, [locale])
 
   const mutation = useMutation({
     mutationFn: updateAccountPreferences,
@@ -35,53 +42,83 @@ export function SettingsPanel() {
       updateAuthenticatedUser(response.user)
       queryClient.setQueryData(accountKeys.profile(), response)
       if (response.user.preferredLocale) {
+        setLastSavedLocale(response.user.preferredLocale)
         setLocale(response.user.preferredLocale)
       }
     },
+    onError: () => {
+      setLocale(lastSavedLocale)
+      setSelectedLocale(lastSavedLocale)
+    },
   })
 
+  const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (selectedLocale === lastSavedLocale) {
+      return
+    }
+    mutation.mutate({ preferredLocale: selectedLocale })
+  }
+
   const handleLocaleChange = (nextLocale: MinaLocale) => {
-    mutation.mutate({ preferredLocale: nextLocale })
+    setSelectedLocale(nextLocale)
+    setLocale(nextLocale)
   }
 
   return (
     <AccountPageShell description={m.account_settings_description()} title={m.account_settings_title()}>
-      <section className="grid gap-6 rounded-md border border-outline-ghost bg-surface-container-lowest p-6 shadow-floating max-md:p-5">
-        <div className="flex items-center gap-3">
-          <span className="flex size-9 items-center justify-center rounded-md bg-brand-accent/10 text-brand-accent">
-            <Languages aria-hidden="true" size={18} />
-          </span>
-          <div className="grid min-w-0 gap-1">
-            <strong className="text-sm font-bold text-foreground">{m.account_settings_language_title()}</strong>
-            <span className="text-sm text-foreground-secondary">{m.account_settings_language_description()}</span>
+      <section className="mx-auto grid w-full max-w-2xl gap-8">
+        <h2 className="m-0 text-left text-3xl font-normal leading-tight text-foreground">{m.account_settings_title()}</h2>
+
+        <form className="grid gap-6" onSubmit={handleSubmit}>
+          <div className="grid gap-2">
+            <span className="text-sm font-normal text-foreground">{m.account_settings_language_label()}</span>
+            <Select
+              disabled={mutation.isPending}
+              onValueChange={(value) => handleLocaleChange(value as MinaLocale)}
+              value={selectedLocale}
+            >
+              <SelectTrigger className="h-11 w-full rounded-lg border-0 bg-gray-100 px-4 text-base font-normal text-foreground focus-visible:ring-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="start" className="w-[var(--radix-select-trigger-width)] bg-gray-100 p-1 shadow-floating ring-0" position="popper">
+                {locales.map((option) => (
+                  <SelectItem className="h-11 px-4 text-base font-normal focus:bg-gray-200" key={option} value={option}>
+                    {localeLabels[option]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        </div>
 
-        <div className="grid max-w-sm gap-2">
-          <span className="text-sm font-bold text-foreground-secondary">{m.account_settings_language_label()}</span>
-          <Select
-            disabled={mutation.isPending}
-            onValueChange={(value) => handleLocaleChange(value as MinaLocale)}
-            value={locale}
-          >
-            <SelectTrigger className="h-10 w-full rounded-md bg-surface-container-lowest">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {locales.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {localeLabels[option]}
+          <div className="grid gap-2">
+            <span className="text-sm font-normal text-foreground">{m.account_settings_theme_label()}</span>
+            <Select disabled value="light">
+              <SelectTrigger className="h-11 w-full rounded-lg border-0 bg-gray-100 px-4 text-base font-normal text-foreground opacity-100 focus-visible:ring-0 disabled:opacity-100">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="start" className="w-[var(--radix-select-trigger-width)] bg-gray-100 p-1 shadow-floating ring-0" position="popper">
+                <SelectItem className="h-11 px-4 text-base font-normal" value="light">
+                  {m.account_settings_theme_light()}
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+              </SelectContent>
+            </Select>
+          </div>
 
-        {mutation.isError ? (
-          <p className="m-0 rounded-md bg-destructive/10 p-3 text-sm font-semibold text-destructive">
-            {getErrorMessage(mutation.error)}
-          </p>
-        ) : null}
+          {mutation.isError ? (
+            <p className="m-0 rounded-md bg-destructive/10 p-3 text-sm font-normal text-destructive">
+              {getErrorMessage(mutation.error)}
+            </p>
+          ) : null}
+
+          <button
+            className="mt-6 h-11 rounded-lg border-0 bg-gray-100 px-4 text-base font-normal text-foreground-tertiary hover:bg-brand-accent hover:text-primary-foreground disabled:cursor-not-allowed disabled:text-foreground-quaternary disabled:hover:bg-gray-100 disabled:hover:text-foreground-quaternary"
+            disabled={mutation.isPending}
+            type="submit"
+          >
+            {mutation.isPending ? m.account_saving() : m.account_settings_save_button()}
+          </button>
+        </form>
       </section>
     </AccountPageShell>
   )

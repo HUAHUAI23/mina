@@ -1,4 +1,3 @@
-import { Database } from 'lucide-react'
 import { formatNumber } from '@mina/i18n'
 
 import { Progress } from '@mina/ui/components/progress'
@@ -18,42 +17,43 @@ export function StoragePanel() {
 
   return (
     <AccountPageShell description={m.account_storage_description()} title={m.account_storage_title()}>
-      <section className="grid gap-6 rounded-md border border-outline-ghost bg-surface-container-lowest p-6 shadow-floating max-md:p-5">
-        <div className="flex items-center gap-3">
-          <span className="flex size-9 items-center justify-center rounded-md bg-brand-accent/10 text-brand-accent">
-            <Database aria-hidden="true" size={18} />
-          </span>
-          <div className="grid min-w-0 gap-1">
-            <strong className="text-sm font-bold text-foreground">{m.account_storage_plan_label()}</strong>
-            {storage ? (
-              <span className="text-sm text-foreground-secondary">{storage.planName}</span>
-            ) : (
-              <Skeleton className="h-4 w-20" />
-            )}
-          </div>
-        </div>
+      <section className="mx-auto grid w-full max-w-2xl gap-6">
+        <h2 className="m-0 text-left text-3xl font-normal leading-tight text-foreground">{m.account_storage_title()}</h2>
 
         {storage ? (
-          <div className="grid gap-3">
-            <div className="flex items-center justify-between gap-4 text-sm">
-              <span className="font-bold text-foreground">{m.account_storage_used_label()}</span>
-              <span className="text-foreground-secondary">
-                {m.account_storage_usage_value({
-                  quota: formatNumber(bytesToGigabytes(storage.quotaBytes), locale),
-                  used: formatNumber(bytesToGigabytes(storage.usedBytes), locale),
-                })}
-              </span>
+          <div className="grid gap-6">
+            <div className="grid gap-2">
+              <span className="text-sm font-normal text-foreground">{m.account_storage_plan_label()}</span>
+              <div className="flex h-11 items-center rounded-lg bg-gray-100 px-4 text-base font-normal text-foreground">
+                {storage.planName}
+              </div>
             </div>
-            <Progress className="h-2 bg-gray-100" value={usagePercent} />
-            <p className="m-0 text-sm text-foreground-secondary">
-              {m.account_storage_percent_used({ percent: formatNumber(usagePercent, locale) })}
-            </p>
+
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between gap-4 text-sm font-normal text-foreground">
+                <span>{m.account_storage_used_label()}</span>
+                <span>
+                  {m.account_storage_usage_value({
+                    quota: formatNumber(bytesToGigabytes(storage.quotaBytes), locale),
+                    used: formatNumber(bytesToGigabytes(storage.usedBytes), locale),
+                  })}
+                </span>
+              </div>
+              <Progress className="h-3 bg-gray-100" value={usagePercent} />
+              <p className="m-0 text-sm font-normal text-foreground-secondary">
+                {m.account_storage_percent_used({ percent: formatNumber(usagePercent, locale) })}
+              </p>
+            </div>
+
+            <button className="h-11 rounded-lg border-0 bg-gray-100 px-4 text-base font-normal text-foreground-tertiary hover:bg-brand-accent hover:text-primary-foreground" type="button">
+              {m.account_storage_manage_button()}
+            </button>
           </div>
         ) : (
-          <div className="grid gap-3">
-            <Skeleton className="h-5 w-full" />
-            <Skeleton className="h-2 w-full" />
-            <Skeleton className="h-4 w-40" />
+          <div className="grid gap-6">
+            <Skeleton className="h-11 w-full rounded-lg" />
+            <Skeleton className="h-3 w-full rounded-full" />
+            <Skeleton className="h-11 w-full rounded-lg" />
           </div>
         )}
       </section>

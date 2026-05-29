@@ -4,7 +4,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Camera, Loader2 } from 'lucide-react'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@mina/ui/components/avatar'
-import { Button } from '@mina/ui/components/button'
 import { Input } from '@mina/ui/components/input'
 import { Label } from '@mina/ui/components/label'
 
@@ -76,43 +75,45 @@ export function ProfilePanel() {
 
   return (
     <AccountPageShell description={m.account_profile_description()} title={m.account_profile_title()}>
-      <section className="grid gap-6 rounded-md border border-outline-ghost bg-surface-container-lowest p-6 shadow-floating max-md:p-5">
-        <div className="flex min-w-0 items-center gap-4">
-          <Avatar className="size-16" size="lg">
-            {profile?.avatarUrl ? <AvatarImage alt="" src={profile.avatarUrl} /> : null}
-            <AvatarFallback className="bg-foreground text-sm font-extrabold text-primary-foreground">
-              {initialsFromName(displayName)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="grid min-w-0 flex-1 gap-1">
-            <strong className="truncate text-base font-bold text-foreground">{displayName}</strong>
-            <span className="truncate text-sm text-foreground-secondary">{profile?.email}</span>
+      <section className="mx-auto grid w-full max-w-lg gap-5">
+        <h2 className="m-0 text-center text-2xl font-normal leading-tight text-foreground">{m.account_nav_profile()}</h2>
+
+        <div className="grid justify-items-center">
+          <div className="relative">
+            <Avatar className="size-40 shadow-floating">
+              {profile?.avatarUrl ? <AvatarImage alt="" src={profile.avatarUrl} /> : null}
+              <AvatarFallback className="bg-foreground text-5xl font-normal text-primary-foreground">
+                {initialsFromName(displayName)}
+              </AvatarFallback>
+            </Avatar>
+            <Label
+              aria-label={m.account_profile_avatar_button()}
+              className="absolute right-1 bottom-1 inline-flex size-14 cursor-pointer items-center justify-center rounded-full border border-outline-ghost bg-surface-container-lowest text-foreground shadow-floating hover:bg-gray-100"
+            >
+              {avatarMutation.isPending ? <Loader2 aria-hidden="true" className="animate-spin" size={26} /> : <Camera aria-hidden="true" size={26} />}
+              <input
+                accept="image/png,image/jpeg,image/webp"
+                className="sr-only"
+                disabled={avatarMutation.isPending}
+                onChange={handleAvatarChange}
+                type="file"
+              />
+            </Label>
           </div>
-          <Label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md bg-gray-100 px-3 text-sm font-bold text-foreground hover:text-brand-accent">
-            {avatarMutation.isPending ? <Loader2 aria-hidden="true" className="animate-spin" size={16} /> : <Camera aria-hidden="true" size={16} />}
-            {m.account_profile_avatar_button()}
-            <input
-              accept="image/png,image/jpeg,image/webp"
-              className="sr-only"
-              disabled={avatarMutation.isPending}
-              onChange={handleAvatarChange}
-              type="file"
-            />
-          </Label>
         </div>
 
         {avatarMutation.isError ? (
-          <p className="m-0 rounded-md bg-destructive/10 p-3 text-sm font-semibold text-destructive">
+          <p className="m-0 rounded-md bg-destructive/10 p-3 text-sm font-normal text-destructive">
             {getErrorMessage(avatarMutation.error)}
           </p>
         ) : null}
 
         <form className="grid gap-5" onSubmit={handleSubmit}>
           <label className="grid gap-2">
-            <span className="text-sm font-bold text-foreground-secondary">{m.account_profile_display_name_label()}</span>
+            <span className="text-sm font-normal text-foreground">{m.account_profile_display_name_label()}</span>
             <Input
               autoComplete="name"
-              className="h-10 bg-surface-container-lowest"
+              className="h-11 rounded-lg border-0 bg-gray-100 px-4 text-base font-normal text-foreground focus-visible:ring-0"
               maxLength={120}
               minLength={1}
               onChange={(event) => setDisplayNameInput(event.target.value)}
@@ -121,29 +122,36 @@ export function ProfilePanel() {
             />
           </label>
           <label className="grid gap-2">
-            <span className="text-sm font-bold text-foreground-secondary">{m.account_profile_email_label()}</span>
+            <span className="text-sm font-normal text-foreground">{m.account_profile_email_label()}</span>
             <Input
-              className="h-10 bg-surface-container-lowest text-foreground-secondary"
+              className="h-11 rounded-lg border-0 bg-gray-100 px-4 text-base font-normal text-foreground focus-visible:ring-0 disabled:bg-gray-100 disabled:text-foreground disabled:opacity-100"
               disabled
               value={profile?.email ?? ''}
             />
           </label>
+          <button className="-mt-3 justify-self-end border-0 bg-transparent px-0 text-sm font-normal text-foreground-secondary hover:text-foreground" type="button">
+            {m.account_profile_change_email()}
+          </button>
 
           {profileMutation.isError ? (
-            <p className="m-0 rounded-md bg-destructive/10 p-3 text-sm font-semibold text-destructive">
+            <p className="m-0 rounded-md bg-destructive/10 p-3 text-sm font-normal text-destructive">
               {getErrorMessage(profileMutation.error)}
             </p>
           ) : null}
 
           {profileMutation.isSuccess ? (
-            <p className="m-0 rounded-md bg-brand-accent/10 p-3 text-sm font-semibold text-brand-accent">
+            <p className="m-0 rounded-md bg-brand-accent/10 p-3 text-sm font-normal text-brand-accent">
               {m.account_profile_saved()}
             </p>
           ) : null}
 
-          <Button className="h-10 justify-self-start rounded-md px-4" disabled={profileMutation.isPending} type="submit">
+          <button
+            className="h-11 rounded-lg border-0 bg-gray-100 px-4 text-base font-normal text-foreground-tertiary hover:bg-brand-accent hover:text-primary-foreground disabled:cursor-not-allowed disabled:text-foreground-quaternary disabled:hover:bg-gray-100 disabled:hover:text-foreground-quaternary"
+            disabled={profileMutation.isPending}
+            type="submit"
+          >
             {profileMutation.isPending ? m.account_saving() : m.account_save_changes()}
-          </Button>
+          </button>
         </form>
       </section>
     </AccountPageShell>
