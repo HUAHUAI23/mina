@@ -57,7 +57,7 @@ The Vite + React application.
 - `src/routes/`: TanStack Router file-based route entries and generated route tree
 - `src/lib/`: reusable client-side utilities
 
-The web app keeps authentication as an app-level gate rather than a route page. `AuthProvider` stores the current development session, `AuthGate` short-circuits unauthenticated rendering with a centered login/register card, and feature API clients call the Hono RPC surface from `@mina/api/client` while parsing responses with `@mina/contracts`.
+The web app uses a dedicated `/login` route for password login and registration. The root TanStack Router route checks the locally stored development session before rendering protected pages; unauthenticated visits redirect to `/login?redirect=...`, and successful authentication navigates back to the original target. `AuthProvider` stores the current session, while feature API clients call the Hono RPC surface from `@mina/api/client` and parse responses with `@mina/contracts`.
 
 ### `packages/contracts`
 
@@ -146,13 +146,13 @@ API requests resolve locale in this order:
 
 ```text
 X-Mina-Locale
--> authenticated user preference when one is added later
+-> authenticated user preference when available
 -> mina_locale cookie
 -> Accept-Language
 -> en
 ```
 
-The current implementation does not persist user locale preferences in the database and does not use locale-prefixed routes. Browser locale selection is stored in `localStorage` as `mina.locale`, and the web client sends the selected locale through `X-Mina-Locale`.
+Authenticated user locale preference is persisted on `users.preferred_locale` and can be updated through the account settings API. Browser locale selection is still stored in `localStorage` as `mina.locale`, and the web client sends the selected locale through `X-Mina-Locale`. Mina does not use locale-prefixed routes.
 
 API errors use stable machine-readable `error.code` values. The user-facing `error.message` is localized at response time when a known `messageKey` is available. `error.locale`, primitive `error.params`, and structured validation `error.issues` are optional contract fields. Services keep English fallback/debug messages for logs and diagnosis; clients should not branch on localized text.
 
@@ -187,7 +187,7 @@ The public auth API currently exposes:
 
 Full OAuth provider login, client registration, consent UI, refresh token exchange, and administrator-only public resource workflows are intentionally not implemented yet.
 
-The frontend currently connects only the password login/register runtime. Because the API does not yet expose a session refresh or `me` endpoint, the browser stores the returned `AuthResponse` for the development session and clears it when the embedded expiry has passed. Server-side session revalidation should move behind a dedicated authenticated endpoint before production hardening.
+The frontend currently connects only the password login/register runtime through `/login`. Because the API does not yet expose a session refresh or `me` endpoint, the browser stores the returned `AuthResponse` for the development session and clears it when the embedded expiry has passed. Server-side session revalidation should move behind a dedicated authenticated endpoint before production hardening.
 
 ## Task And Workflow Core
 
@@ -302,7 +302,7 @@ The web app imports shared design-system CSS from `@mina/ui/globals.css` and com
 
 Routes are file-based through TanStack Router under `apps/web/src/routes`. The generated `apps/web/src/routeTree.gen.ts` is committed so `tsc` can typecheck before Vite runs. Web scripts run `tsr generate` before typecheck, dev, and build to keep the generated tree synchronized.
 
-The app-level provider chain includes `I18nProvider` outside auth/session providers so both authenticated pages and the auth gate can switch language. `I18nProvider` owns the browser locale state, updates `<html lang>`, and exposes locale-bound message functions through `useMessages()`. Web UI components subscribe to those bound messages instead of reading the Paraglide global runtime directly. Pure frontend logic receives bound messages explicitly, or uses the English base-locale fallback only where no UI locale is available. The app shell and auth gate render the shared locale switcher; changing locale does not clear React Query data, remount routes, or rewrite paths.
+The app-level provider chain includes `I18nProvider` outside auth/session providers so both authenticated pages and the standalone login page can switch language. `I18nProvider` owns the browser locale state, updates `<html lang>`, and exposes locale-bound message functions through `useMessages()`. Web UI components subscribe to those bound messages instead of reading the Paraglide global runtime directly. Pure frontend logic receives bound messages explicitly, or uses the English base-locale fallback only where no UI locale is available. The app shell and login page render the shared locale switcher; changing locale does not clear React Query data, remount routes, or rewrite paths.
 
 The root route owns the persistent browser-sized application shell through `apps/web/src/app/app-shell.tsx`. The shell defines the floating navigation island, top bar, route frame, footer note, and overall viewport contract. Route components should fill the route frame and must not recreate the global app skeleton. The shell is locked to `100dvh` with `overflow: hidden` on the document root so normal route switches keep the same browser-screen proportion instead of making the page scroll.
 

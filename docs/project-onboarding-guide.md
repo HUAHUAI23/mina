@@ -83,13 +83,16 @@ Shared i18n lives in `packages/i18n`.
 - Web generated messages are centralized in `apps/web/src/lib/i18n-messages.ts`; UI components read locale-bound messages with `useMessages()`.
 - Web locale state lives at app level in `apps/web/src/app/i18n-provider.tsx` and `apps/web/src/app/locale-storage.ts`.
 - The web API client sends `X-Mina-Locale` from the selected browser locale.
+- Authenticated user language preference is persisted on `users.preferred_locale` and updated through the account settings API.
 - API request locale helpers live in `@mina/i18n/server` and are wired in `apps/api/src/app/create-app.ts`.
 - API errors use stable `error.code` values; localized `error.message` is display text only.
 - Durable task and workflow errors store semantic code/key/params/debug fields and are localized at response time.
 
-Current i18n non-goals are URL locale routing, database-backed user locale preferences, and future server-generated artifacts such as emails or exports.
+Current i18n non-goals are URL locale routing and future server-generated artifacts such as emails or exports.
 
 ## Web UI Styling Quick Rules
+
+The web app has a route-level auth boundary. `/login` is the only public product route for the current password login/register runtime; protected routes redirect there with a `redirect` search parameter and return to the original path after successful authentication.
 
 Web UI should be Tailwind-first. Keep ordinary layout, spacing, typography, colors, borders, radii, sizing, hover, focus, and disabled states in Tailwind utilities rather than handwritten CSS.
 

@@ -10,21 +10,39 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ProjectsRouteImport } from './routes/projects'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as CanvasRouteImport } from './routes/canvas'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectsIndexRouteImport } from './routes/projects.index'
 import { Route as CanvasIndexRouteImport } from './routes/canvas.index'
+import { Route as AccountIndexRouteImport } from './routes/account.index'
 import { Route as ProjectsProjectIdRouteImport } from './routes/projects.$projectId'
 import { Route as CanvasWorkflowIdRouteImport } from './routes/canvas.$workflowId'
+import { Route as AccountStorageRouteImport } from './routes/account.storage'
+import { Route as AccountSettingsRouteImport } from './routes/account.settings'
+import { Route as AccountProfileRouteImport } from './routes/account.profile'
+import { Route as AccountPasswordRouteImport } from './routes/account.password'
+import { Route as AccountBillingRouteImport } from './routes/account.billing'
 
 const ProjectsRoute = ProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CanvasRoute = CanvasRouteImport.update({
   id: '/canvas',
   path: '/canvas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -42,6 +60,11 @@ const CanvasIndexRoute = CanvasIndexRouteImport.update({
   path: '/',
   getParentRoute: () => CanvasRoute,
 } as any)
+const AccountIndexRoute = AccountIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AccountRoute,
+} as any)
 const ProjectsProjectIdRoute = ProjectsProjectIdRouteImport.update({
   id: '/$projectId',
   path: '/$projectId',
@@ -52,30 +75,78 @@ const CanvasWorkflowIdRoute = CanvasWorkflowIdRouteImport.update({
   path: '/$workflowId',
   getParentRoute: () => CanvasRoute,
 } as any)
+const AccountStorageRoute = AccountStorageRouteImport.update({
+  id: '/storage',
+  path: '/storage',
+  getParentRoute: () => AccountRoute,
+} as any)
+const AccountSettingsRoute = AccountSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AccountRoute,
+} as any)
+const AccountProfileRoute = AccountProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AccountRoute,
+} as any)
+const AccountPasswordRoute = AccountPasswordRouteImport.update({
+  id: '/password',
+  path: '/password',
+  getParentRoute: () => AccountRoute,
+} as any)
+const AccountBillingRoute = AccountBillingRouteImport.update({
+  id: '/billing',
+  path: '/billing',
+  getParentRoute: () => AccountRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/account': typeof AccountRouteWithChildren
   '/canvas': typeof CanvasRouteWithChildren
+  '/login': typeof LoginRoute
   '/projects': typeof ProjectsRouteWithChildren
+  '/account/billing': typeof AccountBillingRoute
+  '/account/password': typeof AccountPasswordRoute
+  '/account/profile': typeof AccountProfileRoute
+  '/account/settings': typeof AccountSettingsRoute
+  '/account/storage': typeof AccountStorageRoute
   '/canvas/$workflowId': typeof CanvasWorkflowIdRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
+  '/account/': typeof AccountIndexRoute
   '/canvas/': typeof CanvasIndexRoute
   '/projects/': typeof ProjectsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/account/billing': typeof AccountBillingRoute
+  '/account/password': typeof AccountPasswordRoute
+  '/account/profile': typeof AccountProfileRoute
+  '/account/settings': typeof AccountSettingsRoute
+  '/account/storage': typeof AccountStorageRoute
   '/canvas/$workflowId': typeof CanvasWorkflowIdRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
+  '/account': typeof AccountIndexRoute
   '/canvas': typeof CanvasIndexRoute
   '/projects': typeof ProjectsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/account': typeof AccountRouteWithChildren
   '/canvas': typeof CanvasRouteWithChildren
+  '/login': typeof LoginRoute
   '/projects': typeof ProjectsRouteWithChildren
+  '/account/billing': typeof AccountBillingRoute
+  '/account/password': typeof AccountPasswordRoute
+  '/account/profile': typeof AccountProfileRoute
+  '/account/settings': typeof AccountSettingsRoute
+  '/account/storage': typeof AccountStorageRoute
   '/canvas/$workflowId': typeof CanvasWorkflowIdRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
+  '/account/': typeof AccountIndexRoute
   '/canvas/': typeof CanvasIndexRoute
   '/projects/': typeof ProjectsIndexRoute
 }
@@ -83,33 +154,58 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/account'
     | '/canvas'
+    | '/login'
     | '/projects'
+    | '/account/billing'
+    | '/account/password'
+    | '/account/profile'
+    | '/account/settings'
+    | '/account/storage'
     | '/canvas/$workflowId'
     | '/projects/$projectId'
+    | '/account/'
     | '/canvas/'
     | '/projects/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/login'
+    | '/account/billing'
+    | '/account/password'
+    | '/account/profile'
+    | '/account/settings'
+    | '/account/storage'
     | '/canvas/$workflowId'
     | '/projects/$projectId'
+    | '/account'
     | '/canvas'
     | '/projects'
   id:
     | '__root__'
     | '/'
+    | '/account'
     | '/canvas'
+    | '/login'
     | '/projects'
+    | '/account/billing'
+    | '/account/password'
+    | '/account/profile'
+    | '/account/settings'
+    | '/account/storage'
     | '/canvas/$workflowId'
     | '/projects/$projectId'
+    | '/account/'
     | '/canvas/'
     | '/projects/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountRoute: typeof AccountRouteWithChildren
   CanvasRoute: typeof CanvasRouteWithChildren
+  LoginRoute: typeof LoginRoute
   ProjectsRoute: typeof ProjectsRouteWithChildren
 }
 
@@ -122,11 +218,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/canvas': {
       id: '/canvas'
       path: '/canvas'
       fullPath: '/canvas'
       preLoaderRoute: typeof CanvasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -150,6 +260,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CanvasIndexRouteImport
       parentRoute: typeof CanvasRoute
     }
+    '/account/': {
+      id: '/account/'
+      path: '/'
+      fullPath: '/account/'
+      preLoaderRoute: typeof AccountIndexRouteImport
+      parentRoute: typeof AccountRoute
+    }
     '/projects/$projectId': {
       id: '/projects/$projectId'
       path: '/$projectId'
@@ -164,8 +281,64 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CanvasWorkflowIdRouteImport
       parentRoute: typeof CanvasRoute
     }
+    '/account/storage': {
+      id: '/account/storage'
+      path: '/storage'
+      fullPath: '/account/storage'
+      preLoaderRoute: typeof AccountStorageRouteImport
+      parentRoute: typeof AccountRoute
+    }
+    '/account/settings': {
+      id: '/account/settings'
+      path: '/settings'
+      fullPath: '/account/settings'
+      preLoaderRoute: typeof AccountSettingsRouteImport
+      parentRoute: typeof AccountRoute
+    }
+    '/account/profile': {
+      id: '/account/profile'
+      path: '/profile'
+      fullPath: '/account/profile'
+      preLoaderRoute: typeof AccountProfileRouteImport
+      parentRoute: typeof AccountRoute
+    }
+    '/account/password': {
+      id: '/account/password'
+      path: '/password'
+      fullPath: '/account/password'
+      preLoaderRoute: typeof AccountPasswordRouteImport
+      parentRoute: typeof AccountRoute
+    }
+    '/account/billing': {
+      id: '/account/billing'
+      path: '/billing'
+      fullPath: '/account/billing'
+      preLoaderRoute: typeof AccountBillingRouteImport
+      parentRoute: typeof AccountRoute
+    }
   }
 }
+
+interface AccountRouteChildren {
+  AccountBillingRoute: typeof AccountBillingRoute
+  AccountPasswordRoute: typeof AccountPasswordRoute
+  AccountProfileRoute: typeof AccountProfileRoute
+  AccountSettingsRoute: typeof AccountSettingsRoute
+  AccountStorageRoute: typeof AccountStorageRoute
+  AccountIndexRoute: typeof AccountIndexRoute
+}
+
+const AccountRouteChildren: AccountRouteChildren = {
+  AccountBillingRoute: AccountBillingRoute,
+  AccountPasswordRoute: AccountPasswordRoute,
+  AccountProfileRoute: AccountProfileRoute,
+  AccountSettingsRoute: AccountSettingsRoute,
+  AccountStorageRoute: AccountStorageRoute,
+  AccountIndexRoute: AccountIndexRoute,
+}
+
+const AccountRouteWithChildren =
+  AccountRoute._addFileChildren(AccountRouteChildren)
 
 interface CanvasRouteChildren {
   CanvasWorkflowIdRoute: typeof CanvasWorkflowIdRoute
@@ -196,7 +369,9 @@ const ProjectsRouteWithChildren = ProjectsRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountRoute: AccountRouteWithChildren,
   CanvasRoute: CanvasRouteWithChildren,
+  LoginRoute: LoginRoute,
   ProjectsRoute: ProjectsRouteWithChildren,
 }
 export const routeTree = rootRouteImport

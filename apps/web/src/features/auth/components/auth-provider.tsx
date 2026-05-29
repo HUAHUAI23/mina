@@ -10,6 +10,7 @@ interface AuthContextValue {
   logout: () => void
   session: AuthSession | null
   setAuthenticatedSession: (authSession: AuthResponse) => void
+  updateAuthenticatedUser: (user: AuthUser) => void
   user: AuthUser | null
 }
 
@@ -29,12 +30,27 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setAuth(null)
     }
 
+    const updateAuthenticatedUser = (user: AuthUser) => {
+      setAuth((current) => {
+        if (!current) {
+          return current
+        }
+        const next = {
+          ...current,
+          user,
+        }
+        storeAuthSession(next)
+        return next
+      })
+    }
+
     return {
       auth,
       isAuthenticated: Boolean(auth),
       logout,
       session: auth?.session ?? null,
       setAuthenticatedSession,
+      updateAuthenticatedUser,
       user: auth?.user ?? null,
     }
   }, [auth])

@@ -1,0 +1,43 @@
+.mina-auth-page {
+  background: var(--auth-background);
+}
+
+.mina-auth-page::before {
+  background-image: radial-gradient(circle, oklch(0.78 0.006 247 / 42%) 1px, transparent 1.1px);
+  background-size: 24px 24px;
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.mina-auth-studio-board {
+  transform: rotate(-2deg);
+}
+
+.mina-auth-link {
+  background: oklch(0.7 0.01 247);
+  height: 2px;
+  position: absolute;
+  transform-origin: left center;
+}
+
+.mina-auth-link-a {
+  left: 5.3rem;
+  top: 3.8rem;
+  transform: rotate(-24deg);
+  width: 3.7rem;
+}
+
+.mina-auth-link-b {
+  left: 6.3rem;
+  top: 5.4rem;
+  transform: rotate(55deg);
+  width: 4rem;
+}
+
+@media (max-width: 64rem) {
+  .mina-auth-page {
+    background: var(--auth-background-compact);
+  }
+}

@@ -1,14 +1,16 @@
-import type { FormEvent, PropsWithChildren } from 'react'
-import { useState } from 'react'
+import type { SubmitEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { ArrowRight, Eye, EyeOff, KeyRound, Mail, User, UserPlus } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff, KeyRound, Mail, PanelTop, Sparkles, User, UserPlus, WandSparkles } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
 
-import { useMessages } from '../../../app/i18n-provider'
+import { useI18n, useMessages } from '../../../app/i18n-provider'
 import { LocaleSwitcher } from '../../../app/locale-switcher'
 import { getErrorMessage } from '../../../lib/http'
 import { loginWithPassword, registerWithPassword } from '../api/auth.client'
+import { sanitizeAuthRedirectPath } from '../redirect'
 import { useAuth } from './auth-provider'
-import '../auth-gate.css'
+import '../auth-page.css'
 
 type AuthMode = 'login' | 'register'
 
@@ -36,32 +38,63 @@ const initialRegisterForm: RegisterFormState = {
   username: '',
 }
 
-const authTabClassName = 'flex min-h-10.5 items-center justify-center gap-2 rounded-full border-0 bg-transparent text-[0.82rem] font-extrabold text-foreground-tertiary data-[active=true]:bg-surface-container-lowest data-[active=true]:text-foreground data-[active=true]:shadow-sm'
-const authFieldShellClassName = 'flex min-h-12.5 items-center gap-2.5 rounded-xl bg-surface-container-high px-3.5 text-foreground-quaternary focus-within:bg-surface-container-lowest focus-within:text-foreground-secondary focus-within:shadow-sm'
+const authTabClassName = [
+  'flex min-h-11 items-center justify-center gap-2 rounded-md border-0 bg-transparent text-sm font-extrabold text-foreground-tertiary',
+  'data-[active=true]:bg-surface-container-lowest data-[active=true]:text-foreground data-[active=true]:shadow-sm',
+].join(' ')
+const authFieldShellClassName = [
+  'flex min-h-12 items-center gap-2.5 rounded-md bg-surface-container-low px-3.5 text-foreground-quaternary',
+  'ring-1 ring-inset ring-transparent focus-within:bg-surface-container-lowest focus-within:text-foreground-secondary focus-within:ring-outline-ghost focus-within:shadow-sm',
+].join(' ')
 const authInputClassName = 'w-full min-w-0 border-0 bg-transparent text-foreground outline-0 placeholder:text-foreground-quaternary'
-const authIconButtonClassName = 'flex size-8.5 flex-none items-center justify-center rounded-full border-0 bg-transparent text-foreground-quaternary hover:bg-surface-container-low hover:text-foreground'
-const authSubmitClassName = 'flex min-h-12.5 items-center justify-center gap-2.5 rounded-full border-0 bg-foreground px-5 font-black text-primary-foreground hover:bg-foreground-secondary disabled:cursor-not-allowed disabled:bg-foreground-faint disabled:text-surface-container-lowest'
+const authIconButtonClassName = 'flex size-9 flex-none items-center justify-center rounded-full border-0 bg-transparent text-foreground-quaternary hover:bg-surface-container-low hover:text-foreground'
+const authSubmitClassName = 'flex min-h-12 items-center justify-center gap-2.5 rounded-md border-0 bg-foreground px-5 font-black text-primary-foreground hover:bg-foreground-secondary disabled:cursor-not-allowed disabled:bg-foreground-faint disabled:text-surface-container-lowest'
 
-export function AuthGate({ children }: PropsWithChildren) {
+interface AuthPageProps {
+  redirectPath?: string | undefined
+}
+
+export function AuthPage({ redirectPath }: AuthPageProps) {
   const m = useMessages()
+  const { setLocale } = useI18n()
   const { isAuthenticated, setAuthenticatedSession } = useAuth()
+  const navigate = useNavigate()
   const [mode, setMode] = useState<AuthMode>('login')
   const [showPassword, setShowPassword] = useState(false)
   const [loginForm, setLoginForm] = useState<LoginFormState>(initialLoginForm)
   const [registerForm, setRegisterForm] = useState<RegisterFormState>(initialRegisterForm)
+  const resolvedRedirectPath = sanitizeAuthRedirectPath(redirectPath)
 
   const loginMutation = useMutation({
     mutationFn: loginWithPassword,
-    onSuccess: setAuthenticatedSession,
+    onSuccess: (response) => {
+      setAuthenticatedSession(response)
+      if (response.user.preferredLocale) {
+        setLocale(response.user.preferredLocale)
+      }
+      void navigate({ href: resolvedRedirectPath, replace: true })
+    },
   })
 
   const registerMutation = useMutation({
     mutationFn: registerWithPassword,
-    onSuccess: setAuthenticatedSession,
+    onSuccess: (response) => {
+      setAuthenticatedSession(response)
+      if (response.user.preferredLocale) {
+        setLocale(response.user.preferredLocale)
+      }
+      void navigate({ href: resolvedRedirectPath, replace: true })
+    },
   })
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      void navigate({ href: resolvedRedirectPath, replace: true })
+    }
+  }, [isAuthenticated, navigate, resolvedRedirectPath])
+
   if (isAuthenticated) {
-    return children
+    return null
   }
 
   const passwordInputType = showPassword ? 'text' : 'password'
@@ -73,7 +106,7 @@ export function AuthGate({ children }: PropsWithChildren) {
     registerMutation.reset()
   }
 
-  const handleLoginSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleLoginSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
     loginMutation.mutate({
       identifier: loginForm.identifier.trim(),
@@ -81,7 +114,7 @@ export function AuthGate({ children }: PropsWithChildren) {
     })
   }
 
-  const handleRegisterSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleRegisterSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
     registerMutation.mutate({
       displayName: registerForm.displayName.trim() || undefined,
@@ -92,51 +125,100 @@ export function AuthGate({ children }: PropsWithChildren) {
   }
 
   return (
-    <div className="relative h-dvh w-screen overflow-hidden">
-      <div className="mina-auth-underlay pointer-events-none h-full w-full select-none" aria-hidden="true">
-        {children}
-      </div>
-      <div className="fixed inset-0 z-20 grid h-dvh w-screen place-items-center overflow-hidden p-[clamp(18px,4dvw,44px)] text-foreground max-md:p-3.5">
-        <section
-          className="grid min-h-[520px] w-[min(100%,820px)] max-w-[820px] grid-cols-[minmax(280px,0.86fr)_minmax(330px,1fr)] overflow-hidden rounded-2xl bg-surface-container-lowest shadow-2xl max-lg:max-w-[560px] max-lg:grid-cols-1 max-lg:min-h-0 max-md:max-h-[calc(100dvh-28px)]"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="mina-auth-title"
-        >
-          <aside className="mina-auth-visual grid min-h-0 grid-rows-[auto_minmax(0,1fr)] p-7 max-lg:hidden" aria-hidden="true">
-            <div className="font-display flex items-center gap-3.5 text-[0.84rem] font-black text-foreground">
-              <div className="flex size-10 items-center justify-center rounded-[9px] bg-foreground text-primary-foreground">
-                <span className="font-display text-[0.48rem] font-extrabold tracking-[0.08em]">MINA</span>
+    <main className="mina-auth-page relative grid h-dvh w-screen grid-cols-[minmax(0,1fr)_minmax(22rem,32.5rem)] overflow-hidden bg-surface text-foreground max-lg:grid-cols-1">
+      <section className="relative min-h-0 overflow-hidden p-8 max-lg:hidden" aria-hidden="true">
+        <div className="relative z-10 flex h-full flex-col justify-between">
+          <div className="font-display flex items-center gap-3.5 text-sm font-black text-foreground">
+            <div className="flex size-10 items-center justify-center rounded-md bg-foreground text-primary-foreground">
+              <span className="font-display text-[0.48rem] font-extrabold tracking-[0.08em]">MINA</span>
+            </div>
+            <span>{m.auth_gate_brand_product()}</span>
+          </div>
+
+          <div className="mina-auth-studio-board mx-auto grid w-[min(100%,44rem)] grid-cols-[0.95fr_1.05fr] grid-rows-[6rem_9.5rem_6.5rem] gap-4 self-center">
+            <div className="rounded-md bg-surface-container-lowest p-4 shadow-floating">
+              <div className="mb-4 flex items-center gap-2 text-xs font-black text-foreground-quaternary">
+                <PanelTop size={14} />
+                {m.auth_visual_project_label()}
+              </div>
+              <div className="grid gap-2">
+                <span className="h-3 w-3/4 rounded-sm bg-foreground" />
+                <span className="h-2.5 w-11/12 rounded-sm bg-surface-container-high" />
+                <span className="h-2.5 w-7/12 rounded-sm bg-surface-container-high" />
+              </div>
+            </div>
+            <div className="row-span-2 rounded-md bg-surface-container-lowest p-4 shadow-floating">
+              <div className="mb-5 flex items-center justify-between">
+                <span className="text-xs font-black text-foreground-quaternary">{m.auth_visual_canvas_label()}</span>
+                <Sparkles className="text-brand-accent" size={16} />
+              </div>
+              <div className="grid h-52 place-items-center">
+                <div className="relative size-44">
+                  <span className="absolute left-0 top-5 grid h-16 w-24 place-items-center rounded-md bg-foreground text-[0.64rem] font-black text-primary-foreground">
+                    {m.auth_visual_node_idea()}
+                  </span>
+                  <span className="absolute right-0 top-0 grid h-20 w-24 place-items-center rounded-md bg-gray-100 text-[0.64rem] font-black text-foreground-secondary">
+                    {m.auth_visual_node_model()}
+                  </span>
+                  <span className="absolute bottom-0 left-10 grid h-20 w-28 place-items-center rounded-md bg-brand-accent text-[0.64rem] font-black text-primary-foreground">
+                    {m.auth_visual_node_output()}
+                  </span>
+                  <span className="mina-auth-link mina-auth-link-a" />
+                  <span className="mina-auth-link mina-auth-link-b" />
+                </div>
+              </div>
+            </div>
+            <div className="row-span-2 rounded-md bg-foreground p-4 text-primary-foreground shadow-floating">
+              <div className="mb-10 flex items-center gap-2 text-xs font-black text-primary-foreground/70">
+                <WandSparkles size={15} />
+                {m.auth_visual_runtime_label()}
+              </div>
+              <div className="grid gap-3">
+                <span className="h-3 w-5/6 rounded-sm bg-primary-foreground" />
+                <span className="h-2.5 w-full rounded-sm bg-primary-foreground/25" />
+                <span className="h-2.5 w-2/3 rounded-sm bg-primary-foreground/25" />
+              </div>
+            </div>
+            <div className="rounded-md bg-surface-container-low p-4">
+              <div className="mb-4 h-2.5 w-1/2 rounded-sm bg-foreground-faint" />
+              <div className="grid grid-cols-3 gap-2">
+                <span className="h-14 rounded-sm bg-surface-container-lowest" />
+                <span className="h-14 rounded-sm bg-surface-container-lowest" />
+                <span className="h-14 rounded-sm bg-surface-container-lowest" />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid max-w-xl gap-3">
+            <p className="m-0 text-xs font-black uppercase text-foreground-quaternary">{m.auth_page_kicker()}</p>
+            <h2 className="font-display m-0 text-5xl font-black leading-none tracking-normal">{m.auth_page_visual_title()}</h2>
+            <p className="m-0 max-w-lg text-base font-semibold leading-7 text-foreground-secondary">{m.auth_page_visual_body()}</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid min-h-0 content-center overflow-y-auto bg-surface-container-lowest px-[clamp(1.375rem,4vw,4rem)] py-8 shadow-2xl max-lg:bg-transparent max-lg:shadow-none">
+        <div className="grid w-full max-w-[28rem] justify-self-center gap-7">
+          <div className="flex items-center justify-between gap-4">
+            <div className="font-display flex items-center gap-3 text-sm font-black text-foreground">
+              <div className="flex size-9 items-center justify-center rounded-md bg-foreground text-[0.46rem] font-extrabold tracking-[0.08em] text-primary-foreground">
+                MINA
               </div>
               <span>{m.auth_gate_brand_product()}</span>
             </div>
-            <div className="grid w-[min(100%,260px)] items-center justify-self-center self-center rounded-2xl bg-white/70 p-[18px] shadow-lg">
-              <div className="mb-[18px] flex gap-2">
-                <span className="size-2 rounded-full bg-surface-container-high" />
-                <span className="size-2 rounded-full bg-surface-container-high" />
-                <span className="size-2 rounded-full bg-surface-container-high" />
-              </div>
-              <div className="mina-auth-artboard-grid grid grid-cols-[1.05fr_0.95fr] grid-rows-[76px_58px_70px] gap-3">
-                <span className="rounded-xl" data-tone="ink" />
-                <span className="rounded-xl" data-tone="mist" />
-                <span className="rounded-xl" data-tone="paper" />
-                <span className="rounded-xl" data-tone="slate" />
-              </div>
-            </div>
-          </aside>
+            <LocaleSwitcher />
+          </div>
 
-          <section className="grid min-h-0 min-w-0 content-center gap-5 overflow-y-auto p-[clamp(30px,4dvw,48px)] max-md:px-[22px] max-md:py-7">
-            <LocaleSwitcher className="justify-self-end" />
-            <div className="grid gap-2">
-              <p className="m-0 text-[0.68rem] font-black uppercase tracking-[0.24em] text-foreground-quaternary">
-                {mode === 'login' ? m.auth_gate_login_eyebrow() : m.auth_gate_register_eyebrow()}
-              </p>
-              <h1 className="font-display m-0 text-[clamp(2rem,4.4dvw,2.9rem)] font-black leading-none tracking-normal max-md:text-3xl" id="mina-auth-title">
-                {mode === 'login' ? m.auth_gate_login_title() : m.auth_gate_register_title()}
-              </h1>
-            </div>
+          <div className="grid gap-2">
+            <p className="m-0 text-xs font-black uppercase text-foreground-quaternary">
+              {mode === 'login' ? m.auth_gate_login_eyebrow() : m.auth_gate_register_eyebrow()}
+            </p>
+            <h1 className="font-display m-0 text-4xl font-black leading-none tracking-normal max-md:text-3xl" id="mina-auth-title">
+              {mode === 'login' ? m.auth_gate_login_title() : m.auth_gate_register_title()}
+            </h1>
+          </div>
 
-            <div className="grid grid-cols-2 gap-1 rounded-full bg-surface-container-low p-1" role="tablist" aria-label={m.auth_gate_mode_label()}>
+          <div className="grid grid-cols-2 gap-1 rounded-md bg-surface-container-low p-1" role="tablist" aria-label={m.auth_gate_mode_label()}>
               <button
                 aria-selected={mode === 'login'}
                 className={authTabClassName}
@@ -308,9 +390,8 @@ export function AuthGate({ children }: PropsWithChildren) {
                 </button>
               </form>
             )}
-          </section>
+          </div>
         </section>
-      </div>
-    </div>
+      </main>
   )
 }

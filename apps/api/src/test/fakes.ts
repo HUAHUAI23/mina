@@ -22,6 +22,9 @@ import type {
   PasswordCredential,
   RegisterUserWithAccountInput,
   StoredSession,
+  UpdateUserAvatarInput,
+  UpdateUserPreferencesInput,
+  UpdateUserProfileInput,
 } from '../modules/accounts/accounts.repository'
 import type { MediaObject, MediaObjectStatus } from '../modules/media/media-object'
 import type { CreateUploadingMediaObjectInput, MediaObjectRepository } from '../modules/media/media-object.repository'
@@ -167,6 +170,7 @@ export class FakeAccountsRepository implements AccountsRepository {
     const credential: PasswordCredential = {
       createdAt: now,
       passwordHash: input.passwordHash,
+      passwordVersion: 1,
       updatedAt: now,
       userId: input.userId,
     }
@@ -207,6 +211,7 @@ export class FakeAccountsRepository implements AccountsRepository {
       displayName: input.displayName,
       email: input.email,
       id: input.id,
+      ...(input.preferredLocale ? { preferredLocale: input.preferredLocale } : {}),
       role: input.role,
       updatedAt: now,
       username: input.username,
@@ -252,6 +257,69 @@ export class FakeAccountsRepository implements AccountsRepository {
     const normalizedUsername = username.toLowerCase()
     const user = [...this.#users.values()].find((item) => item.username?.toLowerCase() === normalizedUsername)
     return user ? clone(user) : undefined
+  }
+
+  async updatePasswordCredential(
+    userId: string,
+    passwordHash: string,
+    updatedAtIso: string,
+  ): Promise<PasswordCredential> {
+    const credential = this.#passwordCredentials.get(userId)
+    if (!credential) {
+      throw new Error('Password credential was not updated.')
+    }
+    const updated: PasswordCredential = {
+      ...credential,
+      passwordHash,
+      passwordVersion: credential.passwordVersion + 1,
+      updatedAt: updatedAtIso,
+    }
+    this.#passwordCredentials.set(userId, updated)
+    return clone(updated)
+  }
+
+  async updateUserAvatar(input: UpdateUserAvatarInput): Promise<User> {
+    const user = this.#users.get(input.userId)
+    if (!user) {
+      throw new Error('User avatar was not updated.')
+    }
+    const updated: User = {
+      ...user,
+      avatarMimeType: input.avatarMimeType,
+      avatarStorageKey: input.avatarStorageKey,
+      avatarUpdatedAt: input.avatarUpdatedAt,
+      updatedAt: input.updatedAt,
+    }
+    this.#users.set(input.userId, updated)
+    return clone(updated)
+  }
+
+  async updateUserPreferences(input: UpdateUserPreferencesInput): Promise<User> {
+    const user = this.#users.get(input.userId)
+    if (!user) {
+      throw new Error('User preferences were not updated.')
+    }
+    const updated: User = {
+      ...user,
+      preferredLocale: input.preferredLocale,
+      updatedAt: input.updatedAt,
+    }
+    this.#users.set(input.userId, updated)
+    return clone(updated)
+  }
+
+  async updateUserProfile(input: UpdateUserProfileInput): Promise<User> {
+    const user = this.#users.get(input.userId)
+    if (!user) {
+      throw new Error('User profile was not updated.')
+    }
+    const updated: User = {
+      ...user,
+      displayName: input.displayName,
+      updatedAt: input.updatedAt,
+    }
+    this.#users.set(input.userId, updated)
+    return clone(updated)
   }
 }
 

@@ -1,7 +1,14 @@
 import type {
+  AccountBillingOverview,
+  AccountProfileResponse,
+  AccountStorageOverview,
+  ChangePasswordInput,
+  ChangePasswordResponse,
   AuthResponse,
   LoginInput,
   RegisterInput,
+  UpdateAccountPreferencesInput,
+  UpdateAccountProfileInput,
 } from '@mina/contracts/modules/accounts'
 import type {
   CancelTaskResponse,
@@ -55,7 +62,32 @@ type CreateMediaObjectForm = CreateMediaObjectInput & {
   file: File
 }
 
+type AccountAvatarForm = {
+  file: File
+}
+
 type ClientSchema = {
+  '/api/account/me': {
+    $get: JsonEndpoint<{}, AccountProfileResponse>
+  }
+  '/api/account/profile': {
+    $patch: JsonEndpoint<{ json: UpdateAccountProfileInput }, AccountProfileResponse>
+  }
+  '/api/account/avatar': {
+    $post: JsonEndpoint<{ form: AccountAvatarForm }, AccountProfileResponse>
+  }
+  '/api/account/password': {
+    $patch: JsonEndpoint<{ json: ChangePasswordInput }, ChangePasswordResponse>
+  }
+  '/api/account/preferences': {
+    $patch: JsonEndpoint<{ json: UpdateAccountPreferencesInput }, AccountProfileResponse>
+  }
+  '/api/account/storage': {
+    $get: JsonEndpoint<{}, AccountStorageOverview>
+  }
+  '/api/account/billing': {
+    $get: JsonEndpoint<{}, AccountBillingOverview>
+  }
   '/api/auth/login': {
     $post: JsonEndpoint<{ json: LoginInput }, AuthResponse>
   }

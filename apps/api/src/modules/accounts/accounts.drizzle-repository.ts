@@ -1,6 +1,6 @@
 import type { Account, AuthSession, User } from '@mina/contracts/modules/accounts'
 import { AccountSchema, UserSchema } from '@mina/contracts/modules/accounts'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 
 import type { MinaDbClient } from '../../db/client'
 import { accounts, sessions, userPasswordCredentials, users } from '../../db/schema'
@@ -10,6 +10,9 @@ import type {
   PasswordCredential,
   RegisterUserWithAccountInput,
   StoredSession,
+  UpdateUserAvatarInput,
+  UpdateUserPreferencesInput,
+  UpdateUserProfileInput,
 } from './accounts.repository'
 
 type AccountRow = typeof accounts.$inferSelect
@@ -25,6 +28,10 @@ const userFromRow = (row: UserRow): User =>
     ...(row.username ? { username: row.username } : {}),
     email: row.email,
     ...(row.displayName ? { displayName: row.displayName } : {}),
+    ...(row.avatarStorageKey ? { avatarStorageKey: row.avatarStorageKey } : {}),
+    ...(row.avatarMimeType ? { avatarMimeType: row.avatarMimeType } : {}),
+    ...(row.avatarUpdatedAt ? { avatarUpdatedAt: toIso(row.avatarUpdatedAt) } : {}),
+    ...(row.preferredLocale ? { preferredLocale: row.preferredLocale } : {}),
     role: row.role,
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
@@ -34,6 +41,7 @@ const userFromRow = (row: UserRow): User =>
 const passwordCredentialFromRow = (row: PasswordCredentialRow): PasswordCredential => ({
   createdAt: toIso(row.createdAt),
   passwordHash: row.passwordHash,
+  passwordVersion: row.passwordVersion,
   updatedAt: toIso(row.updatedAt),
   userId: row.userId,
 })
@@ -93,6 +101,7 @@ export class DrizzleAccountsRepository implements AccountsRepository {
           displayName: input.user.displayName ?? null,
           email: input.user.email,
           id: input.user.id,
+          preferredLocale: input.user.preferredLocale ?? null,
           role: input.user.role,
           username: input.user.username,
         })
@@ -163,5 +172,80 @@ export class DrizzleAccountsRepository implements AccountsRepository {
   async findUserByUsername(username: string): Promise<User | undefined> {
     const [row] = await this.db.select().from(users).where(eq(users.username, username)).limit(1)
     return row ? userFromRow(row) : undefined
+  }
+
+  async updatePasswordCredential(
+    userId: string,
+    passwordHash: string,
+    updatedAtIso: string,
+  ): Promise<PasswordCredential> {
+    const [row] = await this.db
+      .update(userPasswordCredentials)
+      .set({
+        passwordHash,
+        passwordVersion: sql`${userPasswordCredentials.passwordVersion} + 1`,
+        updatedAt: new Date(updatedAtIso),
+      })
+      .where(eq(userPasswordCredentials.userId, userId))
+      .returning()
+
+    if (!row) {
+      throw new Error('Password credential was not updated.')
+    }
+
+    return passwordCredentialFromRow(row)
+  }
+
+  async updateUserAvatar(input: UpdateUserAvatarInput): Promise<User> {
+    const [row] = await this.db
+      .update(users)
+      .set({
+        avatarMimeType: input.avatarMimeType,
+        avatarStorageKey: input.avatarStorageKey,
+        avatarUpdatedAt: new Date(input.avatarUpdatedAt),
+        updatedAt: new Date(input.updatedAt),
+      })
+      .where(eq(users.id, input.userId))
+      .returning()
+
+    if (!row) {
+      throw new Error('User avatar was not updated.')
+    }
+
+    return userFromRow(row)
+  }
+
+  async updateUserPreferences(input: UpdateUserPreferencesInput): Promise<User> {
+    const [row] = await this.db
+      .update(users)
+      .set({
+        preferredLocale: input.preferredLocale,
+        updatedAt: new Date(input.updatedAt),
+      })
+      .where(eq(users.id, input.userId))
+      .returning()
+
+    if (!row) {
+      throw new Error('User preferences were not updated.')
+    }
+
+    return userFromRow(row)
+  }
+
+  async updateUserProfile(input: UpdateUserProfileInput): Promise<User> {
+    const [row] = await this.db
+      .update(users)
+      .set({
+        displayName: input.displayName,
+        updatedAt: new Date(input.updatedAt),
+      })
+      .where(eq(users.id, input.userId))
+      .returning()
+
+    if (!row) {
+      throw new Error('User profile was not updated.')
+    }
+
+    return userFromRow(row)
   }
 }

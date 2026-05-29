@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { CSSProperties, DragEvent, FormEvent, ReactNode } from 'react'
+import type { CSSProperties, DragEvent, ReactNode, SubmitEvent } from 'react'
 import {
   closestCenter,
   DndContext,
@@ -839,7 +839,7 @@ function namingDialogCopy(m: WebMessages, state: NamingDialogState) {
 function NamingDialog({ error, m, onChangeName, onClose, onSubmit, pending, state }: NamingDialogProps) {
   const copy = state ? namingDialogCopy(m, state) : undefined
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
     onSubmit()
   }

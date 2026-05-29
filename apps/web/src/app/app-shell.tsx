@@ -1,6 +1,15 @@
+import { useEffect, useState } from 'react'
 import type { PropsWithChildren } from 'react'
-import { ChevronDown, LogOut, Search } from 'lucide-react'
-import { Link, useLocation } from '@tanstack/react-router'
+import { ArrowLeft, ChevronDown, CreditCard, Database, LogOut, Search, User } from 'lucide-react'
+import { Link, useLocation, useNavigate } from '@tanstack/react-router'
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@mina/ui/components/dropdown-menu'
 
 import { cn } from '@mina/ui/lib/utils'
 
@@ -17,6 +26,14 @@ interface NavigationItem {
 const navigationItems: NavigationItem[] = [
   { label: (m) => m.app_nav_projects(), to: '/projects' },
   { disabled: true, label: (m) => m.app_nav_asset_hub(), to: '/projects' },
+]
+
+const accountNavigationItems: NavigationItem[] = [
+  { label: (m) => m.account_nav_profile(), to: '/account/profile' },
+  { label: (m) => m.account_nav_password(), to: '/account/password' },
+  { label: (m) => m.account_nav_storage(), to: '/account/storage' },
+  { label: (m) => m.account_nav_billing(), to: '/account/billing' },
+  { label: (m) => m.account_nav_settings(), to: '/account/settings' },
 ]
 
 const shellClassName = [
@@ -45,11 +62,19 @@ const disabledNavLinkClassName = 'cursor-not-allowed hover:bg-transparent'
 const disabledNavTextClassName = 'text-foreground'
 const inactiveNavLinkClassName = 'hover:bg-gray-100'
 const inactiveNavTextClassName = 'text-foreground group-hover:text-brand-accent'
+const defaultPanelPath = '/projects'
+
+const isAccountPath = (path: string): boolean => path === '/account' || path.startsWith('/account/')
+
+const isPanelPath = (path: string): boolean => !isAccountPath(path)
 
 export function AppShell({ children }: PropsWithChildren) {
   const { messages: m } = useI18n()
-  const { pathname } = useLocation()
+  const { href, pathname } = useLocation()
+  const navigate = useNavigate()
   const { logout, user } = useAuth()
+  const accountMode = isAccountPath(pathname)
+  const [panelPath, setPanelPath] = useState(defaultPanelPath)
   const displayName = user?.displayName || user?.username || user?.email || m.app_default_user()
   const initials = displayName
     .split(/\s+/)
@@ -58,41 +83,75 @@ export function AppShell({ children }: PropsWithChildren) {
     .map((part) => part[0]?.toUpperCase())
     .join('')
     .slice(0, 2)
+  const sidebarNavigation = accountMode ? accountNavigationItems : navigationItems
+  const navLabel = accountMode ? m.account_nav_label() : m.app_nav_label()
+  const handleBackToPanel = () => {
+    navigate({ href: panelPath })
+  }
+  const handleLogout = () => {
+    logout()
+    void navigate({
+      search: { redirect: href },
+      to: '/login',
+    })
+  }
+
+  useEffect(() => {
+    if (isPanelPath(pathname)) {
+      setPanelPath(pathname)
+    }
+  }, [pathname])
 
   return (
     <main className={shellClassName}>
-      <aside aria-label={m.app_nav_label()} className={sidebarClassName}>
+      <aside aria-label={navLabel} className={sidebarClassName}>
         <div className="grid gap-7 max-lg:grid-cols-2 max-lg:items-center max-md:grid-cols-1">
-          <button className={workspaceButtonClassName} type="button">
-            <span className="flex min-w-0 items-center gap-3">
-              <span
-                className="flex size-7 flex-none items-center justify-center rounded-sm border border-foreground-faint bg-surface-container-lowest text-xs font-black text-foreground-secondary"
-                aria-hidden="true"
-              >
-                M
+          {accountMode ? (
+            <button className={workspaceButtonClassName} onClick={handleBackToPanel} type="button">
+              <span className="flex min-w-0 items-center gap-3">
+                <span
+                  className="flex size-7 flex-none items-center justify-center rounded-sm border border-foreground-faint bg-surface-container-lowest text-foreground-secondary"
+                  aria-hidden="true"
+                >
+                  <ArrowLeft size={15} />
+                </span>
+                <span className="truncate text-sm font-medium">{m.account_back_to_panel()}</span>
               </span>
-              <span className="truncate text-sm font-medium">{m.app_workspace_name()}</span>
-            </span>
-            <ChevronDown aria-hidden="true" className="flex-none text-foreground-tertiary" size={17} />
-          </button>
+            </button>
+          ) : (
+            <button className={workspaceButtonClassName} type="button">
+              <span className="flex min-w-0 items-center gap-3">
+                <span
+                  className="flex size-7 flex-none items-center justify-center rounded-sm border border-foreground-faint bg-surface-container-lowest text-xs font-black text-foreground-secondary"
+                  aria-hidden="true"
+                >
+                  M
+                </span>
+                <span className="truncate text-sm font-medium">{m.app_workspace_name()}</span>
+              </span>
+              <ChevronDown aria-hidden="true" className="flex-none text-foreground-tertiary" size={17} />
+            </button>
+          )}
 
-          <label
-            className="flex h-10 min-w-0 items-center gap-3 rounded-md bg-gray-100 px-3.5 text-foreground-tertiary"
-            htmlFor="mina-sidebar-search"
-          >
-            <span className="sr-only">{m.app_search_label()}</span>
-            <input
-              className="min-w-0 flex-1 border-0 bg-transparent text-xs font-semibold text-foreground outline-0 placeholder:text-foreground-tertiary"
-              id="mina-sidebar-search"
-              placeholder={m.app_search_placeholder()}
-              type="search"
-            />
-            <Search aria-hidden="true" className="flex-none" size={14} />
-          </label>
+          {!accountMode ? (
+            <label
+              className="flex h-10 min-w-0 items-center gap-3 rounded-md bg-gray-100 px-3.5 text-foreground-tertiary"
+              htmlFor="mina-sidebar-search"
+            >
+              <span className="sr-only">{m.app_search_label()}</span>
+              <input
+                className="min-w-0 flex-1 border-0 bg-transparent text-xs font-semibold text-foreground outline-0 placeholder:text-foreground-tertiary"
+                id="mina-sidebar-search"
+                placeholder={m.app_search_placeholder()}
+                type="search"
+              />
+              <Search aria-hidden="true" className="flex-none" size={14} />
+            </label>
+          ) : null}
         </div>
 
-        <nav className="-mx-5 mt-6 grid gap-3 max-lg:mt-5 max-lg:flex max-lg:overflow-x-auto" aria-label={m.app_nav_label()}>
-          {navigationItems.map(({ disabled = false, label: getLabel, to }) => {
+        <nav className="-mx-5 mt-6 grid gap-3 max-lg:mt-5 max-lg:flex max-lg:overflow-x-auto" aria-label={navLabel}>
+          {sidebarNavigation.map(({ disabled = false, label: getLabel, to }) => {
             const active = !disabled && (pathname === to || pathname.startsWith(`${to}/`))
             const label = getLabel(m)
 
@@ -138,23 +197,56 @@ export function AppShell({ children }: PropsWithChildren) {
             </button>
           </section>
 
-          <div className="flex min-h-14 items-center gap-3 border-t border-outline-ghost pt-3">
-            <span
-              className="flex size-10 flex-none items-center justify-center rounded-full bg-foreground text-xs font-extrabold text-primary-foreground"
-              aria-hidden="true"
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="flex min-h-14 w-full items-center gap-3 border-0 border-t border-outline-ghost bg-transparent pt-3 text-left text-foreground hover:text-brand-accent"
+                type="button"
+              >
+                <span
+                  className="flex size-10 flex-none items-center justify-center overflow-hidden rounded-full bg-foreground text-xs font-extrabold text-primary-foreground"
+                  aria-hidden="true"
+                >
+                  {user?.avatarUrl ? <img alt="" className="size-full object-cover" src={user.avatarUrl} /> : initials || 'M'}
+                </span>
+                <strong className="min-w-0 flex-1 truncate text-sm leading-tight">{displayName}</strong>
+                <ChevronDown aria-hidden="true" className="flex-none text-foreground-tertiary" size={16} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="w-64 rounded-md border border-outline-ghost bg-surface-container-lowest p-2 shadow-floating"
+              side="top"
+              sideOffset={10}
             >
-              {initials || 'M'}
-            </span>
-            <strong className="min-w-0 flex-1 truncate text-sm leading-tight">{displayName}</strong>
-            <button
-              className="flex size-8 flex-none items-center justify-center rounded-full border-0 bg-transparent text-foreground-tertiary hover:bg-gray-100 hover:text-brand-accent"
-              type="button"
-              aria-label={m.app_sign_out()}
-              onClick={logout}
-            >
-              <LogOut aria-hidden="true" size={16} />
-            </button>
-          </div>
+              <DropdownMenuItem asChild className="h-9 cursor-pointer px-3 font-bold hover:text-brand-accent focus:text-brand-accent">
+                <Link to="/account/profile">
+                  <User aria-hidden="true" size={16} />
+                  {m.account_menu_your_account()}
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild className="h-9 cursor-pointer px-3 font-bold hover:text-brand-accent focus:text-brand-accent">
+                <Link to="/account/storage">
+                  <Database aria-hidden="true" size={16} />
+                  {m.account_menu_storage()}
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild className="h-9 cursor-pointer px-3 font-bold hover:text-brand-accent focus:text-brand-accent">
+                <Link to="/account/billing">
+                  <CreditCard aria-hidden="true" size={16} />
+                  {m.account_menu_billing()}
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="h-9 cursor-pointer px-3 font-bold text-foreground hover:text-brand-accent focus:text-brand-accent"
+                onSelect={handleLogout}
+              >
+                <LogOut aria-hidden="true" size={16} />
+                {m.app_sign_out()}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </aside>
 

@@ -1,5 +1,7 @@
 import { Hono } from 'hono'
 
+import { createAccountManagementRoutes } from '../modules/accounts/account-management.routes'
+import type { AccountManagementService } from '../modules/accounts/account-management.service'
 import { createAccountsRoutes } from '../modules/accounts/accounts.routes'
 import type { AccountsService } from '../modules/accounts/accounts.service'
 import { createHealthRoutes } from '../modules/health/health.routes'
@@ -19,6 +21,7 @@ import type { TasksService } from '../modules/tasks/tasks.service'
 import type { WorkflowsService } from '../modules/workflows/workflows.service'
 
 export interface ApiRouterDependencies {
+  accountManagementService: AccountManagementService
   accountsService: AccountsService
   mediaObjectService: MediaObjectService
   modelCatalogService: TaskModelCatalogService
@@ -30,6 +33,7 @@ export interface ApiRouterDependencies {
 }
 
 export const createApiRouter = ({
+  accountManagementService,
   accountsService,
   mediaObjectService,
   modelCatalogService,
@@ -41,6 +45,7 @@ export const createApiRouter = ({
 }: ApiRouterDependencies): Hono =>
   new Hono()
     .basePath('/api')
+    .route('/account', createAccountManagementRoutes(accountManagementService, accountsService))
     .route('/auth', createAccountsRoutes(accountsService))
     .route('/health', createHealthRoutes())
     .route('/', createMediaRoutes(mediaObjectService, accountsService))

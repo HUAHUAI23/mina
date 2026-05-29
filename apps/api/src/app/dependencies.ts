@@ -1,6 +1,7 @@
 import { createDbClient } from '../db/client'
 import { createObjectStorage } from '../lib/storage/create-object-storage'
 import type { ObjectStorage } from '../lib/storage/object-storage'
+import { AccountManagementService } from '../modules/accounts/account-management.service'
 import { DrizzleAccountsRepository } from '../modules/accounts/accounts.drizzle-repository'
 import { AccountsService } from '../modules/accounts/accounts.service'
 import { DrizzleMediaObjectRepository } from '../modules/media/media-object.drizzle-repository'
@@ -35,6 +36,7 @@ import { WorkflowsService } from '../modules/workflows/workflows.service'
 import { WorkflowYjsRoomService } from '../modules/workflows/collaboration/workflow-yjs-room.service'
 
 export interface AppDependencies {
+  accountManagementService: AccountManagementService
   accountsService: AccountsService
   mediaObjectService: MediaObjectService
   modelCatalogService: TaskModelCatalogService
@@ -111,9 +113,11 @@ export const createAppDependencies = (): AppDependencies => {
     repositories.projectRepository,
     repositories.workflowRepositories.definitions,
   )
+  const accountsService = new AccountsService(accountsRepository)
 
   return {
-    accountsService: new AccountsService(accountsRepository),
+    accountManagementService: new AccountManagementService(accountsRepository, storage, mediaObjectService),
+    accountsService,
     mediaObjectService,
     modelCatalogService,
     projectsService,

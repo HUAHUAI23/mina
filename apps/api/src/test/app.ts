@@ -1,4 +1,5 @@
 import { createApp } from '../app/create-app'
+import { AccountManagementService } from '../modules/accounts/account-management.service'
 import { AccountsService } from '../modules/accounts/accounts.service'
 import { MediaObjectService } from '../modules/media/media-object.service'
 import { PricingService } from '../modules/pricing/pricing.service'
@@ -33,10 +34,11 @@ import { ProjectsService } from '../modules/projects/projects.service'
 
 export const createTestApp = () => {
   const accountsRepository = new FakeAccountsRepository()
+  const storage = new FakeObjectStorage()
   const taskRepository = new FakeTaskRepository()
   const mediaObjectService = new MediaObjectService(
     new FakeMediaObjectRepository(),
-    new FakeObjectStorage(),
+    storage,
     {
       fetch: async () => {
         throw new Error('fetcher not configured')
@@ -87,11 +89,12 @@ export const createTestApp = () => {
   )
 
   return createApp({
+    accountManagementService: new AccountManagementService(accountsRepository, storage, mediaObjectService),
     accountsService: new AccountsService(accountsRepository),
     mediaObjectService,
     modelCatalogService,
     projectsService,
-    storage: new FakeObjectStorage(),
+    storage,
     tasksService,
     workflowEventBus,
     workflowYjsRoomService,

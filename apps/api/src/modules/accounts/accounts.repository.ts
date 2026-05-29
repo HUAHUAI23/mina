@@ -3,6 +3,7 @@ import type { Account, AuthSession, User } from '@mina/contracts/modules/account
 export interface PasswordCredential {
   createdAt: string
   passwordHash: string
+  passwordVersion: number
   updatedAt: string
   userId: string
 }
@@ -11,6 +12,7 @@ export interface CreateUserRecordInput {
   displayName: string | undefined
   email: string
   id: string
+  preferredLocale?: User['preferredLocale']
   role: User['role']
   username: string
 }
@@ -58,4 +60,28 @@ export interface AccountsRepository {
   findUserById(id: string): Promise<User | undefined>
   findUserByUsername(username: string): Promise<User | undefined>
   registerUserWithAccount(input: RegisterUserWithAccountInput): Promise<{ account: Account; user: User }>
+  updatePasswordCredential(userId: string, passwordHash: string, updatedAtIso: string): Promise<PasswordCredential>
+  updateUserAvatar(input: UpdateUserAvatarInput): Promise<User>
+  updateUserPreferences(input: UpdateUserPreferencesInput): Promise<User>
+  updateUserProfile(input: UpdateUserProfileInput): Promise<User>
+}
+
+export interface UpdateUserAvatarInput {
+  avatarMimeType: string
+  avatarStorageKey: string
+  avatarUpdatedAt: string
+  userId: string
+  updatedAt: string
+}
+
+export interface UpdateUserPreferencesInput {
+  preferredLocale: NonNullable<User['preferredLocale']>
+  updatedAt: string
+  userId: string
+}
+
+export interface UpdateUserProfileInput {
+  displayName: string
+  updatedAt: string
+  userId: string
 }
