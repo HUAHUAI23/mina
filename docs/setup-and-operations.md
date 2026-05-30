@@ -34,6 +34,7 @@ Environment variables are validated with `@t3-oss/env-core` and Zod during start
 | `GOOGLE_API_KEY` | Google API key for Gemini image and Veo video providers | empty |
 | `MINA_SCHEDULER_CRON` | Croner expression for task/workflow scheduler ticks | `*/5 * * * * *` |
 | `MINA_SCHEDULER_ENABLED` | Enables the background task/workflow scheduler outside tests | `false` |
+| `MINA_PROVIDER_MEDIA_URL_EXPIRES_SECONDS` | Signed input media URL lifetime for third-party provider calls | `14400` |
 | `MINA_STORAGE_DRIVER` | Object storage driver. Runtime accepts `s3`. | `s3` |
 | `MINA_STORAGE_ROOT_PREFIX` | Root prefix for per-account object storage keys | `users` |
 | `MINA_TASK_MAX_RUNNING_SECONDS` | Maximum wall-clock time for a running provider task before it fails | `21600` |

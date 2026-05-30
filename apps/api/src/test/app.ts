@@ -11,6 +11,8 @@ import { registerTaskModels } from '../modules/tasks/models/register-models'
 import { OutputPostProcessor } from '../modules/tasks/output/output-post-processor'
 import { TaskOutputFinalizer } from '../modules/tasks/output/task-output-finalizer'
 import { DeterministicVideoFrameGenerator } from '../modules/tasks/output/video-frame-generator'
+import { MediaResolvingTaskProvider } from '../modules/tasks/providers/media-resolving-task-provider'
+import { ProviderMediaUrlResolver } from '../modules/tasks/providers/provider-media-url-resolver'
 import { TasksService } from '../modules/tasks/tasks.service'
 import { WorkflowMediaResolver } from '../modules/workflows/media/workflow-media-resolver'
 import { InMemoryWorkflowEventBus } from '../modules/workflows/workflow-event-bus'
@@ -51,7 +53,10 @@ export const createTestApp = () => {
   const tasksService = new TasksService(
     taskRepository,
     pricingService,
-    new ProviderRouter(modelRegistry),
+    new MediaResolvingTaskProvider(
+      new ProviderRouter(modelRegistry),
+      new ProviderMediaUrlResolver(mediaObjectService, 14_400),
+    ),
     modelRegistry,
     new TaskOutputFinalizer(mediaObjectService),
     new OutputPostProcessor(new DeterministicVideoFrameGenerator(mediaObjectService)),

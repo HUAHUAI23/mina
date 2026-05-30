@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { TaskConfig } from '@mina/contracts/modules/tasks'
+import { z } from 'zod'
 
 import {
   FakeMediaObjectRepository,
@@ -16,6 +17,8 @@ import { registerTaskModels } from './models/register-models'
 import { OutputPostProcessor } from './output/output-post-processor'
 import { TaskOutputFinalizer } from './output/task-output-finalizer'
 import { DeterministicVideoFrameGenerator } from './output/video-frame-generator'
+import { MediaResolvingTaskProvider } from './providers/media-resolving-task-provider'
+import { ProviderMediaUrlResolver } from './providers/provider-media-url-resolver'
 import type { TaskProvider } from './providers/provider'
 import { TasksService } from './tasks.service'
 
@@ -192,6 +195,154 @@ describe('TasksService event logging', () => {
     expect(
       (await taskEventLog.listEvents(task.id)).map((event) => event.eventType),
     ).toEqual(['task.created', 'task.started', 'task.succeeded'])
+  })
+
+  test('resolves media object URLs only for provider start without persisting signed URLs', async () => {
+    const taskEventLog = new FakeTaskEventLog()
+    const taskRepository = new FakeTaskRepository()
+    const modelRegistry = new ModelRegistry()
+    const mediaObjectRepository = new FakeMediaObjectRepository()
+    const mediaObjectService = new MediaObjectService(
+      mediaObjectRepository,
+      new FakeObjectStorage(),
+      {
+        fetch: async () => {
+          throw new Error('fetcher not configured')
+        },
+      },
+    )
+    let providerTaskConfig: TaskConfig | undefined
+    modelRegistry.register({
+      capabilities: {
+        media: { inputImages: { max: 16 } },
+        output: { images: true },
+      },
+      key: {
+        kind: 'image_generation',
+        provider: 'signed-test',
+        model: 'signed-image',
+      },
+      paramsSchema: z.object({}),
+      collectInputResources: (config) => config.media.inputImages,
+      getPricingInput: (config) => ({
+        taskKind: config.kind,
+        provider: config.provider,
+        model: config.model,
+        billingMetric: 'image',
+        usageAmount: 1,
+      }),
+      getTaskMode: () => 'sync',
+      parseConfig: (config) => ({
+        ...config,
+        params: {},
+      }),
+      parseTask: (providerTask) => ({
+        ...providerTask,
+        config: {
+          ...providerTask.config,
+          params: {},
+        },
+      }),
+      poll: async () => ({ status: 'pending' }),
+      prepareConfig: (input) => ({
+        kind: 'image_generation',
+        media: {
+          inputImages: input.media.inputImages,
+          referenceImages: [],
+          referenceAudios: [],
+          referenceVideos: [],
+        },
+        model: 'signed-image',
+        params: {},
+        prompt: input.draft.prompt,
+        provider: 'signed-test',
+      }),
+      start: async (providerTask) => {
+        providerTaskConfig = providerTask.config
+        return {
+          output: { resources: [], variables: {} },
+          status: 'succeeded',
+        }
+      },
+    })
+    const tasksService = new TasksService(
+      taskRepository,
+      new PricingService(new FakePricingRepository([
+        {
+          id: 'price_signed_image',
+          taskKind: 'image_generation',
+          provider: 'signed-test',
+          model: 'signed-image',
+          billingMetric: 'image',
+          unitPrice: 1,
+          currency: 'credit',
+          activeFrom: '2026-01-01T00:00:00.000Z',
+          priority: 10,
+        },
+      ])),
+      new MediaResolvingTaskProvider(
+        new ProviderRouter(modelRegistry),
+        new ProviderMediaUrlResolver(mediaObjectService, 14_400),
+      ),
+      modelRegistry,
+      new TaskOutputFinalizer(mediaObjectService),
+      new OutputPostProcessor(new DeterministicVideoFrameGenerator(mediaObjectService)),
+      taskEventLog,
+    )
+    const timestamp = new Date().toISOString()
+    await mediaObjectRepository.create({
+      id: 'media_input',
+      accountId: 'account',
+      kind: 'image',
+      status: 'ready',
+      bucket: 'mina-test-storage',
+      storageKey: 'users/account/media/media_input/original.png',
+      url: 's3://mina-test-storage/users/account/media/media_input/original.png',
+      mimeType: 'image/png',
+      byteSize: 1,
+      origin: 'user_upload',
+      purpose: 'workflow_slot',
+      retention: 'project_scoped',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+    const task = await tasksService.createTask({
+      accountId: 'account',
+      config: {
+        ...imageConfig(),
+        model: 'signed-image',
+        provider: 'signed-test',
+        media: {
+          inputImages: [
+            {
+              kind: 'image',
+              role: 'reference_image',
+              url: 's3://mina-test-storage/users/account/media/media_input/original.png',
+              mediaObjectId: 'media_input',
+              source: { type: 'media_object', mediaObjectId: 'media_input' },
+            },
+          ],
+          referenceImages: [],
+          referenceAudios: [],
+          referenceVideos: [],
+        },
+      },
+    })
+
+    expect((await taskRepository.listResources(task.id))[0]?.url).toBe(
+      's3://mina-test-storage/users/account/media/media_input/original.png',
+    )
+    const completed = await tasksService.runTask(task.id)
+
+    expect(providerTaskConfig?.media.inputImages[0]?.url).toBe(
+      'fake://mina-test-storage/users/account/media/media_input/original.png',
+    )
+    expect(completed.config.media.inputImages[0]?.url).toBe(
+      's3://mina-test-storage/users/account/media/media_input/original.png',
+    )
+    expect((await taskRepository.findById(task.id))?.config.media.inputImages[0]?.url).toBe(
+      's3://mina-test-storage/users/account/media/media_input/original.png',
+    )
   })
 
   test('validates standalone task media through the model spec before creation', async () => {

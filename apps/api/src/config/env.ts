@@ -16,6 +16,7 @@ const DEFAULT_TASK_POLL_DEFAULT_INTERVAL_SECONDS = 10
 const DEFAULT_TASK_POLL_LEASE_SECONDS = 30
 const DEFAULT_TASK_POLL_MAX_INTERVAL_SECONDS = 120
 const DEFAULT_TASK_PROVIDER_ERROR_MAX_RETRIES = 8
+const DEFAULT_PROVIDER_MEDIA_URL_EXPIRES_SECONDS = 14_400
 const DEFAULT_GOOGLE_API_BASE_URL = 'https://generativelanguage.googleapis.com'
 const DEFAULT_VOLCENGINE_ARK_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
 
@@ -35,6 +36,11 @@ const env = createEnv({
     GOOGLE_API_KEY: optionalNonEmptyStringSchema,
     MINA_LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
     MINA_MEDIA_UPLOAD_MAX_BYTES: z.coerce.number().int().positive().default(DEFAULT_MEDIA_UPLOAD_MAX_BYTES),
+    MINA_PROVIDER_MEDIA_URL_EXPIRES_SECONDS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(DEFAULT_PROVIDER_MEDIA_URL_EXPIRES_SECONDS),
     MINA_S3_ACCESS_KEY_ID: optionalNonEmptyStringSchema,
     MINA_S3_BUCKET: optionalNonEmptyStringSchema,
     MINA_S3_ENDPOINT: z.url().optional(),
@@ -82,6 +88,7 @@ export const apiEnv = {
   googleApiKey: env.GOOGLE_API_KEY,
   logLevel: env.MINA_LOG_LEVEL,
   mediaUploadMaxBytes: env.MINA_MEDIA_UPLOAD_MAX_BYTES,
+  providerMediaUrlExpiresSeconds: env.MINA_PROVIDER_MEDIA_URL_EXPIRES_SECONDS,
   s3AccessKeyId: env.MINA_S3_ACCESS_KEY_ID,
   s3Bucket: env.MINA_S3_BUCKET,
   s3Endpoint: env.MINA_S3_ENDPOINT,

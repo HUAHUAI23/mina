@@ -1,4 +1,5 @@
 import { createDbClient } from '../db/client'
+import { apiEnv } from '../config/env'
 import { createObjectStorage } from '../lib/storage/create-object-storage'
 import type { ObjectStorage } from '../lib/storage/object-storage'
 import { AccountManagementService } from '../modules/accounts/account-management.service'
@@ -19,6 +20,8 @@ import { registerTaskModels } from '../modules/tasks/models/register-models'
 import { OutputPostProcessor } from '../modules/tasks/output/output-post-processor'
 import { TaskOutputFinalizer } from '../modules/tasks/output/task-output-finalizer'
 import { FfmpegVideoFrameGenerator } from '../modules/tasks/output/video-frame-generator'
+import { MediaResolvingTaskProvider } from '../modules/tasks/providers/media-resolving-task-provider'
+import { ProviderMediaUrlResolver } from '../modules/tasks/providers/provider-media-url-resolver'
 import { DrizzleTaskEventLog } from '../modules/tasks/task-events'
 import { DrizzleTaskRepository } from '../modules/tasks/tasks.drizzle-repository'
 import { TasksService } from '../modules/tasks/tasks.service'
@@ -77,7 +80,14 @@ export const createAppDependencies = (): AppDependencies => {
   const modelRegistry = registerTaskModels(new ModelRegistry())
   const modelCatalogService = new TaskModelCatalogService(modelRegistry)
   const taskConfigAssembler = new TaskConfigAssembler(modelRegistry)
-  const taskProvider = new ProviderRouter(modelRegistry)
+  const providerMediaUrlResolver = new ProviderMediaUrlResolver(
+    mediaObjectService,
+    apiEnv.providerMediaUrlExpiresSeconds,
+  )
+  const taskProvider = new MediaResolvingTaskProvider(
+    new ProviderRouter(modelRegistry),
+    providerMediaUrlResolver,
+  )
   const outputFinalizer = new TaskOutputFinalizer(mediaObjectService)
   const outputPostProcessor = new OutputPostProcessor(new FfmpegVideoFrameGenerator(mediaObjectService))
   const tasksService = new TasksService(

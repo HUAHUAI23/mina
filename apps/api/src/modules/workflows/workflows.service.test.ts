@@ -1130,7 +1130,7 @@ describe('WorkflowsService execution semantics', () => {
 
     expect(localizedRun.error?.code).toBe('WORKFLOW_RUN_FAILED')
     expect(localizedRun.error?.locale).toBe('zh-Hans')
-    expect(localizedRun.error?.message).toBe('一个或多个工作流节点失败。')
+    expect(localizedRun.error?.message).toBe('一个或多个工作流节点运行失败。')
     expect(localizedRun.nodeStates.image?.error?.locale).toBe('zh-Hans')
     expect(localizedRun.nodeStates.image?.error?.message).toBe('dev 处理请求失败。')
     expect(nodeTask?.error?.code).toBe('PROVIDER_FAILED')

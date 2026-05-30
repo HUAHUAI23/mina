@@ -169,7 +169,7 @@ describe('mina api', () => {
     expect(response.status).toBe(404)
     expect(payload.error.code).toBe('NOT_FOUND')
     expect(payload.error.locale).toBe('zh-Hans')
-    expect(payload.error.message).toBe('未找到请求的路由。')
+    expect(payload.error.message).toBe('未找到对应的请求路由。')
   })
 
   test('falls back to English for unsupported locale headers', async () => {
@@ -183,7 +183,7 @@ describe('mina api', () => {
     expect(response.status).toBe(404)
     expect(payload.error.code).toBe('NOT_FOUND')
     expect(payload.error.locale).toBe('en')
-    expect(payload.error.message).toBe('Route not found.')
+    expect(payload.error.message).toBe('Request route not found.')
   })
 
   test('keeps auth failure codes stable across localized messages', async () => {
