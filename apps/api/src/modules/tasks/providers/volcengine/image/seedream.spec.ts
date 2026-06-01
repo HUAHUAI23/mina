@@ -18,9 +18,15 @@ import {
 import { TaskConfigValidationError } from '../../../config/validation-error'
 import type { ModelSpec, ParsedTask, ParsedTaskConfig, PrepareConfigInput } from '../../../models/model-spec'
 import type { ProviderPollResult, ProviderStartResult } from '../../provider'
+import type { ArkApiResponse } from '../common/client'
 import { VolcengineProviderClient } from '../common/client'
 import { parseJsonStringMap, resolveAlias } from '../common/model-aliases'
-import { buildVolcengineSeedreamRequest, type VolcengineGeneratedImage, volcengineSeedreamOutputFromImages } from './seedream.mapper'
+import {
+  buildVolcengineSeedreamRequest,
+  type VolcengineGeneratedImage,
+  type VolcengineSeedreamRequestInput,
+  volcengineSeedreamOutputFromImages,
+} from './seedream.mapper'
 
 const outputFormatSupport = new Map<string, readonly string[]>([
   ['doubao-seedream-5-0-260128', ['png', 'jpeg']],
@@ -30,6 +36,21 @@ const sizeLabelSupport = new Map<string, readonly string[]>([
   ['doubao-seedream-5-0-260128', ['2K', '3K']],
   ['doubao-seedream-4-5-251128', ['2K', '4K']],
 ])
+
+interface SeedreamGenerationFailure {
+  attempt: number
+  message: string
+}
+
+interface SeedreamGenerationSuccess {
+  images: VolcengineGeneratedImage[]
+}
+
+const errorMessageFromUnknown = (error: unknown): string =>
+  error instanceof Error ? error.message : 'Volcengine Seedream image generation failed.'
+
+const responseImages = (response: ArkApiResponse<VolcengineGeneratedImage[]>): VolcengineGeneratedImage[] =>
+  response.data ?? []
 
 export class VolcengineSeedreamSpec implements ModelSpec<VolcengineSeedreamParams> {
   readonly key: { kind: 'image_generation'; provider: 'volcengine'; model: string }
@@ -127,33 +148,72 @@ export class VolcengineSeedreamSpec implements ModelSpec<VolcengineSeedreamParam
 
   async start(task: ParsedTask<VolcengineSeedreamParams>): Promise<ProviderStartResult> {
     const upstreamModel = resolveAlias(this.aliases, task.model)
-    const response = await this.client.generateImages<VolcengineGeneratedImage[]>(
-      upstreamModel,
-      buildVolcengineSeedreamRequest(task.config.prompt, {
-        count: task.config.params.count,
-        images: this.collectInputResources(task.config).map((input) => input.url),
-        model: upstreamModel,
-        optimizePrompt: task.config.params.optimizePrompt,
-        responseFormat: 'url',
-        size: task.config.params.size,
-        webSearch: task.config.params.webSearch,
-        ...(task.config.params.maxImages !== undefined ? { maxImages: task.config.params.maxImages } : {}),
-        ...(task.config.params.outputFormat ? { outputFormat: task.config.params.outputFormat } : {}),
-        ...(task.config.params.sequentialImageGeneration
-          ? { sequentialImageGeneration: task.config.params.sequentialImageGeneration }
-          : {}),
-        ...(task.config.params.watermark !== undefined ? { watermark: task.config.params.watermark } : {}),
-      }),
-    )
+    const requestedImageCount = task.config.params.count
+    const requestInput: VolcengineSeedreamRequestInput = {
+      images: this.collectInputResources(task.config).map((input) => input.url),
+      model: upstreamModel,
+      optimizePrompt: task.config.params.optimizePrompt,
+      responseFormat: 'url',
+      size: task.config.params.size,
+      webSearch: task.config.params.webSearch,
+      ...(task.config.params.maxImages !== undefined ? { maxImages: task.config.params.maxImages } : {}),
+      ...(task.config.params.outputFormat ? { outputFormat: task.config.params.outputFormat } : {}),
+      ...(task.config.params.sequentialImageGeneration
+        ? { sequentialImageGeneration: task.config.params.sequentialImageGeneration }
+        : {}),
+      ...(task.config.params.watermark !== undefined ? { watermark: task.config.params.watermark } : {}),
+    }
+
+    const successes: SeedreamGenerationSuccess[] = []
+    const failures: SeedreamGenerationFailure[] = []
+    for (let attempt = 0; attempt < requestedImageCount; attempt += 1) {
+      try {
+        const response = await this.client.generateImages<VolcengineGeneratedImage[]>(
+          upstreamModel,
+          buildVolcengineSeedreamRequest(task.config.prompt, requestInput),
+        )
+        const images = responseImages(response)
+        if (images.length === 0) {
+          failures.push({ attempt, message: 'Volcengine Seedream returned no image output.' })
+          continue
+        }
+        successes.push({
+          images,
+        })
+      } catch (error) {
+        failures.push({ attempt, message: errorMessageFromUnknown(error) })
+      }
+    }
+
+    const images = successes.flatMap((success) => success.images)
+    if (images.length === 0) {
+      return {
+        code: 'VOLCENGINE_SEEDREAM_NO_IMAGE_OUTPUT',
+        message: failures[0]?.message ?? 'Volcengine Seedream returned no image output.',
+        metadata: {
+          upstreamModel,
+          requestedImageCount,
+          succeededImageCount: 0,
+          failedImageCount: requestedImageCount,
+          partialFailures: failures,
+        },
+        status: 'failed',
+      }
+    }
 
     return {
-      ...(response.usage?.token_count
-        ? { actualUsage: { amount: response.usage.token_count, metric: 'token' as const } }
-        : {}),
+      actualUsage: {
+        amount: images.length,
+        metric: 'image' as const,
+      },
       metadata: {
         upstreamModel,
+        requestedImageCount,
+        succeededImageCount: images.length,
+        failedImageCount: failures.length,
+        ...(failures.length > 0 ? { partialFailures: failures } : {}),
       },
-      output: volcengineSeedreamOutputFromImages(task.id, response.data ?? []),
+      output: volcengineSeedreamOutputFromImages(task.id, images),
       status: 'succeeded',
     }
   }

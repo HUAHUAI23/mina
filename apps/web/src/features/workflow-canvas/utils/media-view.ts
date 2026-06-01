@@ -34,19 +34,20 @@ export const videoPosterResource = (
     return undefined
   }
   const sourceVideoId = video?.id
-  const byRole = (role: NodeOutputResource['role']) =>
-    output.resources.find((resource) => {
-      if (resource.kind !== 'image' || resource.role !== role) {
-        return false
-      }
-      if (!sourceVideoId) {
-        return true
-      }
-      return (
-        resource.metadata?.sourceVideoResourceId === sourceVideoId ||
-        resource.metadata?.sourceFirstFrameVideoResourceId === sourceVideoId ||
-        resource.metadata?.sourceLastFrameVideoResourceId === sourceVideoId
-      )
-    })
+  const videoCount = output.resources.filter((resource) => resource.kind === 'video' && resource.role === 'generated_video').length
+  const matchesVideo = (resource: NodeOutputResource): boolean =>
+    resource.metadata?.sourceVideoResourceId === sourceVideoId ||
+    resource.metadata?.sourceFirstFrameVideoResourceId === sourceVideoId ||
+    resource.metadata?.sourceLastFrameVideoResourceId === sourceVideoId
+  const byRole = (role: NodeOutputResource['role']) => {
+    const resources = output.resources.filter((resource) => resource.kind === 'image' && resource.role === role)
+    if (resources.length === 0) {
+      return undefined
+    }
+    if (!sourceVideoId) {
+      return resources[0]
+    }
+    return resources.find(matchesVideo) ?? (videoCount <= 1 ? resources[0] : undefined)
+  }
   return byRole('video_cover') ?? byRole('first_frame') ?? byRole('last_frame')
 }

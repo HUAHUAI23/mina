@@ -63,7 +63,6 @@ describe('provider mappers', () => {
 
   test('maps Volcengine Seedream requests and outputs', () => {
     const request = buildVolcengineSeedreamRequest('image', {
-      count: 1,
       images: ['https://cdn/ref.png'],
       model: 'seedream',
       optimizePrompt: true,

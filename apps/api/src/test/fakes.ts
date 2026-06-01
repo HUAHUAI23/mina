@@ -151,6 +151,10 @@ export class FakeObjectStorage implements ObjectStorage {
     }
   }
 
+  getObjectForTest(key: string): { body: ObjectStorageBody; contentType?: string; metadata?: Record<string, string> } | undefined {
+    return this.#objects.get(key)
+  }
+
   private objectUrl(key: string): string {
     return `fake://${this.#bucket}/${key}`
   }

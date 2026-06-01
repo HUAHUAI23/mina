@@ -9,7 +9,6 @@ export interface VolcengineGeneratedImage {
 }
 
 export interface VolcengineSeedreamRequestInput {
-  count: number
   images: string[]
   maxImages?: number
   model: string

@@ -116,6 +116,68 @@ describe('TasksService event logging', () => {
     expect(task.cost.estimatedCost).toBe(3)
   })
 
+  test('scales actual image cost to the number of successful partial outputs', async () => {
+    const { taskEventLog, tasksService } = createService({
+      cancel: async () => {},
+      poll: async () => ({ status: 'pending' }),
+      start: async (task) => ({
+        actualUsage: { amount: 2, metric: 'image' },
+        metadata: {
+          failedImageCount: 1,
+          partialFailures: [{ attempt: 1, message: 'provider timeout' }],
+          requestedImageCount: 3,
+          succeededImageCount: 2,
+        },
+        output: {
+          resources: [
+            {
+              id: `${task.id}:image:0`,
+              index: 0,
+              kind: 'image',
+              role: 'generated_image',
+              url: `mina://tasks/${task.id}/outputs/0.png`,
+            },
+            {
+              id: `${task.id}:image:1`,
+              index: 1,
+              kind: 'image',
+              role: 'generated_image',
+              url: `mina://tasks/${task.id}/outputs/1.png`,
+            },
+          ],
+          variables: {},
+        },
+        status: 'succeeded',
+      }),
+    })
+    const task = await tasksService.createTask({
+      accountId: 'account',
+      config: imageConfig(3),
+    })
+
+    const completed = await tasksService.runTask(task.id)
+
+    expect(completed.status).toBe('succeeded')
+    expect(completed.cost.actualCost).toBe(2)
+    expect(completed.cost.usage).toEqual({ amount: 3, metric: 'image' })
+    expect(completed.output?.resources).toHaveLength(2)
+    expect(completed.providerMetadata).toMatchObject({
+      failedImageCount: 1,
+      requestedImageCount: 3,
+      succeededImageCount: 2,
+    })
+    const events = await taskEventLog.listEvents(task.id)
+    expect(events.at(-1)?.payload).toMatchObject({
+      actualUsageAmount: 2,
+      outputResourceCount: 2,
+      providerMetadata: {
+        failedImageCount: 1,
+        requestedImageCount: 3,
+        succeededImageCount: 2,
+      },
+    })
+  })
+
   test('records task lifecycle events', async () => {
     const { taskEventLog, tasksService } = createService()
     const task = await tasksService.createTask({

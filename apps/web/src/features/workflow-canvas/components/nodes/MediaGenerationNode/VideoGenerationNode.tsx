@@ -25,7 +25,9 @@ export const VideoGenerationNode = memo(function VideoGenerationNode({ data, id 
       mediaView={data.mediaView}
       nodeType="video_generation"
       title={data.title}
-      renderPreview={({ preview }) => <VideoPosterPreview resource={preview.resource} poster={preview.poster} />}
+      renderPreview={({ nodeVisible, preview }) => (
+        <VideoPosterPreview nodeVisible={nodeVisible} resource={preview.resource} poster={preview.poster} />
+      )}
     />
   )
 }, videoGenerationNodePropsEqual)

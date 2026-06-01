@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test'
+import type { Task } from '@mina/contracts/modules/tasks'
 
 import { GoogleGeminiImageSpec } from './google/image/gemini.spec'
 import { GoogleVeoSpec } from './google/video/veo.spec'
+import type { VolcengineProviderClient } from './volcengine/common/client'
 import { VolcengineSeedreamSpec } from './volcengine/image/seedream.spec'
 import { VolcengineSeedanceSpec } from './volcengine/video/seedance.spec'
 
@@ -10,6 +12,58 @@ const imageInput = (url = 'data:image/png;base64,abc') => ({
   role: 'reference_image' as const,
   url,
 })
+
+const seedreamTask = (count: number): Task => ({
+  accountId: 'account',
+  config: {
+    kind: 'image_generation',
+    media: {
+      inputImages: [],
+      referenceAudios: [],
+      referenceImages: [],
+      referenceVideos: [],
+    },
+    model: 'doubao-seedream-5-0-260128',
+    params: {
+      count,
+      optimizePrompt: false,
+      size: '2048x2048',
+      webSearch: false,
+    },
+    prompt: 'image',
+    provider: 'volcengine',
+  },
+  cost: {
+    estimatedCost: count,
+    usage: {
+      amount: count,
+      metric: 'image',
+    },
+  },
+  createdAt: new Date().toISOString(),
+  id: 'task_seedream',
+  kind: 'image_generation',
+  mode: 'sync',
+  model: 'doubao-seedream-5-0-260128',
+  provider: 'volcengine',
+  status: 'running',
+  updatedAt: new Date().toISOString(),
+})
+
+class FakeVolcengineImageClient {
+  readonly bodies: Record<string, unknown>[] = []
+
+  constructor(private readonly results: Array<{ data?: Array<{ url: string }> } | Error>) {}
+
+  async generateImages(_model: string, body: Record<string, unknown>) {
+    this.bodies.push(body)
+    const next = this.results.shift()
+    if (next instanceof Error) {
+      throw next
+    }
+    return next ?? { data: [{ url: 'https://cdn/fallback.png' }] }
+  }
+}
 
 describe('provider model specs', () => {
   test('Google Gemini image applies defaults and derives pricing/resources', () => {
@@ -106,6 +160,99 @@ describe('provider model specs', () => {
         },
       }),
     ).toThrow('does not support png')
+  })
+
+  test('Volcengine Seedream calls the image provider once per requested output', async () => {
+    const client = new FakeVolcengineImageClient([
+      { data: [{ url: 'https://cdn/image-1.png' }] },
+      { data: [{ url: 'https://cdn/image-2.png' }] },
+      { data: [{ url: 'https://cdn/image-3.png' }] },
+    ])
+    const spec = new VolcengineSeedreamSpec(
+      'doubao-seedream-5-0-260128',
+      client as unknown as VolcengineProviderClient,
+      new Map(),
+    )
+
+    const result = await spec.start(spec.parseTask(seedreamTask(3)))
+
+    expect(client.bodies).toHaveLength(3)
+    expect(client.bodies.every((body) => body.model === 'doubao-seedream-5-0-260128')).toBe(true)
+    expect(result.status).toBe('succeeded')
+    if (result.status !== 'succeeded') {
+      throw new Error('Expected Seedream generation to succeed.')
+    }
+    expect(result.actualUsage).toEqual({ amount: 3, metric: 'image' })
+    expect(result.metadata).toMatchObject({
+      failedImageCount: 0,
+      requestedImageCount: 3,
+      succeededImageCount: 3,
+    })
+    expect(result.output.resources.map((resource) => resource.url)).toEqual([
+      'https://cdn/image-1.png',
+      'https://cdn/image-2.png',
+      'https://cdn/image-3.png',
+    ])
+    expect(result.output.resources.map((resource) => resource.index)).toEqual([0, 1, 2])
+  })
+
+  test('Volcengine Seedream succeeds with partial outputs when some vendor calls fail', async () => {
+    const client = new FakeVolcengineImageClient([
+      { data: [{ url: 'https://cdn/image-1.png' }] },
+      new Error('provider timeout'),
+      { data: [{ url: 'https://cdn/image-3.png' }] },
+    ])
+    const spec = new VolcengineSeedreamSpec(
+      'doubao-seedream-5-0-260128',
+      client as unknown as VolcengineProviderClient,
+      new Map(),
+    )
+
+    const result = await spec.start(spec.parseTask(seedreamTask(3)))
+
+    expect(result.status).toBe('succeeded')
+    if (result.status !== 'succeeded') {
+      throw new Error('Expected partial Seedream generation to succeed.')
+    }
+    expect(result.actualUsage).toEqual({ amount: 2, metric: 'image' })
+    expect(result.metadata).toMatchObject({
+      failedImageCount: 1,
+      partialFailures: [{ attempt: 1, message: 'provider timeout' }],
+      requestedImageCount: 3,
+      succeededImageCount: 2,
+    })
+    expect(result.output.resources.map((resource) => resource.url)).toEqual([
+      'https://cdn/image-1.png',
+      'https://cdn/image-3.png',
+    ])
+  })
+
+  test('Volcengine Seedream fails only when every requested image call fails', async () => {
+    const client = new FakeVolcengineImageClient([
+      new Error('first failed'),
+      new Error('second failed'),
+    ])
+    const spec = new VolcengineSeedreamSpec(
+      'doubao-seedream-5-0-260128',
+      client as unknown as VolcengineProviderClient,
+      new Map(),
+    )
+
+    const result = await spec.start(spec.parseTask(seedreamTask(2)))
+
+    expect(result).toMatchObject({
+      code: 'VOLCENGINE_SEEDREAM_NO_IMAGE_OUTPUT',
+      metadata: {
+        failedImageCount: 2,
+        partialFailures: [
+          { attempt: 0, message: 'first failed' },
+          { attempt: 1, message: 'second failed' },
+        ],
+        requestedImageCount: 2,
+        succeededImageCount: 0,
+      },
+      status: 'failed',
+    })
   })
 
   test('Volcengine Seedance derives async mode, pricing, and resources', () => {

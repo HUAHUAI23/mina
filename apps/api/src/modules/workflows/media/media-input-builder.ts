@@ -35,9 +35,7 @@ export const findOutputBySelector = (
   role: ResourceRole,
   index: number,
 ): NodeOutputResource | undefined =>
-  output.resources.find(
-    (resource) => resource.kind === resourceKind && resource.role === role && resource.index === index,
-  )
+  output.resources.filter((resource) => resource.kind === resourceKind && resource.role === role)[index]
 
 export const findOutputByMediaView = (
   output: { resources: NodeOutputResource[] },

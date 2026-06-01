@@ -25,6 +25,11 @@ This documentation captures:
    original symptoms today, with concrete fix directions.
 5. The **runtime event stream** that runs beside Yjs, including how task
    and run events refresh client runtime facts and React Query caches.
+6. The workflow canvas **media runtime** rules live in
+   [`../workflow-canvas-media-runtime.md`](../workflow-canvas-media-runtime.md):
+   image multi-output generation, video poster selection, active video
+   lifecycle, history thumbnails, and the boundary between collaborative
+   media pins and local playback state.
 
 ## Reading order
 
@@ -35,6 +40,7 @@ This documentation captures:
 | 3 | [`03-refactor-audit.md`](./03-refactor-audit.md) | Reviewers of the recent refactor | Checklist of what changed, where the code now matches the ideal model, where it still diverges |
 | 4 | [`04-remaining-issues.md`](./04-remaining-issues.md) | Whoever picks up the next iteration | Concrete residual bugs in the current code (most importantly the **initial-mount wipe** which can still reproduce symptom 2) with proposed minimal fixes |
 | 5 | [`05-runtime-event-stream.md`](./05-runtime-event-stream.md) | Engineers working on task status, media previews, history rail, or run state | How the workflow event WebSocket, runtime facts store, and React Query invalidation cooperate with Yjs without becoming collaborative document state |
+| - | [`../workflow-canvas-media-runtime.md`](../workflow-canvas-media-runtime.md) | Engineers working on media task outputs or previews | Media output count semantics, partial image success, video posters, active video lifecycle, history thumbnails, and media selection boundaries |
 
 ## TL;DR
 

@@ -20,6 +20,9 @@ export interface VideoFrameGenerator {
   generateFrame(input: VideoFrameGeneratorInput): Promise<NodeOutputResource>
 }
 
+type VideoFrameDerivativeStatus = 'generated' | 'fallback'
+type VideoFrameFallbackReason = 'video_url_missing' | 'video_read_url_failed' | 'ffmpeg_failed'
+
 const frameMetadataKey = (role: VideoFrameRole): string => {
   if (role === 'first_frame') return 'sourceFirstFrameVideoResourceId'
   if (role === 'last_frame') return 'sourceLastFrameVideoResourceId'
@@ -35,24 +38,92 @@ const frameIndexOffset = (role: VideoFrameRole): number => {
 }
 
 const frameTimeSeconds = (role: VideoFrameRole): number => role === 'last_frame' ? -1 : 0
+const fallbackJpeg = Uint8Array.from(Buffer.from(
+  '/9j/4AAQSkZJRgABAgAAAQABAAD//gAQTGF2YzYwLjMxLjEwMgD/2wBDAAgEBAQEBAUFBQUFBQYGBgYGBgYGBgYGBgYHBwcICAgHBwcGBgcHCAgICAkJCQgICAgJCQoKCgwMCwsODg4RERT/xABLAAEBAAAAAAAAAAAAAAAAAAAACAEBAAAAAAAAAAAAAAAAAAAAABABAAAAAAAAAAAAAAAAAAAAABEBAAAAAAAAAAAAAAAAAAAAAP/AABEIAAIAAgMBIgACEQADEQD/2gAMAwEAAhEDEQA/AJ/AB//Z',
+  'base64',
+))
+
+const frameMetadata = (
+  input: VideoFrameGeneratorInput,
+  status: VideoFrameDerivativeStatus,
+  fallbackReason?: VideoFrameFallbackReason,
+): Record<string, unknown> => {
+  const sourceKey = frameMetadataKey(input.frameRole)
+  return {
+    derivativeStatus: status,
+    frameRole: input.frameRole,
+    frameTimeSeconds: frameTimeSeconds(input.frameRole),
+    parentMediaObjectId: input.video.mediaObjectId,
+    ...(fallbackReason ? { fallbackReason } : {}),
+    [sourceKey]: input.video.id,
+  }
+}
+
+const frameResource = (
+  input: VideoFrameGeneratorInput,
+  media: { id?: string; url: string },
+  metadata: Record<string, unknown>,
+): NodeOutputResource => ({
+  id: `${input.taskId}:${frameIdSegment(input.frameRole)}:${input.video.index}`,
+  kind: 'image',
+  role: input.frameRole,
+  index: input.video.index + frameIndexOffset(input.frameRole),
+  url: media.url,
+  ...(media.id ? { mediaObjectId: media.id } : {}),
+  metadata,
+})
+
+const createFallbackCover = async (
+  mediaObjectService: MediaObjectService,
+  input: VideoFrameGeneratorInput,
+  fallbackReason: VideoFrameFallbackReason,
+): Promise<NodeOutputResource> => {
+  if (input.frameRole !== 'video_cover') {
+    return Promise.reject(new Error(`Unable to extract required ${input.frameRole} from generated video.`))
+  }
+  const metadata = frameMetadata(input, 'fallback', fallbackReason)
+  const mediaObject = await mediaObjectService.createFromBuffer({
+    accountId: input.accountId,
+    body: fallbackJpeg,
+    kind: 'image',
+    mimeType: 'image/jpeg',
+    metadata,
+    objectNameKind: input.frameRole,
+    origin: 'system_generated',
+    ...(input.video.mediaObjectId ? { parentMediaObjectId: input.video.mediaObjectId } : {}),
+    purpose: 'preview',
+    retention: 'task_scoped',
+    sourceTaskId: input.taskId,
+  })
+  return frameResource(input, mediaObject, metadata)
+}
+
+const resolveFinalizedVideoUrl = async (
+  mediaObjectService: MediaObjectService,
+  input: VideoFrameGeneratorInput,
+): Promise<{ reason?: VideoFrameFallbackReason; url?: string }> => {
+  if (!input.video.mediaObjectId) {
+    return { reason: 'video_url_missing' }
+  }
+  try {
+    return { url: await mediaObjectService.createReadUrl(input.accountId, input.video.mediaObjectId) }
+  } catch {
+    return { reason: 'video_read_url_failed' }
+  }
+}
 
 export class DeterministicVideoFrameGenerator implements VideoFrameGenerator {
   constructor(private readonly mediaObjectService?: MediaObjectService) {}
 
   async generateFrame(input: VideoFrameGeneratorInput): Promise<NodeOutputResource> {
-    const sourceKey = frameMetadataKey(input.frameRole)
+    const metadata = frameMetadata(input, 'fallback', 'ffmpeg_failed')
     if (this.mediaObjectService) {
       const mediaObject = await this.mediaObjectService.createFromBuffer({
         accountId: input.accountId,
-        body: new TextEncoder().encode(`${input.taskId}:${input.video.id}:${input.frameRole}`),
+        body: fallbackJpeg,
         kind: 'image',
         mimeType: 'image/jpeg',
-        metadata: {
-          frameRole: input.frameRole,
-          frameTimeSeconds: frameTimeSeconds(input.frameRole),
-          parentMediaObjectId: input.video.mediaObjectId,
-          [sourceKey]: input.video.id,
-        },
+        metadata,
         objectNameKind: input.frameRole,
         origin: 'system_generated',
         ...(input.video.mediaObjectId ? { parentMediaObjectId: input.video.mediaObjectId } : {}),
@@ -60,33 +131,9 @@ export class DeterministicVideoFrameGenerator implements VideoFrameGenerator {
         retention: 'task_scoped',
         sourceTaskId: input.taskId,
       })
-      return {
-        id: `${input.taskId}:${frameIdSegment(input.frameRole)}:${input.video.index}`,
-        kind: 'image',
-        role: input.frameRole,
-        index: input.video.index + frameIndexOffset(input.frameRole),
-        url: mediaObject.url,
-        mediaObjectId: mediaObject.id,
-        metadata: {
-          frameRole: input.frameRole,
-          frameTimeSeconds: frameTimeSeconds(input.frameRole),
-          parentMediaObjectId: input.video.mediaObjectId,
-          [sourceKey]: input.video.id,
-        },
-      }
+      return frameResource(input, mediaObject, metadata)
     }
-    return {
-      id: `${input.taskId}:${frameIdSegment(input.frameRole)}:${input.video.index}`,
-      kind: 'image',
-      role: input.frameRole,
-      index: input.video.index + frameIndexOffset(input.frameRole),
-      url: `${input.video.url}#${input.frameRole}`,
-      metadata: {
-        frameRole: input.frameRole,
-        frameTimeSeconds: frameTimeSeconds(input.frameRole),
-        [sourceKey]: input.video.id,
-      },
-    }
+    return frameResource(input, { url: `${input.video.url}#${input.frameRole}` }, metadata)
   }
 }
 
@@ -94,9 +141,9 @@ export class FfmpegVideoFrameGenerator implements VideoFrameGenerator {
   constructor(private readonly mediaObjectService: MediaObjectService) {}
 
   async generateFrame(input: VideoFrameGeneratorInput): Promise<NodeOutputResource> {
-    const sourceKey = frameMetadataKey(input.frameRole)
-    if (!/^https?:\/\//.test(input.video.url)) {
-      return new DeterministicVideoFrameGenerator(this.mediaObjectService).generateFrame(input)
+    const resolved = await resolveFinalizedVideoUrl(this.mediaObjectService, input)
+    if (!resolved.url) {
+      return createFallbackCover(this.mediaObjectService, input, resolved.reason ?? 'video_url_missing')
     }
 
     const tempDir = await mkdtemp(join(tmpdir(), 'mina-video-frame-'))
@@ -104,7 +151,7 @@ export class FfmpegVideoFrameGenerator implements VideoFrameGenerator {
     const framePath = join(tempDir, 'frame.jpg')
 
     try {
-      const response = await fetch(input.video.url)
+      const response = await fetch(resolved.url)
       if (!response.ok) {
         throw new Error(`Video download failed with HTTP ${response.status}.`)
       }
@@ -113,17 +160,13 @@ export class FfmpegVideoFrameGenerator implements VideoFrameGenerator {
       const seekArgs = input.frameRole === 'last_frame' ? ['-sseof', '-0.1'] : []
       await runFfmpeg(['-y', ...seekArgs, '-i', videoPath, '-frames:v', '1', '-q:v', '2', framePath])
       const frame = await readFile(framePath)
+      const metadata = frameMetadata(input, 'generated')
       const mediaObject = await this.mediaObjectService.createFromBuffer({
         accountId: input.accountId,
         body: frame,
         kind: 'image',
         mimeType: 'image/jpeg',
-        metadata: {
-          frameRole: input.frameRole,
-          frameTimeSeconds: frameTimeSeconds(input.frameRole),
-          parentMediaObjectId: input.video.mediaObjectId,
-          [sourceKey]: input.video.id,
-        },
+        metadata,
         objectNameKind: input.frameRole,
         origin: 'system_generated',
         ...(input.video.mediaObjectId ? { parentMediaObjectId: input.video.mediaObjectId } : {}),
@@ -132,20 +175,9 @@ export class FfmpegVideoFrameGenerator implements VideoFrameGenerator {
         sourceTaskId: input.taskId,
       })
 
-      return {
-        id: `${input.taskId}:${frameIdSegment(input.frameRole)}:${input.video.index}`,
-        kind: 'image',
-        role: input.frameRole,
-        index: input.video.index + frameIndexOffset(input.frameRole),
-        url: mediaObject.url,
-        mediaObjectId: mediaObject.id,
-        metadata: {
-          frameRole: input.frameRole,
-          frameTimeSeconds: frameTimeSeconds(input.frameRole),
-          parentMediaObjectId: input.video.mediaObjectId,
-          [sourceKey]: input.video.id,
-        },
-      }
+      return frameResource(input, mediaObject, metadata)
+    } catch {
+      return createFallbackCover(this.mediaObjectService, input, 'ffmpeg_failed')
     } finally {
       await rm(tempDir, { force: true, recursive: true })
     }

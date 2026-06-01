@@ -18,6 +18,7 @@ import { WorkflowNodeHandles } from '../WorkflowNodeHandles'
 import { useCurrentNodeVisible } from '../use-node-visibility'
 
 export interface MediaNodeShellRenderInput {
+  nodeVisible: boolean
   preview: NodeMediaPreview
 }
 
@@ -119,7 +120,7 @@ export const MediaNodeShell = memo(function MediaNodeShell({
         </div>
       </div>
       <div className={nodePreviewClassName}>
-        {renderPreview({ preview: visiblePreview })}
+        {renderPreview({ nodeVisible, preview: visiblePreview })}
         {isRunning ? (
           <div className={runningOverlayClassName}>
             <Loader2 aria-hidden="true" className="animate-spin" size={18} />

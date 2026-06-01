@@ -1117,6 +1117,59 @@ describe('WorkflowsService execution semantics', () => {
     ).toEqual(['generated_video', 'last_frame', 'first_frame', 'video_cover'])
   })
 
+  test('flow group resolves video frame run outputs with role-local selector indexes', async () => {
+    const { taskRepository, tasksService, workflowsService } = createServices()
+    const workflow = await workflowsService.createWorkflow({
+      name: 'flow group video frame selector',
+      nodes: [
+        flowGroupNode('group'),
+        { ...videoNode('a', 'group'), position: { x: 40, y: 80 } },
+        {
+          ...videoNodeWithMediaSlots(videoNode('b', 'group'), {
+            firstFrame: [
+              nodeOutputSlot('firstFrame', 'a', 'run_output', {
+                resourceKind: 'image',
+                role: 'first_frame',
+                index: 0,
+              }),
+            ],
+          }),
+          position: { x: 420, y: 120 },
+        },
+      ],
+      edges: [
+        mediaEdge('a-b', 'a', 'b', 'firstFrame', 'slot-a-firstFrame'),
+      ],
+    }, DEFAULT_ACCOUNT_ID)
+
+    const run = await workflowsService.createRun(workflow.id, { selectedNodeId: 'b' }, DEFAULT_ACCOUNT_ID)
+    expect(run.nodeStates.a?.status).toBe('running')
+    expect(run.nodeStates.b?.status).toBe('pending')
+
+    const [sourceCompletedRun] = await runBackgroundCycle({
+      tasksService,
+      workflowsService,
+    })
+    expect(sourceCompletedRun?.nodeStates.a?.status).toBe('succeeded')
+    expect(sourceCompletedRun?.nodeStates.b?.status).toBe('running')
+
+    const targetTaskId = sourceCompletedRun?.nodeStates.b?.taskId
+    expect(typeof targetTaskId).toBe('string')
+    if (!targetTaskId) {
+      throw new Error('Target task id was not created.')
+    }
+    const inputResources = (
+      await taskRepository.listResources(targetTaskId)
+    ).filter((resource) => resource.direction === 'input')
+
+    expect(inputResources).toHaveLength(1)
+    expect(inputResources[0]?.role).toBe('first_frame')
+    expect(inputResources[0]?.source).toMatchObject({
+      type: 'workflow_run_output',
+      nodeId: 'a',
+    })
+  })
+
   test('repeated reconciliation does not create duplicate workflow node tasks', async () => {
     const { taskRepository, workflowsService } = createServices()
     const workflow = await workflowsService.createWorkflow({

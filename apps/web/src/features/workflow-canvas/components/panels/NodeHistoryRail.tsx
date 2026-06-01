@@ -9,7 +9,8 @@ import { useI18n, useMessages } from '../../../../app/i18n-provider'
 import { workflowKeys } from '../../api/workflow-keys'
 import { listNodeTasks } from '../../api/workflow-queries'
 import { isMediaGenerationNode } from '../../domain/canvas-node-types'
-import { selectableResources } from '../../utils/media-view'
+import { historyThumbnailResource } from '../../media/history-thumbnail'
+import { primarySelectableResources } from '../../utils/media-view'
 import { previewUrlForMedia } from '../../utils/media-url'
 import { useCanvasStore } from '../../store/canvas-store'
 import { useCanvasUiStore } from '../../store/canvas-ui-store'
@@ -91,7 +92,7 @@ export function NodeHistoryRail() {
 
         <div className={listClassName}>
           {query.data?.items.map((item) => {
-            const resources = selectableResources(item.task.output)
+            const resources = primarySelectableResources(item.task.output)
             const liveStatus = runtime?.taskStatuses[item.task.id] ?? item.task.status
             const pendingLabel = statusLabel(liveStatus, m)
             return (
@@ -104,7 +105,8 @@ export function NodeHistoryRail() {
                 {resources.length > 0 ? (
                   <div className="flex min-w-0 flex-wrap gap-1.5">
                     {resources.map((resource) => {
-                      const previewUrl = previewUrlForMedia(resource)
+                      const previewResource = historyThumbnailResource(item.task.output, resource)
+                      const previewUrl = previewUrlForMedia(previewResource)
                       const selected =
                         mediaView?.taskId === item.task.id &&
                         (mediaView.outputResourceId ? mediaView.outputResourceId === resource.id : mediaView.outputIndex === resource.index)
@@ -123,7 +125,7 @@ export function NodeHistoryRail() {
                           }
                           type="button"
                         >
-                          {resource.kind === 'image' && previewUrl ? (
+                          {previewResource?.kind === 'image' && previewUrl ? (
                             <img alt="" className="size-full object-cover" loading="lazy" src={previewUrl} />
                           ) : (
                             <span>{resource.role === 'generated_video' ? 'V' : resource.index + 1}</span>
