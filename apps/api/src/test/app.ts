@@ -16,6 +16,7 @@ import { ProviderMediaUrlResolver } from '../modules/tasks/providers/provider-me
 import { TasksService } from '../modules/tasks/tasks.service'
 import { WorkflowMediaResolver } from '../modules/workflows/media/workflow-media-resolver'
 import { InMemoryWorkflowEventBus } from '../modules/workflows/workflow-event-bus'
+import { BusWorkflowRunEventPublisher } from '../modules/workflows/workflow-run-event-publisher'
 import { WorkflowsService } from '../modules/workflows/workflows.service'
 import {
   FakeAccountsRepository,
@@ -63,6 +64,7 @@ export const createTestApp = () => {
     new FakeTaskEventLog(),
   )
   const runs = new FakeWorkflowRunRepository()
+  const nodeTasks = new FakeWorkflowNodeTaskRepository(runs, taskRepository)
   const workflowEventBus = new InMemoryWorkflowEventBus()
   const workflowDefinitions = new FakeWorkflowDefinitionRepository()
   const workflowYjsRoomService = new WorkflowYjsRoomService(
@@ -78,7 +80,7 @@ export const createTestApp = () => {
     {
       definitions: workflowDefinitions,
       nodeStates: runs,
-      nodeTasks: new FakeWorkflowNodeTaskRepository(runs),
+      nodeTasks,
       runs,
     },
     tasksService,
@@ -86,6 +88,7 @@ export const createTestApp = () => {
     new WorkflowMediaResolver(mediaObjectService, tasksService),
     workflowYjsRoomService,
     new FakeWorkflowRunEventLog(),
+    new BusWorkflowRunEventPublisher(workflowEventBus),
     workflowEventBus,
   )
   const projectsService = new ProjectsService(

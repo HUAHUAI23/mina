@@ -12,6 +12,10 @@ import type { WorkflowRunNodeStateRepository } from './repositories/workflow-run
 import type { WorkflowRunRecord } from './repositories/workflow-types'
 import { buildMediaEnvelope } from './task-config'
 import { workflowRunEventPayload, type WorkflowRunEventLog } from './workflow-events'
+import {
+  NoopWorkflowRunEventPublisher,
+  type WorkflowRunEventPublisher,
+} from './workflow-run-event-publisher'
 
 export interface StartNodeInput {
   edges: WorkflowCanvasEdge[]
@@ -26,6 +30,7 @@ export interface StartNodeResult {
 }
 
 interface WorkflowNodeExecutorDependencies {
+  eventPublisher?: WorkflowRunEventPublisher
   nodeStates: WorkflowRunNodeStateRepository
   nodeTasks: WorkflowNodeTaskRepository
   taskConfigAssembler: TaskConfigAssembler
@@ -35,7 +40,11 @@ interface WorkflowNodeExecutorDependencies {
 }
 
 export class WorkflowNodeExecutor {
-  constructor(private readonly dependencies: WorkflowNodeExecutorDependencies) {}
+  private readonly eventPublisher: WorkflowRunEventPublisher
+
+  constructor(private readonly dependencies: WorkflowNodeExecutorDependencies) {
+    this.eventPublisher = dependencies.eventPublisher ?? new NoopWorkflowRunEventPublisher()
+  }
 
   async observeRunningNode(input: {
     node: WorkflowCanvasNode
@@ -59,6 +68,14 @@ export class WorkflowNodeExecutor {
         nodeId: input.node.id,
         outputResourceCount: task.output.resources.length,
         taskId: task.id,
+      })
+      this.eventPublisher.publishNodeTaskStatus({
+        nodeId: input.node.id,
+        run: input.run,
+        status: 'succeeded',
+        taskCreatedAt: task.createdAt,
+        taskId: task.id,
+        taskUpdatedAt: task.updatedAt,
       })
       return { progressed: true }
     }
@@ -85,6 +102,14 @@ export class WorkflowNodeExecutor {
       await this.recordWorkflowRunEvent(input.run, 'workflow.node.failed', message, {
         nodeId: input.node.id,
         taskId: task.id,
+      })
+      this.eventPublisher.publishNodeTaskStatus({
+        nodeId: input.node.id,
+        run: input.run,
+        status: task.status,
+        taskCreatedAt: task.createdAt,
+        taskId: task.id,
+        taskUpdatedAt: task.updatedAt,
       })
       return { error: error.message, progressed: true }
     }
@@ -136,6 +161,14 @@ export class WorkflowNodeExecutor {
       await this.recordWorkflowRunEvent(input.run, 'workflow.node.started', 'Workflow node started running.', {
         nodeId: input.node.id,
         taskId: task.id,
+      })
+      this.eventPublisher.publishNodeTaskStatus({
+        nodeId: input.node.id,
+        run: input.run,
+        status: task.status,
+        taskCreatedAt: task.createdAt,
+        taskId: task.id,
+        taskUpdatedAt: task.updatedAt,
       })
 
       return { progressed: true }

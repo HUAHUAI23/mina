@@ -55,8 +55,12 @@ export class BackgroundTaskScheduler {
 
     this.#isRunning = true
     try {
-      await this.input.tasksService.startQueuedTasks()
-      await this.input.tasksService.pollAsyncTasks()
+      await this.input.workflowsService.publishTaskStatusUpdates(
+        await this.input.tasksService.startQueuedTasks(),
+      )
+      await this.input.workflowsService.publishTaskStatusUpdates(
+        await this.input.tasksService.pollAsyncTasks(),
+      )
       await this.input.workflowsService.reconcileRunningRuns()
     } catch (error) {
       this.#logger.error({ error }, 'Background task scheduler tick failed.')

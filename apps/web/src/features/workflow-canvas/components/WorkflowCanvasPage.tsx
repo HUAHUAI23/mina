@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import '@xyflow/react/dist/style.css'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
+import type { TaskStatus } from '@mina/contracts/modules/tasks'
+import type { WorkflowNodeRunStatus } from '@mina/contracts/modules/workflows'
 
 import { useMessages } from '../../../app/i18n-provider'
 import { taskKeys, workflowKeys } from '../api/workflow-keys'
@@ -10,16 +12,28 @@ import {
   createWorkflowRun,
   getWorkflow,
 } from '../api/workflow-queries'
-import { getWorkflowClientId, parseWorkflowEvent, workflowEventUrl } from '../api/workflow-ws'
 import { useCanvasStore } from '../store/canvas-store'
-import { incrementCanvasPerfCounter } from '../diagnostics/canvas-performance-marks'
-import { useCanvasUiStore } from '../store/canvas-ui-store'
+import { useNodeRuntimeStore } from '../store/node-runtime-store'
+import { useWorkflowEventStream } from '../sync/use-workflow-event-stream'
 import { useWorkflowYjsSync } from '../sync/yjs/yjs-sync'
 import { SaveStatusPill } from './SaveStatusPill'
 import { WorkflowCanvas } from './WorkflowCanvas'
 
 interface WorkflowCanvasPageProps {
   workflowId: string
+}
+
+const nodeRunStatusToTaskStatus = (status: WorkflowNodeRunStatus): TaskStatus => {
+  switch (status) {
+    case 'running':
+      return 'running'
+    case 'succeeded':
+      return 'succeeded'
+    case 'failed':
+      return 'failed'
+    default:
+      return 'queued'
+  }
 }
 
 const pageShellClassName = 'relative h-dvh w-screen min-w-0 overflow-hidden bg-surface text-foreground'
@@ -48,16 +62,8 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
   const hydratedWorkflowId = useCanvasStore((state) => state.hydratedWorkflowId)
   const hydrateFromServer = useCanvasStore((state) => state.hydrateFromServer)
   const setNodeMediaView = useCanvasStore((state) => state.setNodeMediaView)
-  const selectedNodeIds = useCanvasUiStore((state) => state.selectedNodeIds)
-  const eventRuntimeRef = useRef({
-    selectedNodeId: selectedNodeIds[0],
-    version,
-  })
-  eventRuntimeRef.current = {
-    selectedNodeId: selectedNodeIds[0],
-    version,
-  }
   useWorkflowYjsSync(workflowId)
+  useWorkflowEventStream(workflowId)
 
   useEffect(() => {
     const workflow = workflowQuery.data?.item
@@ -75,39 +81,14 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
     }
   }, [hydrateFromServer, hydratedWorkflowId, version, workflowQuery.data])
 
+  // Seed the ephemeral facts layer from the load-time runtime summary so a freshly opened canvas
+  // can show each node's latest output before any live event arrives.
+  const nodeRuntime = workflowQuery.data?.nodeRuntime
   useEffect(() => {
-    const clientId = getWorkflowClientId()
-    incrementCanvasPerfCounter('websocketReconnects')
-    const socket = new WebSocket(workflowEventUrl(workflowId))
-    socket.onmessage = (message) => {
-      if (typeof message.data !== 'string') {
-        return
-      }
-      const event = parseWorkflowEvent(message.data)
-      if (!event || event.workflowId !== workflowId || event.sourceClientId === clientId) {
-        return
-      }
-      const { selectedNodeId } = eventRuntimeRef.current
-      if (event.type === 'workflow.definition.updated') {
-        return
-      }
-      void queryClient.invalidateQueries({ queryKey: workflowKeys.detail(workflowId) })
-      if (event.type === 'workflow.node.task.updated' && selectedNodeId === event.payload.nodeId) {
-        void queryClient.invalidateQueries({ queryKey: workflowKeys.nodeTasks(workflowId, event.payload.nodeId) })
-      }
-      if (event.type === 'workflow.run.updated') {
-        void queryClient.invalidateQueries({ queryKey: workflowKeys.runs(workflowId) })
-      }
+    if (nodeRuntime) {
+      useNodeRuntimeStore.getState().mergeServerRuntime(nodeRuntime)
     }
-    return () => {
-      socket.onmessage = null
-      if (socket.readyState === WebSocket.CONNECTING) {
-        socket.addEventListener('open', () => socket.close(), { once: true })
-        return
-      }
-      socket.close()
-    }
-  }, [queryClient, workflowId])
+  }, [nodeRuntime])
 
   const runMutation = useMutation({
     mutationFn: async (nodeId: string) => createWorkflowRun(workflowId, { selectedNodeId: nodeId }),
@@ -119,7 +100,19 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
     onSuccess: (response) => {
       setRunError(undefined)
       void queryClient.invalidateQueries({ queryKey: workflowKeys.runs(workflowId) })
-      for (const nodeId of Object.keys(response.item.nodeStates)) {
+      // Immediately advance each node to its new task so previews follow the run before events land.
+      const applyNodeTaskStatus = useNodeRuntimeStore.getState().applyNodeTaskStatus
+      for (const [nodeId, state] of Object.entries(response.item.nodeStates)) {
+        if (state.taskId) {
+          const statusUpdatedAt = state.completedAt ?? state.startedAt ?? response.item.updatedAt
+          applyNodeTaskStatus({
+            nodeId,
+            status: nodeRunStatusToTaskStatus(state.status),
+            taskCreatedAt: response.item.createdAt,
+            taskId: state.taskId,
+            taskUpdatedAt: statusUpdatedAt,
+          })
+        }
         void queryClient.invalidateQueries({ queryKey: workflowKeys.nodeTasks(workflowId, nodeId) })
       }
     },

@@ -21,6 +21,7 @@ import { VideoGenerationNode } from './nodes/MediaGenerationNode/VideoGeneration
 import { NodeGroupNode } from './nodes/NodeGroupNode'
 import { TextNode } from './nodes/TextNode'
 import { CanvasDock } from './dock/CanvasDock'
+import { NodeHistoryRail } from './panels/NodeHistoryRail'
 import { useCanvasUiStore } from '../store/canvas-ui-store'
 import { selectWorkflowCanvasNodes } from '../store/canvas-selection-actions'
 import { isIgnoredCanvasTarget, isReactFlowPaneTarget } from '../utils/canvas-dom-scope'
@@ -260,6 +261,7 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
                 )}
               </div>
             </div>
+            <NodeHistoryRail />
             <CanvasDock onRunNode={onRunNode} runError={runError} runningNodeId={runningNodeId} />
           </ReactFlow>
         </div>

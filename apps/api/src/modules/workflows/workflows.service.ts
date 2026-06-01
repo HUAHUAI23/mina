@@ -3,10 +3,12 @@ import type {
   CreateWorkflowRunInput,
   UpdateWorkflowInput,
   Workflow,
+  WorkflowNodeRuntime,
   WorkflowNodeTaskHistoryItem,
   WorkflowRun,
   WorkflowSummary,
 } from '@mina/contracts/modules/workflows'
+import type { Task } from '@mina/contracts/modules/tasks'
 import type { WorkflowEvent } from '@mina/contracts/modules/workflows/events'
 import type { MinaLocale } from '@mina/i18n'
 
@@ -21,7 +23,12 @@ import type { WorkflowRunNodeStateRepository } from './repositories/workflow-run
 import { validateCanvas } from './validation'
 import { createWorkflowEventId, type WorkflowEventBus } from './workflow-event-bus'
 import { NoopWorkflowRunEventLog, type WorkflowRunEventLog } from './workflow-events'
+import {
+  NoopWorkflowRunEventPublisher,
+  type WorkflowRunEventPublisher,
+} from './workflow-run-event-publisher'
 import { WorkflowRunsService } from './workflow-runs.service'
+import { materializeEffectiveMediaViews } from './media/materialize-effective-media-views'
 import type { WorkflowYjsRoomService, WorkflowYjsSnapshot } from './collaboration/workflow-yjs-room.service'
 
 const nowIso = (): string => new Date().toISOString()
@@ -48,6 +55,7 @@ export class WorkflowsService {
     workflowMediaResolver: WorkflowMediaResolver,
     private readonly workflowYjsRoomService: WorkflowYjsRoomService,
     workflowRunEventLog: WorkflowRunEventLog = new NoopWorkflowRunEventLog(),
+    private readonly workflowRunEventPublisher: WorkflowRunEventPublisher = new NoopWorkflowRunEventPublisher(),
     private readonly workflowEventBus?: WorkflowEventBus,
   ) {
     this.workflowRunsService = new WorkflowRunsService(
@@ -56,6 +64,7 @@ export class WorkflowsService {
       taskConfigAssembler,
       workflowMediaResolver,
       workflowRunEventLog,
+      workflowRunEventPublisher,
     )
   }
 
@@ -137,6 +146,25 @@ export class WorkflowsService {
     return this.workflowFromSnapshot(metadata, await this.workflowYjsRoomService.snapshotForWorkflow(metadata))
   }
 
+  async listNodeRuntime(id: string, accountId: string): Promise<WorkflowNodeRuntime[]> {
+    const metadata = await this.repositories.definitions.findById(id)
+    if (!metadata) {
+      throw new HttpError(404, 'WORKFLOW_NOT_FOUND', {
+        fallbackMessage: 'Workflow not found.',
+        messageKey: 'api_error_workflow_not_found',
+      })
+    }
+    this.assertAccountAccess(metadata.accountId, accountId)
+    const rows = await this.repositories.nodeTasks.listLatestNodeTasks(id)
+    return rows.map((row) => ({
+      latestTaskCreatedAt: row.latestTaskCreatedAt,
+      latestTaskId: row.latestTaskId,
+      nodeId: row.nodeId,
+      status: row.status,
+      statusUpdatedAt: row.statusUpdatedAt,
+    }))
+  }
+
   async listRuns(workflowId: string, accountId: string, locale?: MinaLocale): Promise<WorkflowRun[]> {
     await this.getWorkflow(workflowId, accountId)
     return locale ? this.workflowRunsService.listRunsLocalized(workflowId, locale) : this.workflowRunsService.listRuns(workflowId)
@@ -169,10 +197,17 @@ export class WorkflowsService {
     if (snapshot.version !== metadata.version) {
       await this.repositories.definitions.touch(metadata.id, nowIso(), snapshot.version)
     }
+    const workflow = this.workflowFromSnapshot({ ...metadata, version: snapshot.version }, snapshot)
+    const nodeRuntime = await this.repositories.nodeTasks.listLatestNodeTasks(workflow.id)
     const run = await this.workflowRunsService.createRunFromSnapshot(
-      this.workflowFromSnapshot({ ...metadata, version: snapshot.version }, snapshot),
+      {
+        ...workflow,
+        nodes: materializeEffectiveMediaViews(workflow.nodes, nodeRuntime),
+      },
       input,
     )
+    // The initial "running" signal; per-node task transitions are owned by the run executor's
+    // event publisher (startNode/observeRunningNode), which fires during the synchronous reconcile.
     this.publishWorkflowEvent({
       id: createWorkflowEventId(),
       accountId: run.accountId,
@@ -182,19 +217,6 @@ export class WorkflowsService {
       version: run.workflowVersion,
       workflowId: run.workflowId,
     })
-    for (const [nodeId, state] of Object.entries(run.nodeStates)) {
-      if (state.taskId) {
-        this.publishWorkflowEvent({
-          id: createWorkflowEventId(),
-          accountId: run.accountId,
-          createdAt: run.updatedAt,
-          payload: { nodeId, taskId: state.taskId, status: 'queued' },
-          type: 'workflow.node.task.updated',
-          version: run.workflowVersion,
-          workflowId: run.workflowId,
-        })
-      }
-    }
     return locale ? this.workflowRunsService.localizeRun(run, locale) : run
   }
 
@@ -209,6 +231,32 @@ export class WorkflowsService {
 
   async reconcileRun(runId: string): Promise<WorkflowRun> {
     return this.workflowRunsService.reconcileRun(runId)
+  }
+
+  async publishTaskStatusUpdates(tasks: readonly Task[]): Promise<void> {
+    if (tasks.length === 0) {
+      return
+    }
+    const taskById = new Map(tasks.map((task) => [task.id, task]))
+    const links = await this.repositories.nodeTasks.listTaskRuntimeLinks([...taskById.keys()])
+    for (const link of links) {
+      const task = taskById.get(link.taskId)
+      if (!task) {
+        continue
+      }
+      this.workflowRunEventPublisher.publishNodeTaskStatus({
+        nodeId: link.nodeId,
+        run: {
+          accountId: link.accountId,
+          workflowId: link.workflowId,
+          workflowVersion: link.workflowVersion,
+        },
+        status: task.status,
+        taskCreatedAt: task.createdAt,
+        taskId: task.id,
+        taskUpdatedAt: task.updatedAt,
+      })
+    }
   }
 
   private publishWorkflowEvent(event: WorkflowEvent): void {

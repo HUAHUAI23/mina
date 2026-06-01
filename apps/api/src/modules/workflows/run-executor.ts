@@ -12,6 +12,10 @@ import type { WorkflowRunRepository } from './repositories/workflow-run.reposito
 import type { WorkflowRunNodeStateRepository } from './repositories/workflow-run-node-state.repository'
 import type { ClaimedWorkflowRun, WorkflowRunRecord, WorkflowRunSnapshot } from './repositories/workflow-types'
 import { NoopWorkflowRunEventLog, workflowRunEventPayload, type WorkflowRunEventLog } from './workflow-events'
+import {
+  NoopWorkflowRunEventPublisher,
+  type WorkflowRunEventPublisher,
+} from './workflow-run-event-publisher'
 
 const DEFAULT_WORKFLOW_RUN_CLAIM_BATCH_SIZE = 20
 const DEFAULT_WORKFLOW_RUN_LEASE_SECONDS = 30
@@ -33,8 +37,10 @@ export class WorkflowRunExecutor {
     taskConfigAssembler: TaskConfigAssembler,
     workflowMediaResolver: WorkflowMediaResolver,
     private readonly workflowRunEventLog: WorkflowRunEventLog = new NoopWorkflowRunEventLog(),
+    private readonly eventPublisher: WorkflowRunEventPublisher = new NoopWorkflowRunEventPublisher(),
   ) {
     this.nodeExecutor = new WorkflowNodeExecutor({
+      eventPublisher,
       nodeStates: repositories.nodeStates,
       nodeTasks: repositories.nodeTasks,
       taskConfigAssembler,
@@ -172,6 +178,7 @@ export class WorkflowRunExecutor {
       await this.recordWorkflowRunEvent(failed, 'workflow.run.failed', failureMessage ?? 'Workflow run failed.', {
         error: failed.error?.debugMessage ?? failed.error?.message ?? failureMessage ?? 'One or more workflow nodes failed.',
       })
+      this.eventPublisher.publishRunStatus({ run: failed, runId: failed.id, status: failed.status })
       return this.getRunOrThrow(run.id)
     }
 
@@ -185,6 +192,7 @@ export class WorkflowRunExecutor {
         return this.getRunOrThrow(run.id)
       }
       await this.recordWorkflowRunEvent(succeeded, 'workflow.run.succeeded', 'Workflow run completed successfully.')
+      this.eventPublisher.publishRunStatus({ run: succeeded, runId: succeeded.id, status: succeeded.status })
       return this.getRunOrThrow(run.id)
     }
 

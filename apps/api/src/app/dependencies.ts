@@ -27,6 +27,7 @@ import { DrizzleTaskRepository } from '../modules/tasks/tasks.drizzle-repository
 import { TasksService } from '../modules/tasks/tasks.service'
 import { DrizzleWorkflowRunEventLog } from '../modules/workflows/workflow-events'
 import { InMemoryWorkflowEventBus } from '../modules/workflows/workflow-event-bus'
+import { BusWorkflowRunEventPublisher } from '../modules/workflows/workflow-run-event-publisher'
 import { WorkflowMediaResolver } from '../modules/workflows/media/workflow-media-resolver'
 import { DrizzleWorkflowYjsRepository } from '../modules/workflows/collaboration/drizzle-workflow-yjs.repository'
 import {
@@ -101,6 +102,7 @@ export const createAppDependencies = (): AppDependencies => {
   )
   const workflowMediaResolver = new WorkflowMediaResolver(mediaObjectService, tasksService)
   const workflowEventBus = new InMemoryWorkflowEventBus()
+  const workflowRunEventPublisher = new BusWorkflowRunEventPublisher(workflowEventBus)
   const workflowYjsRoomService = new WorkflowYjsRoomService(
     new DrizzleWorkflowYjsRepository(db),
     undefined,
@@ -117,6 +119,7 @@ export const createAppDependencies = (): AppDependencies => {
     workflowMediaResolver,
     workflowYjsRoomService,
     repositories.workflowRunEventLog,
+    workflowRunEventPublisher,
     workflowEventBus,
   )
   const projectsService = new ProjectsService(

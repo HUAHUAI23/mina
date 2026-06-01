@@ -17,6 +17,8 @@ export const useCanvasNode = (nodeId: string): WorkflowCanvasNode | undefined =>
     return index === undefined ? undefined : state.nodes[index]
   })
 
+export const useCanvasWorkflowId = () => useCanvasStore((state) => state.workflowId)
+
 export const useCanvasNodes = () => useCanvasStore((state) => state.nodes)
 
 export const useCanvasEdges = () => useCanvasStore((state) => state.edges)

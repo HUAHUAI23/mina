@@ -1,4 +1,4 @@
-import { FileAudio, ImageOff, Link2, Video, X } from 'lucide-react'
+import { FileAudio, ImageOff, Link2, LoaderCircle, Video, X } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import type { NodeMediaSlotItem as NodeMediaSlotItemType } from '@mina/contracts/modules/media'
 import { cn } from '@mina/ui/lib/utils'
@@ -8,6 +8,8 @@ import { getMediaObject } from '../../api/media-queries'
 import { getTask } from '../../api/workflow-queries'
 import { mediaKeys, taskKeys } from '../../api/workflow-keys'
 import { useCanvasNode } from '../../store/selectors'
+import { resolveNodeTaskView } from '../../media/resolve-node-task-view'
+import { useNodeRuntimeStore } from '../../store/node-runtime-store'
 import { resolveMediaViewResource } from '../../utils/media-view'
 import { previewUrlForMedia } from '../../utils/media-url'
 
@@ -36,6 +38,7 @@ const missingSlotThumbClassName = 'shadow-[inset_0_0_0_1.5px_color-mix(in_oklch,
 const slotIndexClassName = 'mina-wc-slot-index absolute top-1 left-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--foreground)_72%,transparent)] px-[3px] text-[0.52rem] font-[850] text-primary-foreground'
 const slotCloseClassName = 'mina-wc-slot-close pointer-events-none absolute -top-1.5 -right-1.5 z-40 flex size-4.5 cursor-pointer items-center justify-center rounded-full bg-zinc-900 p-0 text-white opacity-0 hover:bg-black group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 [&_svg]:size-2.5 [&_svg]:stroke-[2.5px]'
 const slotImageClassName = 'size-full object-cover'
+const slotLoadingClassName = 'animate-spin text-foreground-tertiary'
 
 export function MediaSlotItem({
   dragHandleProps,
@@ -52,7 +55,9 @@ export function MediaSlotItem({
     sourceNode?.data.nodeType === 'image_generation' || sourceNode?.data.nodeType === 'video_generation'
       ? sourceNode.data.mediaView
       : undefined
-  const hasUpstreamMedia = item.source.type === 'node_output' ? Boolean(sourceMediaView?.taskId) : true
+  const sourceRuntime = useNodeRuntimeStore((state) => (nodeOutputSource ? state.byNodeId[nodeOutputSource.nodeId] : undefined))
+  const sourceTaskView = resolveNodeTaskView(sourceMediaView, sourceRuntime)
+  const sourceTaskId = sourceTaskView.taskId
   const mediaObjectId = item.source.type === 'media_object' ? item.source.mediaObjectId : undefined
   const mediaQuery = useQuery({
     enabled: Boolean(mediaObjectId),
@@ -61,12 +66,21 @@ export function MediaSlotItem({
     staleTime: 30_000,
   })
   const taskQuery = useQuery({
-    enabled: Boolean(sourceMediaView?.taskId),
-    queryFn: () => getTask(sourceMediaView?.taskId ?? ''),
-    queryKey: sourceMediaView?.taskId ? taskKeys.detail(sourceMediaView.taskId) : taskKeys.detail('pending'),
+    enabled: Boolean(sourceTaskId),
+    queryFn: () => getTask(sourceTaskId ?? ''),
+    queryKey: sourceTaskId ? taskKeys.detail(sourceTaskId) : taskKeys.detail('pending'),
     staleTime: 10_000,
   })
-  const upstreamResource = resolveMediaViewResource(taskQuery.data?.item.output, sourceMediaView)
+  const upstreamResource = resolveMediaViewResource(taskQuery.data?.item.output, sourceTaskView.isPinned ? sourceMediaView : undefined)
+  const upstreamStatus = taskQuery.data?.item.status ?? sourceRuntime?.status
+  const isUpstreamPending =
+    item.source.type === 'node_output' &&
+    Boolean(sourceTaskId) &&
+    !upstreamResource &&
+    (taskQuery.isLoading || upstreamStatus === 'queued' || upstreamStatus === 'running')
+  const hasUpstreamMedia =
+    item.source.type !== 'node_output' ||
+    Boolean(sourceTaskId && (upstreamResource || isUpstreamPending || !taskQuery.isFetched))
   const localPreview =
     item.source.type === 'external_url' && item.source.kind === 'image'
       ? previewUrlForMedia(item.source)
@@ -83,6 +97,7 @@ export function MediaSlotItem({
       {...dragHandleProps}
       className={slotItemClassName}
       data-first={isFirst ? 'true' : undefined}
+      data-loading={isUpstreamPending ? 'true' : undefined}
       data-mina-canvas-ignore="true"
       data-missing={hasUpstreamMedia ? undefined : 'true'}
       title={m.workflow_canvas_drag_to_reorder()}
@@ -90,6 +105,8 @@ export function MediaSlotItem({
       <div className={cn(slotThumbClassName, !hasUpstreamMedia && missingSlotThumbClassName)}>
         {localPreview ? (
           <img alt="" className={slotImageClassName} draggable={false} src={localPreview} />
+        ) : isUpstreamPending ? (
+          <LoaderCircle className={slotLoadingClassName} size={14} />
         ) : hasUpstreamMedia ? (
           mediaFallback(mediaKind)
         ) : (

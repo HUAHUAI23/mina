@@ -4,7 +4,7 @@ import {
   WorkflowCanvasEdgeSchema,
   WorkflowCanvasNodeSchema,
 } from '../canvas/canvas.schemas'
-import { NodeExecutionOutputSchema, TaskSchema } from '../tasks/task.schemas'
+import { NodeExecutionOutputSchema, TaskSchema, TaskStatusSchema } from '../tasks/task.schemas'
 import { LocalizedErrorDetailsSchema } from '../../schemas/api-error.schemas'
 
 export const WorkflowRunModeSchema = z.enum(['isolated_node', 'flow_group'])
@@ -91,8 +91,23 @@ export const WorkflowListResponseSchema = z.object({
   items: z.array(WorkflowSummarySchema),
 })
 
+/**
+ * Per-node runtime facts that are not part of the collaborative definition: which task
+ * a node ran most recently and its live status. Clients seed their ephemeral facts layer
+ * from this so a freshly loaded canvas can show the latest output before any live event
+ * arrives. The collaborative pin (node.data.mediaView) stays separate and authoritative.
+ */
+export const WorkflowNodeRuntimeSchema = z.object({
+  nodeId: z.string().min(1),
+  latestTaskId: z.string().min(1).optional(),
+  latestTaskCreatedAt: z.string().datetime().optional(),
+  status: TaskStatusSchema.optional(),
+  statusUpdatedAt: z.string().datetime().optional(),
+})
+
 export const WorkflowResponseSchema = z.object({
   item: WorkflowSchema,
+  nodeRuntime: z.array(WorkflowNodeRuntimeSchema).default([]),
 })
 
 export const WorkflowRunListResponseSchema = z.object({
@@ -121,6 +136,7 @@ export type WorkflowListResponse = z.infer<typeof WorkflowListResponseSchema>
 export type WorkflowNodeTaskHistoryItem = z.infer<typeof WorkflowNodeTaskHistoryItemSchema>
 export type WorkflowNodeTaskHistoryResponse = z.infer<typeof WorkflowNodeTaskHistoryResponseSchema>
 export type WorkflowNodeRunStatus = z.infer<typeof WorkflowNodeRunStatusSchema>
+export type WorkflowNodeRuntime = z.infer<typeof WorkflowNodeRuntimeSchema>
 export type WorkflowParams = z.infer<typeof WorkflowParamsSchema>
 export type WorkflowResponse = z.infer<typeof WorkflowResponseSchema>
 export type WorkflowRun = z.infer<typeof WorkflowRunSchema>

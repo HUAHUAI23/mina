@@ -12,4 +12,6 @@ test-results
 .env
 temp
 .tanstack
+*.tsbuildinfo
+*.tsbuildinfo.*
 helloagents/

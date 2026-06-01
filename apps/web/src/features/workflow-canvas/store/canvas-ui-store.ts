@@ -36,12 +36,15 @@ interface CanvasUiState {
   activeNodePanel: ActiveNodePanel | undefined
   advancedOpenByComposerId: Record<string, boolean>
   composerDraft: ComposerDraftState
+  // The node whose task-history rail is currently open, if any. Local UI only — not collaborative.
+  historyPanelNodeId: string | undefined
   selectedSlotByComposerId: Record<string, MediaSlotName | undefined>
   selectedNodeIds: string[]
 }
 
 interface CanvasUiActions {
   beginDraftUpload(uploadId: string, slot: MediaSlotName): void
+  closeHistoryPanel(): void
   closeNodePanel(): void
   completeDraftUpload(uploadId: string, item?: NodeMediaSlotItem | undefined): void
   failDraftUpload(uploadId: string, message: string): void
@@ -55,6 +58,7 @@ interface CanvasUiActions {
   setDraftTask(task: NodeTaskFormValue): void
   setComposerAdvancedOpen(composerId: string, open: boolean): void
   setComposerSelectedSlot(composerId: string, slot: MediaSlotName | undefined): void
+  toggleHistoryPanel(nodeId: string): void
 }
 
 type CanvasUiStore = CanvasUiState & CanvasUiActions
@@ -152,6 +156,7 @@ export const useCanvasUiStore = create<CanvasUiStore>()(subscribeWithSelector((s
   activeNodePanel: undefined,
   advancedOpenByComposerId: {},
   composerDraft: createDefaultComposerDraft(),
+  historyPanelNodeId: undefined,
   selectedSlotByComposerId: {},
   beginDraftUpload: (uploadId, slot) =>
     set((state) => ({
@@ -164,6 +169,7 @@ export const useCanvasUiStore = create<CanvasUiStore>()(subscribeWithSelector((s
         },
       },
     })),
+  closeHistoryPanel: () => set({ historyPanelNodeId: undefined }),
   closeNodePanel: () => set({ activeNodePanel: undefined }),
   completeDraftUpload: (uploadId, item) =>
     set((state) => ({
@@ -277,6 +283,8 @@ export const useCanvasUiStore = create<CanvasUiStore>()(subscribeWithSelector((s
         },
       }
     }),
+  toggleHistoryPanel: (nodeId) =>
+    set((state) => ({ historyPanelNodeId: state.historyPanelNodeId === nodeId ? undefined : nodeId })),
 })))
 
 export const getCanvasUiSnapshot = () => useCanvasUiStore.getState()

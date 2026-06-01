@@ -31,7 +31,11 @@ export const createWorkflowsRoutes = (
     .get('/:id', apiValidator('param', WorkflowParamsSchema), async (c) => {
       const actor = await requireAuthActor(c, accountsService)
       const { id } = c.req.valid('param')
-      return c.json({ item: await workflowsService.getWorkflow(id, actor.accountId) })
+      const [item, nodeRuntime] = await Promise.all([
+        workflowsService.getWorkflow(id, actor.accountId),
+        workflowsService.listNodeRuntime(id, actor.accountId),
+      ])
+      return c.json({ item, nodeRuntime })
     })
     .patch(
       '/:id',

@@ -29,6 +29,10 @@ import type { WorkflowRunNodeStateRepository } from './repositories/workflow-run
 import type { WorkflowRunNodeDependency, WorkflowRunRecord } from './repositories/workflow-types'
 import { validateFlowGroup } from './validation'
 import { NoopWorkflowRunEventLog, workflowRunEventPayload, type WorkflowRunEventLog } from './workflow-events'
+import {
+  NoopWorkflowRunEventPublisher,
+  type WorkflowRunEventPublisher,
+} from './workflow-run-event-publisher'
 import { WorkflowRunExecutor } from './run-executor'
 
 const nowIso = (): string => new Date().toISOString()
@@ -70,6 +74,7 @@ export class WorkflowRunsService {
     taskConfigAssembler: TaskConfigAssembler,
     workflowMediaResolver: WorkflowMediaResolver,
     private readonly workflowRunEventLog: WorkflowRunEventLog = new NoopWorkflowRunEventLog(),
+    private readonly eventPublisher: WorkflowRunEventPublisher = new NoopWorkflowRunEventPublisher(),
   ) {
     this.runExecutor = new WorkflowRunExecutor(
       repositories,
@@ -77,6 +82,7 @@ export class WorkflowRunsService {
       taskConfigAssembler,
       workflowMediaResolver,
       workflowRunEventLog,
+      eventPublisher,
     )
   }
 
@@ -161,6 +167,7 @@ export class WorkflowRunsService {
         payload: workflowRunEventPayload({ ...run, status: 'cancelled' }),
         workflowRunId: run.id,
       })
+      this.eventPublisher.publishRunStatus({ run: cancelled, runId: cancelled.id, status: cancelled.status })
     }
   }
 

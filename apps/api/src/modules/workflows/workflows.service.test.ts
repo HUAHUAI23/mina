@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import type { MediaSlotName, NodeOutputSelector } from '@mina/contracts/modules/media'
+import type { WorkflowEvent } from '@mina/contracts/modules/workflows/events'
 
 import { DEFAULT_ACCOUNT_ID } from '../accounts/accounts.data'
 import { MediaObjectService } from '../media/media-object.service'
@@ -17,6 +18,7 @@ import { TasksService } from '../tasks/tasks.service'
 import { validateCanvas } from './validation'
 import { WorkflowMediaResolver } from './media/workflow-media-resolver'
 import { InMemoryWorkflowEventBus } from './workflow-event-bus'
+import { BusWorkflowRunEventPublisher } from './workflow-run-event-publisher'
 import {
   FakeMediaObjectRepository,
   FakeObjectStorage,
@@ -31,12 +33,12 @@ import {
 import { WorkflowsService } from './workflows.service'
 import { WorkflowYjsRoomService } from './collaboration/workflow-yjs-room.service'
 
-const createWorkflowRepositories = () => {
+const createWorkflowRepositories = (taskRepository: FakeTaskRepository) => {
   const runs = new FakeWorkflowRunRepository()
   return {
     definitions: new FakeWorkflowDefinitionRepository(),
     nodeStates: runs,
-    nodeTasks: new FakeWorkflowNodeTaskRepository(runs),
+    nodeTasks: new FakeWorkflowNodeTaskRepository(runs, taskRepository),
     runs,
   }
 }
@@ -65,7 +67,7 @@ const createServices = (taskProvider?: TaskProvider) => {
       new DeterministicVideoFrameGenerator(mediaObjectService),
     ),
   )
-  const workflowRepositories = createWorkflowRepositories()
+  const workflowRepositories = createWorkflowRepositories(taskRepository)
   const workflowYjsRoomService = new WorkflowYjsRoomService(
     new FakeWorkflowYjsRepository(),
     undefined,
@@ -75,6 +77,7 @@ const createServices = (taskProvider?: TaskProvider) => {
       },
     },
   )
+  const workflowEventBus = new InMemoryWorkflowEventBus()
   const workflowsService = new WorkflowsService(
     workflowRepositories,
     tasksService,
@@ -82,7 +85,8 @@ const createServices = (taskProvider?: TaskProvider) => {
     new WorkflowMediaResolver(mediaObjectService, tasksService),
     workflowYjsRoomService,
     workflowRunEventLog,
-    new InMemoryWorkflowEventBus(),
+    new BusWorkflowRunEventPublisher(workflowEventBus),
+    workflowEventBus,
   )
 
   return {
@@ -91,9 +95,16 @@ const createServices = (taskProvider?: TaskProvider) => {
     tasksService,
     workflowRepositories,
     workflowRunEventLog,
+    workflowEventBus,
     workflowYjsRoomService,
     workflowsService,
   }
+}
+
+const collectWorkflowEvents = (bus: InMemoryWorkflowEventBus, workflowId: string) => {
+  const events: WorkflowEvent[] = []
+  const unsubscribe = bus.subscribe(workflowId, (event) => events.push(event))
+  return { events, unsubscribe }
 }
 
 const updateWorkflowSnapshot = async (
@@ -347,6 +358,206 @@ describe('WorkflowsService execution semantics', () => {
       type: 'workflow_current_media',
       nodeId: 'a',
       taskId: sourceTask.id,
+    })
+  })
+
+  test('ordinary canvas materializes latest source output when MediaView is following latest', async () => {
+    const services = createServices()
+    const { taskRepository, tasksService, workflowsService } = services
+    const workflow = await workflowsService.createWorkflow({
+      name: 'ordinary latest media view',
+      nodes: [
+        imageNode('source', 1),
+        videoNodeWithMediaSlots(videoNode('target'), {
+          firstFrame: [nodeOutputSlot('firstFrame', 'source', 'current_media')],
+        }),
+      ],
+      edges: [
+        mediaEdge('source-target', 'source', 'target', 'firstFrame', 'slot-source-firstFrame'),
+      ],
+    }, DEFAULT_ACCOUNT_ID)
+
+    const sourceRun = await workflowsService.createRun(workflow.id, { selectedNodeId: 'source' }, DEFAULT_ACCOUNT_ID)
+    const sourceTaskId = sourceRun.nodeStates.source?.taskId
+    if (!sourceTaskId) {
+      throw new Error('Source task id was not created.')
+    }
+    await runBackgroundCycle({ tasksService, workflowsService })
+    const sourceTask = await tasksService.getTask(sourceTaskId)
+    const sourceOutput = sourceTask.output?.resources[0]
+    if (!sourceOutput) {
+      throw new Error('Source output was not created.')
+    }
+
+    const targetRun = await workflowsService.createRun(workflow.id, { selectedNodeId: 'target' }, DEFAULT_ACCOUNT_ID)
+    const targetTaskId = targetRun.nodeStates.target?.taskId
+    expect(targetRun.status).toBe('running')
+    expect(typeof targetTaskId).toBe('string')
+    if (!targetTaskId) {
+      throw new Error('Target task id was not created.')
+    }
+    expect(targetRun.snapshotNodes.find((node) => node.id === 'source')?.data).toMatchObject({
+      mediaView: { taskId: sourceTaskId },
+    })
+    const inputResources = (await taskRepository.listResources(targetTaskId)).filter((resource) => resource.direction === 'input')
+    expect(inputResources[0]?.url).toBe(sourceOutput.url)
+    expect(inputResources[0]?.source).toMatchObject({
+      type: 'workflow_current_media',
+      nodeId: 'source',
+      taskId: sourceTaskId,
+    })
+  })
+
+  test('ordinary canvas keeps pinned history when a newer task exists', async () => {
+    const providerOutputByPrompt = new Map<string, string>()
+    const taskProvider: TaskProvider = {
+      poll: async () => ({
+        code: 'NOT_ASYNC',
+        message: 'not async',
+        status: 'failed',
+      }),
+      start: async (task) => {
+        const mediaObjectId = providerOutputByPrompt.get(task.config.prompt)
+        if (!mediaObjectId) {
+          throw new Error(`Missing provider output for ${task.config.prompt}.`)
+        }
+        return {
+          output: {
+            resources: [
+              {
+                id: `${task.id}:image:0`,
+                index: 0,
+                kind: 'image',
+                role: 'generated_image',
+                url: `mina://media/${mediaObjectId}`,
+              },
+            ],
+            variables: {},
+          },
+          status: 'succeeded',
+        }
+      },
+    }
+    const services = createServices(taskProvider)
+    const { mediaObjectService, taskRepository, tasksService, workflowsService } = services
+    const oldMedia = await mediaObjectService.createFromBuffer({
+      accountId: DEFAULT_ACCOUNT_ID,
+      body: new TextEncoder().encode('old'),
+      kind: 'image',
+      mimeType: 'image/png',
+      origin: 'task_output',
+      purpose: 'task_output',
+      retention: 'task_scoped',
+    })
+    const newMedia = await mediaObjectService.createFromBuffer({
+      accountId: DEFAULT_ACCOUNT_ID,
+      body: new TextEncoder().encode('new'),
+      kind: 'image',
+      mimeType: 'image/png',
+      origin: 'task_output',
+      purpose: 'task_output',
+      retention: 'task_scoped',
+    })
+
+    const baseSource = imageNode('source', 1)
+    providerOutputByPrompt.set('prompt source', oldMedia.id)
+    const workflow = await workflowsService.createWorkflow({
+      name: 'pinned history wins',
+      nodes: [
+        baseSource,
+        videoNodeWithMediaSlots(videoNode('target'), {
+          firstFrame: [nodeOutputSlot('firstFrame', 'source', 'current_media')],
+        }),
+      ],
+      edges: [
+        mediaEdge('source-target', 'source', 'target', 'firstFrame', 'slot-source-firstFrame'),
+      ],
+    }, DEFAULT_ACCOUNT_ID)
+    const oldRun = await workflowsService.createRun(workflow.id, { selectedNodeId: 'source' }, DEFAULT_ACCOUNT_ID)
+    await runBackgroundCycle({ tasksService, workflowsService })
+    const oldTaskId = oldRun.nodeStates.source?.taskId
+    if (!oldTaskId) {
+      throw new Error('Old source task id was not created.')
+    }
+
+    const pinnedWorkflow = await updateWorkflowSnapshot(services, workflow.id, {
+      edges: workflow.edges,
+      nodes: workflow.nodes.map((node) =>
+        node.id === 'source' && node.data.nodeType === 'image_generation'
+          ? { ...node, data: { ...node.data, mediaView: { taskId: oldTaskId } } }
+          : node,
+      ),
+    })
+
+    providerOutputByPrompt.set('prompt source', newMedia.id)
+    const newRun = await workflowsService.createRun(pinnedWorkflow.id, { selectedNodeId: 'source' }, DEFAULT_ACCOUNT_ID)
+    await runBackgroundCycle({ tasksService, workflowsService })
+    const newTaskId = newRun.nodeStates.source?.taskId
+    if (!newTaskId) {
+      throw new Error('New source task id was not created.')
+    }
+    expect(newTaskId).not.toBe(oldTaskId)
+
+    const targetRun = await workflowsService.createRun(pinnedWorkflow.id, { selectedNodeId: 'target' }, DEFAULT_ACCOUNT_ID)
+    const targetTaskId = targetRun.nodeStates.target?.taskId
+    if (!targetTaskId) {
+      throw new Error('Target task id was not created.')
+    }
+
+    expect(targetRun.snapshotNodes.find((node) => node.id === 'source')?.data).toMatchObject({
+      mediaView: { taskId: oldTaskId },
+    })
+    const inputResources = (await taskRepository.listResources(targetTaskId)).filter((resource) => resource.direction === 'input')
+    expect(inputResources[0]?.mediaObjectId).toBe(oldMedia.id)
+    expect(inputResources[0]?.mediaObjectId).not.toBe(newMedia.id)
+    expect(inputResources[0]?.source).toMatchObject({
+      type: 'workflow_current_media',
+      nodeId: 'source',
+      taskId: oldTaskId,
+    })
+  })
+
+  test('ordinary canvas rejects required current media when the latest task has no output yet', async () => {
+    const pendingProvider: TaskProvider = {
+      poll: async () => ({
+        nextPollAfterSeconds: 60,
+        status: 'pending',
+      }),
+      start: async (task) => ({
+        externalTaskId: `external_${task.id}`,
+        status: 'submitted',
+      }),
+    }
+    const services = createServices(pendingProvider)
+    const { tasksService, workflowsService } = services
+    const workflow = await workflowsService.createWorkflow({
+      name: 'latest not ready',
+      nodes: [
+        videoNode('source'),
+        videoNodeWithMediaSlots(videoNode('target'), {
+          firstFrame: [nodeOutputSlot('firstFrame', 'source', 'current_media')],
+        }),
+      ],
+      edges: [
+        mediaEdge('source-target', 'source', 'target', 'firstFrame', 'slot-source-firstFrame'),
+      ],
+    }, DEFAULT_ACCOUNT_ID)
+
+    const sourceRun = await workflowsService.createRun(workflow.id, { selectedNodeId: 'source' }, DEFAULT_ACCOUNT_ID)
+    const sourceTaskId = sourceRun.nodeStates.source?.taskId
+    if (!sourceTaskId) {
+      throw new Error('Source task id was not created.')
+    }
+    const [startedTask] = await tasksService.startQueuedTasks()
+    expect(startedTask?.id).toBe(sourceTaskId)
+    expect(startedTask?.status).toBe('running')
+    expect(startedTask?.output).toBeUndefined()
+
+    await expect(
+      workflowsService.createRun(workflow.id, { selectedNodeId: 'target' }, DEFAULT_ACCOUNT_ID),
+    ).rejects.toMatchObject({
+      code: 'WORKFLOW_UPSTREAM_OUTPUT_MISSING',
+      status: 422,
     })
   })
 
@@ -1020,6 +1231,77 @@ describe('WorkflowsService execution semantics', () => {
     })
   })
 
+  test('publishes task status updates for scheduler-owned running transitions', async () => {
+    const { tasksService, workflowEventBus, workflowsService } = createServices()
+    const workflow = await workflowsService.createWorkflow({
+      name: 'running status push',
+      nodes: [videoNode('video')],
+      edges: [],
+    }, DEFAULT_ACCOUNT_ID)
+    const collector = collectWorkflowEvents(workflowEventBus, workflow.id)
+
+    const run = await workflowsService.createRun(workflow.id, { selectedNodeId: 'video' }, DEFAULT_ACCOUNT_ID)
+    const taskId = run.nodeStates.video?.taskId
+    if (!taskId) {
+      throw new Error('Video task id was not created.')
+    }
+    collector.events.length = 0
+
+    const [startedTask] = await tasksService.startQueuedTasks()
+    expect(startedTask?.id).toBe(taskId)
+    expect(startedTask?.status).toBe('running')
+    if (!startedTask) {
+      throw new Error('Expected scheduler to start the queued task.')
+    }
+    await workflowsService.publishTaskStatusUpdates([startedTask])
+
+    const runningEvent = collector.events.find(
+      (event) =>
+        event.type === 'workflow.node.task.updated' &&
+        event.payload.nodeId === 'video' &&
+        event.payload.taskId === taskId &&
+        event.payload.status === 'running',
+    )
+    expect(runningEvent?.workflowId).toBe(workflow.id)
+    expect(runningEvent?.accountId).toBe(DEFAULT_ACCOUNT_ID)
+    expect(runningEvent?.payload).toMatchObject({
+      nodeId: 'video',
+      taskCreatedAt: startedTask.createdAt,
+      taskId,
+      taskUpdatedAt: startedTask.updatedAt,
+    })
+
+    collector.unsubscribe()
+  })
+
+  test('broadcasts cancelled workflow runs', async () => {
+    const { workflowEventBus, workflowRunEventLog, workflowsService } = createServices()
+    const workflow = await workflowsService.createWorkflow({
+      name: 'cancel broadcast',
+      nodes: [videoNode('video')],
+      edges: [],
+    }, DEFAULT_ACCOUNT_ID)
+    const collector = collectWorkflowEvents(workflowEventBus, workflow.id)
+    const run = await workflowsService.createRun(workflow.id, { selectedNodeId: 'video' }, DEFAULT_ACCOUNT_ID)
+    collector.events.length = 0
+
+    await workflowsService.cancelRun(run.id, DEFAULT_ACCOUNT_ID)
+
+    const cancelled = await workflowsService.getRun(run.id, DEFAULT_ACCOUNT_ID)
+    expect(cancelled.status).toBe('cancelled')
+    const liveEvent = collector.events.find(
+      (event) =>
+        event.type === 'workflow.run.updated' &&
+        event.payload.runId === run.id &&
+        event.payload.status === 'cancelled',
+    )
+    expect(liveEvent?.workflowId).toBe(workflow.id)
+    const durableEvents = await workflowRunEventLog.listEvents(run.id)
+    expect(durableEvents.map((event) => event.eventType)).toContain('workflow.run.cancelled')
+
+    collector.unsubscribe()
+  })
+
   test('fails workflow run and records node failure when a node task fails', async () => {
     const failingProvider: TaskProvider = {
       poll: async () => ({
@@ -1045,8 +1327,9 @@ describe('WorkflowsService execution semantics', () => {
         },
       },
     )
+    const taskRepository = new FakeTaskRepository()
     const tasksService = new TasksService(
-      new FakeTaskRepository(),
+      taskRepository,
       new PricingService(new FakePricingRepository()),
       failingProvider,
       modelRegistry,
@@ -1055,7 +1338,7 @@ describe('WorkflowsService execution semantics', () => {
         new DeterministicVideoFrameGenerator(mediaObjectService),
       ),
     )
-    const workflowRepositories = createWorkflowRepositories()
+    const workflowRepositories = createWorkflowRepositories(taskRepository)
     const workflowYjsRoomService = new WorkflowYjsRoomService(
       new FakeWorkflowYjsRepository(),
       undefined,
@@ -1072,6 +1355,7 @@ describe('WorkflowsService execution semantics', () => {
       new WorkflowMediaResolver(mediaObjectService, tasksService),
       workflowYjsRoomService,
       workflowRunEventLog,
+      new BusWorkflowRunEventPublisher(new InMemoryWorkflowEventBus()),
       new InMemoryWorkflowEventBus(),
     )
     const workflow = await workflowsService.createWorkflow({

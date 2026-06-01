@@ -43,6 +43,8 @@ export const WorkflowNodeTaskUpdatedEventSchema = WorkflowEventBaseSchema.extend
     nodeId: z.string().min(1),
     taskId: z.string().min(1),
     status: TaskStatusSchema,
+    taskCreatedAt: z.string().datetime().optional(),
+    taskUpdatedAt: z.string().datetime().optional(),
   }),
 })
 

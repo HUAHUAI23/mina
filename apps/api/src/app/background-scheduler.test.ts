@@ -9,6 +9,7 @@ class SchedulerProbe {
   maxConcurrentTicks = 0
   taskStarts = 0
   taskPolls = 0
+  taskStatusPublishes = 0
   workflowReconciliations = 0
   releaseTick: (() => void) | undefined
 
@@ -30,11 +31,24 @@ class SchedulerProbe {
   } as unknown as TasksService
 
   readonly workflowsService = {
+    publishTaskStatusUpdates: async () => {
+      this.taskStatusPublishes += 1
+    },
     reconcileRunningRuns: async () => {
       this.workflowReconciliations += 1
       return []
     },
   } as unknown as WorkflowsService
+
+  async waitForPolling(): Promise<void> {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      if (this.releaseTick) {
+        return
+      }
+      await Promise.resolve()
+    }
+    throw new Error('Expected scheduler tick to enter task polling.')
+  }
 }
 
 describe('BackgroundTaskScheduler', () => {
@@ -47,15 +61,18 @@ describe('BackgroundTaskScheduler', () => {
     })
 
     const firstTick = scheduler.tick()
+    await probe.waitForPolling()
     await scheduler.tick()
     expect(probe.taskStarts).toBe(1)
     expect(probe.taskPolls).toBe(1)
+    expect(probe.taskStatusPublishes).toBe(1)
     expect(probe.workflowReconciliations).toBe(0)
     expect(probe.maxConcurrentTicks).toBe(1)
 
     probe.releaseTick?.()
     await firstTick
 
+    expect(probe.taskStatusPublishes).toBe(2)
     expect(probe.workflowReconciliations).toBe(1)
   })
 })
