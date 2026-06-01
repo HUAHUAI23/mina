@@ -72,6 +72,18 @@
       color-mix(in oklch, var(--primary) 44%, var(--foreground-secondary));
 }
 
+.react-flow__node.selected .mina-wc-media-node {
+  box-shadow: none;
+}
+
+.react-flow__node.selected .mina-wc-media-preview {
+  box-shadow:
+    0 34px 64px -36px
+      color-mix(in oklch, var(--foreground-secondary) 34%, transparent),
+    inset 0 0 0 1.5px
+      color-mix(in oklch, var(--primary) 50%, var(--foreground-secondary));
+}
+
 .react-flow__node.dragging .mina-wc-node,
 .mina-wc-flow-shell[data-connecting] .react-flow__node:hover .mina-wc-node {
   box-shadow:
@@ -79,6 +91,22 @@
       color-mix(in oklch, var(--foreground-secondary) 26%, transparent),
     inset 0 0 0 1px
       color-mix(in oklch, var(--primary) 34%, var(--foreground-secondary));
+}
+
+.react-flow__node.dragging .mina-wc-media-node,
+.mina-wc-flow-shell[data-connecting] .react-flow__node:hover .mina-wc-media-node {
+  box-shadow: none;
+}
+
+.react-flow__node.dragging .mina-wc-media-preview,
+.mina-wc-flow-shell[data-connecting]
+  .react-flow__node:hover
+  .mina-wc-media-preview {
+  box-shadow:
+    0 32px 58px -38px
+      color-mix(in oklch, var(--foreground-secondary) 32%, transparent),
+    inset 0 0 0 1px
+      color-mix(in oklch, var(--primary) 40%, var(--foreground-secondary));
 }
 
 .mina-wc-stage .react-flow__handle.mina-wc-handle,
@@ -369,6 +397,13 @@
   z-index: 18;
 }
 
+.mina-wc-flow-shell .mina-wc-history-rail.react-flow__panel.top.right {
+  margin: 0;
+  right: clamp(16px, 2.4vw, 34px);
+  top: 96px;
+  z-index: 22;
+}
+
 .mina-wc-minimap-frame {
   background: color-mix(
     in oklch,
@@ -449,17 +484,28 @@
 }
 
 @media (max-width: 720px) {
-  .mina-wc-canvas-dock.react-flow__panel {
+  .mina-wc-flow-shell .mina-wc-canvas-dock.react-flow__panel.bottom.center {
     bottom: 20px;
-    left: 10px !important;
+    left: 10px;
     max-width: none;
-    right: 10px !important;
-    transform: none !important;
-    width: auto !important;
+    right: 10px;
+    transform: none;
+    width: auto;
   }
 
   .mina-wc-minimap-panel {
     display: none;
+  }
+
+  .mina-wc-flow-shell .mina-wc-history-rail.react-flow__panel.top.right {
+    left: 10px;
+    right: 10px;
+    top: 82px;
+  }
+
+  .mina-wc-flow-shell .mina-wc-history-rail > section {
+    max-height: min(68dvh, 34rem);
+    width: auto;
   }
 
   .mina-wc-controls.react-flow__controls {

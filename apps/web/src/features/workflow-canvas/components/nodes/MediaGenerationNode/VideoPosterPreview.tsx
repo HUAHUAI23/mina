@@ -14,11 +14,11 @@ interface VideoPosterPreviewProps {
   resource?: NodeOutputResource | undefined
 }
 
-const placeholderClassName = 'mina-wc-node-placeholder flex size-full items-center justify-center text-[0.72rem] font-extrabold text-foreground-quaternary [&_svg]:opacity-70'
-const nodeMediaClassName = 'mina-wc-node-media size-full object-cover'
-const videoPosterClassName = 'mina-wc-video-poster relative flex size-full items-center justify-center border-0 bg-surface-container-high p-0 text-[0.72rem] font-extrabold text-foreground-quaternary'
-const posterImageClassName = 'size-full object-cover'
-const playBadgeClassName = 'absolute flex size-10.5 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--foreground)_72%,transparent)] text-primary-foreground'
+const placeholderClassName = 'mina-wc-node-placeholder absolute inset-0 flex items-center justify-center bg-surface-container-high text-xs font-bold text-foreground-quaternary [&_svg]:opacity-70'
+const nodeMediaClassName = 'mina-wc-node-media absolute inset-0 size-full object-cover'
+const videoPosterClassName = 'mina-wc-video-poster absolute inset-0 flex size-full items-center justify-center border-0 bg-surface-container-high p-0 text-xs font-bold text-foreground-quaternary'
+const posterImageClassName = 'absolute inset-0 size-full object-cover'
+const playBadgeClassName = 'absolute flex size-10.5 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--foreground)_74%,transparent)] text-primary-foreground shadow-[0_16px_30px_-18px_color-mix(in_oklch,var(--foreground)_38%,transparent)]'
 
 export const VideoPosterPreview = memo(function VideoPosterPreview({ nodeVisible, poster, resource }: VideoPosterPreviewProps) {
   const m = useMessages()

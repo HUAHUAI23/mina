@@ -17,10 +17,10 @@ export interface NodeDragSession {
 }
 
 const frameFromFlowNode = (node: WorkflowFlowNode): NodeFrameSnapshot => ({
-  height: node.height ?? node.measured?.height,
+  height: node.type === 'flow_group' || node.type === 'node_group' ? node.height ?? node.measured?.height : node.height,
   parentId: node.parentId,
   position: node.position,
-  width: node.width ?? node.measured?.width,
+  width: node.type === 'flow_group' || node.type === 'node_group' ? node.width ?? node.measured?.width : node.width,
 })
 
 export const createNodeDragSession = (

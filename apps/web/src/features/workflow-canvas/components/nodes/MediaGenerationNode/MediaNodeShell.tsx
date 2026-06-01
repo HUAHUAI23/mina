@@ -30,14 +30,13 @@ interface MediaNodeShellProps {
   title: string
 }
 
-const mediaNodeClassName = 'mina-wc-node relative grid min-h-[274px] w-[390px] origin-center gap-[9px] overflow-visible rounded-[14px] bg-[color-mix(in_oklch,var(--surface-container-lowest)_92%,transparent)] p-3 shadow-[0_26px_48px_-34px_color-mix(in_oklch,var(--foreground)_28%,transparent),inset_0_0_0_1px_color-mix(in_oklch,var(--foreground-quaternary)_13%,transparent)]'
-const nodeHeaderClassName = 'mina-wc-node-header flex items-center justify-between px-0.5'
-const nodeTitleClassName = 'text-[0.84rem] text-foreground'
-const nodeKindClassName = 'text-[0.66rem] font-extrabold text-foreground-tertiary'
-const nodeHeaderActionsClassName = 'flex items-center gap-1.5'
-const historyButtonClassName = 'nodrag nopan flex size-6 flex-none items-center justify-center rounded-md border-0 bg-transparent p-0 text-foreground-tertiary hover:bg-surface-container-high hover:text-foreground aria-pressed:bg-surface-container-high aria-pressed:text-foreground'
-const nodePreviewClassName = 'relative grid aspect-video place-items-center overflow-hidden rounded-xl bg-surface-container-high shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--foreground-quaternary)_10%,transparent)]'
-const runningOverlayClassName = 'absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 bg-[color-mix(in_oklch,var(--surface-container-lowest)_64%,transparent)] text-[0.7rem] font-bold text-foreground-tertiary backdrop-blur-[1px]'
+const mediaNodeClassName = 'mina-wc-node mina-wc-media-node relative w-[390px] origin-center overflow-visible bg-transparent p-0'
+const nodeHeaderClassName = 'mina-wc-node-header pointer-events-none absolute inset-x-0 -top-9 z-20 flex min-w-0 items-center justify-between gap-3'
+const nodeKindClassName = 'text-sm font-bold text-foreground-secondary'
+const nodeHeaderActionsClassName = 'flex flex-none items-center gap-2'
+const historyButtonClassName = 'nodrag nopan pointer-events-auto flex size-7 flex-none items-center justify-center rounded-full border-0 bg-transparent p-0 text-foreground-tertiary hover:text-foreground aria-pressed:text-foreground'
+const nodePreviewClassName = 'mina-wc-media-preview relative grid aspect-[16/10] w-full place-items-center overflow-hidden rounded-2xl bg-transparent shadow-[0_28px_58px_-34px_color-mix(in_oklch,var(--foreground)_30%,transparent),inset_0_0_0_1px_color-mix(in_oklch,var(--foreground-quaternary)_12%,transparent)]'
+const runningOverlayClassName = 'absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 bg-[color-mix(in_oklch,var(--surface-container-lowest)_72%,transparent)] text-xs font-bold text-foreground-tertiary'
 
 const mediaNodeRenderSignature = (input: {
   id: string
@@ -101,9 +100,8 @@ export const MediaNodeShell = memo(function MediaNodeShell({
     <article className={mediaNodeClassName}>
       <WorkflowNodeHandles />
       <div className={nodeHeaderClassName}>
-        <strong className={nodeTitleClassName}>{title}</strong>
+        <span className={nodeKindClassName}>{nodeType === 'video_generation' ? m.workflow_canvas_video() : m.workflow_canvas_image()}</span>
         <div className={nodeHeaderActionsClassName}>
-          <span className={nodeKindClassName}>{nodeType === 'video_generation' ? m.workflow_canvas_video() : m.workflow_canvas_image()}</span>
           <button
             aria-label={historyOpen ? m.workflow_canvas_close_history() : m.workflow_canvas_view_history()}
             aria-pressed={historyOpen}

@@ -77,6 +77,11 @@ export const defaultTaskForNodeType = (
 
 const createId = (prefix: string): string => `${prefix}_${crypto.randomUUID()}`
 
+export const MEDIA_GENERATION_NODE_FRAME = {
+  height: 244,
+  width: 390,
+} as const
+
 export const createWorkflowCanvasNode = (
   type: WorkflowNodeType,
   index: number,
@@ -92,7 +97,7 @@ export const createWorkflowCanvasNode = (
       id: createId('node'),
       type,
       position,
-      width: 240,
+      width: MEDIA_GENERATION_NODE_FRAME.width,
       data: {
         nodeType: type,
         title: 'Image Node',
@@ -107,7 +112,7 @@ export const createWorkflowCanvasNode = (
       id: createId('node'),
       type,
       position,
-      width: 260,
+      width: MEDIA_GENERATION_NODE_FRAME.width,
       data: {
         nodeType: type,
         title: 'Video Node',

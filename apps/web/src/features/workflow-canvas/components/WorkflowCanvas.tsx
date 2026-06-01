@@ -201,6 +201,7 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
             edgeTypes={edgeTypes}
             edges={flowEdges}
             fitView
+            fitViewOptions={{ maxZoom: 1, padding: 0.24 }}
             isValidConnection={isValidConnection}
             multiSelectionKeyCode="Control"
             nodes={flowNodes}

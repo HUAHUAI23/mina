@@ -10,7 +10,7 @@ import { composerRegistry } from '../../composer/registry'
 import type { ComposerContext, ComposerRuntime } from '../../composer/types'
 import '../../composer/blocks'
 import '../../composer/slots'
-import { isMediaGenerationNode } from '../../domain/canvas-node-types'
+import { isMediaGenerationNode, MEDIA_GENERATION_NODE_FRAME } from '../../domain/canvas-node-types'
 import type { ComposerDraftState } from '../../store/canvas-ui-store'
 import type { CanvasStore } from '../../store/store-types'
 import { useFlowRenderStore } from '../../render/flow-render-store'
@@ -36,8 +36,8 @@ const dockBlockClassName = 'mina-wc-dock-block min-w-0'
 type AddMediaGenerationNode = CanvasStore['addMediaGenerationNode']
 type MediaNodeType = Parameters<AddMediaGenerationNode>[0]['nodeType']
 
-const nodeSizeEstimate = (nodeType: MediaNodeType): { height: number; width: number } =>
-  nodeType === 'video_generation' ? { height: 180, width: 260 } : { height: 170, width: 240 }
+const nodeSizeEstimate = (_nodeType: MediaNodeType): { height: number; width: number } =>
+  MEDIA_GENERATION_NODE_FRAME
 
 export function CanvasDock({ onRunNode, runError, runningNodeId }: CanvasDockProps) {
   const m = useMessages()

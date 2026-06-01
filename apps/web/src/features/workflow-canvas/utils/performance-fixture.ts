@@ -1,5 +1,6 @@
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 
+import { MEDIA_GENERATION_NODE_FRAME } from '../domain/canvas-node-types'
 import { stableCanvas } from './react-flow-persistence'
 
 export interface CanvasPerformanceFixture {
@@ -7,14 +8,18 @@ export interface CanvasPerformanceFixture {
   nodes: WorkflowCanvasNode[]
 }
 
+const FIXTURE_COLUMN_WIDTH = 470
+const FIXTURE_ROW_HEIGHT = 320
+const FIXTURE_COLUMNS = 40
+
 const imageNode = (index: number): WorkflowCanvasNode => ({
   id: `perf_node_${index}`,
   type: 'image_generation',
   position: {
-    x: (index % 40) * 320,
-    y: Math.floor(index / 40) * 260,
+    x: (index % FIXTURE_COLUMNS) * FIXTURE_COLUMN_WIDTH,
+    y: Math.floor(index / FIXTURE_COLUMNS) * FIXTURE_ROW_HEIGHT,
   },
-  width: 240,
+  width: MEDIA_GENERATION_NODE_FRAME.width,
   data: {
     nodeType: 'image_generation',
     title: `Image ${index}`,
@@ -48,10 +53,10 @@ const videoNode = (index: number): WorkflowCanvasNode => ({
   id: `perf_node_${index}`,
   type: 'video_generation',
   position: {
-    x: (index % 40) * 320,
-    y: Math.floor(index / 40) * 260,
+    x: (index % FIXTURE_COLUMNS) * FIXTURE_COLUMN_WIDTH,
+    y: Math.floor(index / FIXTURE_COLUMNS) * FIXTURE_ROW_HEIGHT,
   },
-  width: 260,
+  width: MEDIA_GENERATION_NODE_FRAME.width,
   data: {
     nodeType: 'video_generation',
     title: `Video ${index}`,
@@ -85,8 +90,8 @@ const textNode = (index: number): WorkflowCanvasNode => ({
   id: `perf_node_${index}`,
   type: 'text',
   position: {
-    x: (index % 40) * 320,
-    y: Math.floor(index / 40) * 260,
+    x: (index % FIXTURE_COLUMNS) * FIXTURE_COLUMN_WIDTH,
+    y: Math.floor(index / FIXTURE_COLUMNS) * FIXTURE_ROW_HEIGHT,
   },
   width: 220,
   data: {

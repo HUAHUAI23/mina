@@ -8,8 +8,8 @@ interface ImagePreviewProps {
   resource?: NodeOutputResource | undefined
 }
 
-const placeholderClassName = 'mina-wc-node-placeholder flex size-full items-center justify-center text-[0.72rem] font-extrabold text-foreground-quaternary [&_svg]:opacity-70'
-const nodeMediaClassName = 'mina-wc-node-media size-full object-cover'
+const placeholderClassName = 'mina-wc-node-placeholder absolute inset-0 flex items-center justify-center bg-surface-container-high text-xs font-bold text-foreground-quaternary [&_svg]:opacity-70'
+const nodeMediaClassName = 'mina-wc-node-media absolute inset-0 size-full object-cover'
 
 export const ImagePreview = memo(function ImagePreview({ resource }: ImagePreviewProps) {
   const m = useMessages()
