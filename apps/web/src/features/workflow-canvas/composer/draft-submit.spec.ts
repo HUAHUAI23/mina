@@ -52,7 +52,6 @@ await submitComposerDraft(
     },
     focusNode: () => uploadBlockedCalls.push('focusNode'),
     getNewNodePosition: () => ({ x: 10, y: 20 }),
-    onRunNode: () => uploadBlockedCalls.push('onRunNode'),
     openNodePanel: () => uploadBlockedCalls.push('openNodePanel'),
     resetComposerDraft: () => uploadBlockedCalls.push('resetComposerDraft'),
     setDraftError: (error) => {
@@ -108,12 +107,6 @@ await submitComposerDraft(
       successfulCalls.push('getNewNodePosition')
       return { x: 10, y: 20 }
     },
-    onRunNode: (nodeId) => {
-      if (nodeId !== 'node_created') {
-        throw new Error('Draft submit should run the created node.')
-      }
-      successfulCalls.push('onRunNode')
-    },
     openNodePanel: (nodeId, panel) => {
       if (nodeId !== 'node_created' || panel !== 'config') {
         throw new Error('Draft submit should open the created node config panel.')
@@ -142,8 +135,8 @@ if (createdInput.position?.x !== 10 || createdInput.position.y !== 20) {
 if (useCanvasUiStore.getState().selectedNodeIds[0] !== 'node_created') {
   throw new Error('Draft submit should select the created node.')
 }
-if (successfulCalls.join(',') !== 'getNewNodePosition,addMediaGenerationNode,openNodePanel,resetComposerDraft,focusNode,onRunNode') {
-  throw new Error('Draft submit should create, select, open, reset, focus, and run in order.')
+if (successfulCalls.join(',') !== 'getNewNodePosition,addMediaGenerationNode,openNodePanel,resetComposerDraft,focusNode') {
+  throw new Error('Draft submit should create, select, open, reset, and focus in order without running.')
 }
 
 resetUiStore()
@@ -166,7 +159,6 @@ await submitComposerDraft(
       failedCalls.push('getNewNodePosition')
       return { x: 10, y: 20 }
     },
-    onRunNode: () => failedCalls.push('onRunNode'),
     openNodePanel: () => failedCalls.push('openNodePanel'),
     resetComposerDraft: () => failedCalls.push('resetComposerDraft'),
     setDraftError: (error) => {

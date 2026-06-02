@@ -1,4 +1,4 @@
-import { ChevronDown, Languages, SlidersHorizontal, Sparkles } from 'lucide-react'
+import { ChevronDown, Languages, SlidersHorizontal, Sparkles, type LucideIcon } from 'lucide-react'
 import { cn } from '@mina/ui/lib/utils'
 
 import { useMessages } from '../../../../app/i18n-provider'
@@ -18,6 +18,7 @@ interface ModelConfigToolbarProps {
   compatibilityMode: ModelCompatibilityMode
   form: NodeTaskFormApi
   generationMode: GenerationMode
+  runIcon?: LucideIcon | undefined
   models?: ClientModelSpec[] | undefined
   onModelChange(spec: ClientModelSpec): void
   onRun(): void
@@ -25,6 +26,7 @@ interface ModelConfigToolbarProps {
   running?: boolean | undefined
   setAdvancedOpen(open: boolean): void
   spec: ClientModelSpec
+  submitLabel?: string | undefined
 }
 
 const modeLabel = (mode: GenerationMode, m: ReturnType<typeof useMessages>): string => {
@@ -50,6 +52,7 @@ export function ModelConfigToolbar({
   compatibilityMode,
   form,
   generationMode,
+  runIcon,
   models,
   onModelChange,
   onRun,
@@ -57,6 +60,7 @@ export function ModelConfigToolbar({
   running,
   setAdvancedOpen,
   spec,
+  submitLabel,
 }: ModelConfigToolbarProps) {
   const m = useMessages()
   const registry = useClientModelRegistry()
@@ -108,7 +112,7 @@ export function ModelConfigToolbar({
       >
         <SlidersHorizontal aria-hidden="true" size={17} />
       </button>
-      <RunControls compact disabled={!canSubmit} onRun={onRun} running={running} error={runError} />
+      <RunControls compact disabled={!canSubmit} error={runError} icon={runIcon} label={submitLabel} onRun={onRun} running={running} />
     </div>
   )
 }

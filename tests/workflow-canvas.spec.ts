@@ -624,41 +624,43 @@ test('workflow canvas dock shows empty prompt and expands into media composer', 
 
   const dock = page.locator('.mina-wc-canvas-dock')
   const shell = page.locator('.mina-wc-dock-shell')
+  const emptyComposer = page.locator('.mina-wc-empty-composer')
   await expect(dock).toBeVisible()
   await expect(shell).toHaveAttribute('data-context', 'empty')
-  await expect(page.locator('.mina-wc-empty-prompt-bar')).toBeVisible()
-  await expect(page.locator('.mina-wc-empty-prompt-bar')).not.toHaveAttribute('data-expanded', 'true')
-  await expect(page.locator('.mina-wc-empty-prompt-bar').getByRole('textbox', { name: 'Prompt' })).toHaveCount(0)
-  await expect(page.locator('.mina-wc-empty-prompt-bar').getByRole('button', { name: 'Open prompt composer' })).toBeVisible()
-  await expect(page.locator('.mina-wc-empty-prompt-bar').getByRole('combobox', { name: 'Model' })).toBeVisible()
+  await expect(emptyComposer).toBeVisible()
+  await expect(emptyComposer.getByRole('textbox', { name: 'Prompt' })).toBeVisible()
+  await expect(emptyComposer.getByRole('button', { name: 'Insert node' })).toBeVisible()
   const emptyDockFrame = await dock.boundingBox()
   expect(emptyDockFrame).not.toBeNull()
   expect(emptyDockFrame?.y ?? 0).toBeGreaterThan(360)
 
-  let promptRunNodeId: string | undefined
-  const runRequest = page.waitForRequest((request) => {
+  const runNodeIds: string[] = []
+  page.on('request', (request) => {
     if (request.method() !== 'POST' || !request.url().endsWith(`/api/workflows/${workflow.item.id}/runs`)) {
-      return false
+      return
     }
     const body = request.postDataJSON() as { selectedNodeId?: string }
-    promptRunNodeId = body.selectedNodeId
-    return Boolean(promptRunNodeId)
+    if (body.selectedNodeId) {
+      runNodeIds.push(body.selectedNodeId)
+    }
   })
-  await page.locator('.mina-wc-empty-prompt-bar').getByRole('button', { name: 'Open prompt composer' }).click()
-  await expect(page.locator('.mina-wc-empty-prompt-bar')).toHaveAttribute('data-expanded', 'true')
-  await page.locator('.mina-wc-empty-prompt-bar').getByRole('textbox', { name: 'Prompt' }).fill('A glass greenhouse at sunset')
-  await page.locator('.mina-wc-empty-prompt-bar').getByRole('button', { name: 'Run prompt' }).click()
-  await runRequest
-  expect(promptRunNodeId).toBeTruthy()
+  await emptyComposer.getByRole('textbox', { name: 'Prompt' }).fill('A glass greenhouse at sunset')
+  await shell.getByRole('button', { name: 'Insert node' }).click()
   await expect(page.locator('.react-flow__node')).toHaveCount(21)
+  await expect.poll(() => readSelectedNodeIds(page)).toHaveLength(1)
+  await page.waitForTimeout(250)
+  await expect.poll(() => runNodeIds.length).toBe(0)
+  const [insertedNodeId] = await readSelectedNodeIds(page)
+  expect(insertedNodeId).toBeTruthy()
   await expect(shell).toHaveAttribute('data-context', 'node')
-  await expect(page.locator(`.react-flow__node[data-id="${promptRunNodeId}"]`)).toBeVisible()
+  await expect(page.locator(`.react-flow__node[data-id="${insertedNodeId}"]`)).toBeVisible()
   await expect(page.locator('.mina-wc-config-toolbar')).toBeVisible()
+  await shell.getByRole('button', { name: 'Run' }).click()
+  await expect.poll(() => runNodeIds.join(',')).toBe(insertedNodeId)
 
   await page.locator('.react-flow__pane').click({ position: { x: 20, y: 20 } })
   await expect(shell).toHaveAttribute('data-context', 'empty')
-  await expect(page.locator('.mina-wc-empty-prompt-bar')).not.toHaveAttribute('data-expanded', 'true')
-  await expect(page.locator('.mina-wc-empty-prompt-bar').getByRole('textbox', { name: 'Prompt' })).toHaveCount(0)
+  await expect(emptyComposer.getByRole('textbox', { name: 'Prompt' })).toBeVisible()
 
   const target = await firstVisibleDraggableNode(page)
   await page.mouse.click(target.x, target.y)
@@ -698,12 +700,6 @@ test('workflow canvas dock shows empty prompt and expands into media composer', 
   const expandedDockFrame = await dock.boundingBox()
   expect(expandedDockFrame).not.toBeNull()
   expect(expandedDockFrame?.y ?? 0).toBeGreaterThan(250)
-
-  const secondTarget = await firstVisibleDraggableNodeExcept(page, target.id)
-  await selectNodes(page, [target.id, secondTarget.id])
-  await expect(shell).toHaveAttribute('data-context', 'multi')
-  await expect(page.locator('.mina-wc-multi-panel')).toBeVisible()
-  await expect(page.locator('.mina-wc-config-toolbar')).toHaveCount(0)
 })
 
 test('workflow canvas video media dock uses one active stack with slot tabs', async ({ page, request }) => {

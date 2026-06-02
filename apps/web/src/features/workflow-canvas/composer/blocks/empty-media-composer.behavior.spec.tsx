@@ -2,12 +2,24 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { NodeMediaSlotItem } from '@mina/contracts/modules/media'
 
+import { I18nProvider } from '../../../../app/i18n-provider'
 import { useCanvasUiStore, type ComposerDraftState } from '../../store/canvas-ui-store'
 import { MediaTaskFormProvider } from '../media-task-form'
 import { composerRegistry } from '../registry'
 import type { ComposerRuntime } from '../types'
 import './index'
 import { MediaComposerShell } from './MediaComposerShell'
+
+if (!globalThis.navigator?.languages) {
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: {
+      ...globalThis.navigator,
+      language: globalThis.navigator?.language ?? 'en',
+      languages: ['en'],
+    },
+  })
+}
 
 const draftTask = {
   kind: 'image_generation' as const,
@@ -38,19 +50,22 @@ const renderDraftComposer = (draft: ComposerDraftState, mode: 'collapsed' | 'exp
   useCanvasUiStore.setState({ composerDraft: draft })
 
   return renderToStaticMarkup(
-    <QueryClientProvider client={queryClient}>
-      <MediaTaskFormProvider kind="draft" draft={draft} onSubmitDraft={async () => undefined}>
-        {() => (
-          <MediaComposerShell
-            mode={mode}
-            modelScope="all"
-            runError={draft.error}
-            running={Boolean(runtime.runningNodeId)}
-            submitDisabled={Object.values(draft.uploads).some((entry) => entry.status === 'uploading')}
-          />
-        )}
-      </MediaTaskFormProvider>
-    </QueryClientProvider>,
+    <I18nProvider>
+      <QueryClientProvider client={queryClient}>
+        <MediaTaskFormProvider kind="draft" draft={draft} onSubmitDraft={async () => undefined}>
+          {() => (
+            <MediaComposerShell
+              mode={mode}
+              modelScope="all"
+              runError={draft.error}
+              running={Boolean(runtime.runningNodeId)}
+              submitDisabled={Object.values(draft.uploads).some((entry) => entry.status === 'uploading')}
+              submitLabel="Insert node"
+            />
+          )}
+        </MediaTaskFormProvider>
+      </QueryClientProvider>
+    </I18nProvider>,
   )
 }
 
@@ -76,8 +91,8 @@ if (!collapsedHtml.includes('grid-cols-[auto_minmax(0,1fr)_auto]')) {
 if (!collapsedHtml.includes('data-variant="collapsed"') || !collapsedHtml.includes('[--composer-media-width:46px]')) {
   throw new Error('Collapsed empty composer should render the compact media slot variant.')
 }
-if (!collapsedHtml.includes('aria-label="Run prompt"') || !collapsedHtml.includes('aria-label="Prompt"')) {
-  throw new Error('Collapsed empty composer should expose prompt and send controls.')
+if (!collapsedHtml.includes('aria-label="Insert node"') || !collapsedHtml.includes('aria-label="Prompt"')) {
+  throw new Error('Collapsed empty composer should expose prompt and insert controls.')
 }
 if (collapsedHtml.includes('Attach file') || collapsedHtml.includes('Add image') || collapsedHtml.includes('Video model') || collapsedHtml.includes('Image model')) {
   throw new Error('Collapsed empty composer should not render separate attach buttons or model hints.')

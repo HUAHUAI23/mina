@@ -14,7 +14,6 @@ export interface SubmitComposerDraftDependencies {
   addMediaGenerationNode: AddMediaGenerationNode
   focusNode(nodeId: string): void
   getNewNodePosition(nodeType: MediaGenerationNodeType): XYPosition | undefined
-  onRunNode(nodeId: string): void
   openNodePanel(nodeId: string, panel: 'config'): void
   resetComposerDraft(): void
   setDraftError(error: string | undefined): void
@@ -44,7 +43,6 @@ export const submitComposerDraft = async (
     dependencies.openNodePanel(nodeId, 'config')
     dependencies.resetComposerDraft()
     dependencies.focusNode(nodeId)
-    dependencies.onRunNode(nodeId)
   } catch (error) {
     dependencies.setDraftExpanded(true)
     dependencies.setDraftError(error instanceof Error ? error.message : m.workflow_canvas_error_failed_create_node())

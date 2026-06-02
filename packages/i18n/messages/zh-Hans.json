@@ -210,6 +210,7 @@
   "workflow_canvas_model_configuration": "模型配置",
   "workflow_canvas_draft_composer": "草稿编辑器",
   "workflow_canvas_node_composer": "节点编辑器",
+  "workflow_canvas_insert_node": "插入节点",
   "workflow_canvas_run_prompt": "运行提示词",
   "workflow_canvas_uploading": "上传中",
   "workflow_canvas_no_models_available": "没有可用于 {mode} 的已配置 {kind} 模型。",

@@ -1,6 +1,6 @@
 import { useStore } from '@tanstack/react-form'
 import type { DeepKeys } from '@tanstack/react-form'
-import { Zap } from 'lucide-react'
+import { Plus, Zap, type LucideIcon } from 'lucide-react'
 
 import { useMessages } from '../../../../app/i18n-provider'
 import { AdvancedConfigGroup } from '../../forms/field-groups/AdvancedConfigGroup'
@@ -24,6 +24,8 @@ interface MediaComposerShellProps {
   runError?: string | undefined
   running?: boolean | undefined
   submitDisabled?: boolean | undefined
+  submitIcon?: LucideIcon | undefined
+  submitLabel?: string | undefined
 }
 
 const configSectionClassName = 'mina-wc-config-section relative grid gap-2 border-t border-[color:color-mix(in_oklch,var(--foreground-quaternary)_10%,transparent)] pt-3.5'
@@ -211,10 +213,14 @@ function ComposerConfigSection({
   modelState,
   runError,
   running,
+  submitIcon,
+  submitLabel,
 }: {
   modelState: ComposerModelState & { spec: ClientModelSpec }
   runError?: string | undefined
   running?: boolean | undefined
+  submitIcon?: LucideIcon | undefined
+  submitLabel: string
 }) {
   const m = useMessages()
   const { composerId, form } = useMediaTaskForm()
@@ -235,9 +241,11 @@ function ComposerConfigSection({
           void form.handleSubmit()
         }}
         runError={runError}
+        runIcon={submitIcon}
         running={running}
         setAdvancedOpen={(open) => setComposerAdvancedOpen(composerId, open)}
         spec={modelState.spec}
+        submitLabel={submitLabel}
       />
 
       {advancedOpen ? <AdvancedConfigGroup form={form} spec={modelState.spec} /> : null}
@@ -258,11 +266,15 @@ export function MediaComposerShell({
   runError,
   running,
   submitDisabled,
+  submitIcon,
+  submitLabel,
 }: MediaComposerShellProps) {
   const m = useMessages()
   const { form, mediaActions, nodeType } = useMediaTaskForm()
   const modelState = useComposerModel({ modelScope, submitDisabled })
   const { canSubmit, currentValue, generationMode, spec } = modelState
+  const resolvedSubmitLabel = submitLabel ?? m.workflow_canvas_run()
+  const SubmitIcon = submitIcon ?? (submitLabel ? Plus : Zap)
 
   if (!spec) {
     return (
@@ -280,16 +292,16 @@ export function MediaComposerShell({
         </div>
         <ComposerPromptSection currentValue={currentValue} mode="collapsed" nodeType={nodeType} onExpand={onExpand} />
         <button
-          aria-label={m.workflow_canvas_run_prompt()}
+          aria-label={resolvedSubmitLabel}
           className={collapsedRunButtonClassName}
           disabled={!canSubmit || running}
           onClick={() => {
             void form.handleSubmit()
           }}
-          title={mediaActions.uploading ? m.workflow_canvas_uploading() : m.workflow_canvas_run_prompt()}
+          title={mediaActions.uploading ? m.workflow_canvas_uploading() : resolvedSubmitLabel}
           type="button"
         >
-          <Zap aria-hidden="true" size={20} />
+          <SubmitIcon aria-hidden="true" size={20} />
         </button>
         {runError ? <p className={emptyErrorClassName}>{runError}</p> : null}
       </section>
@@ -307,7 +319,7 @@ export function MediaComposerShell({
         </div>
       </div>
 
-      <ComposerConfigSection modelState={{ ...modelState, spec }} runError={runError} running={running} />
+      <ComposerConfigSection modelState={{ ...modelState, spec }} runError={runError} running={running} submitIcon={SubmitIcon} submitLabel={resolvedSubmitLabel} />
     </section>
   )
 }
