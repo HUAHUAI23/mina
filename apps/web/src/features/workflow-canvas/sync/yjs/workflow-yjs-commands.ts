@@ -23,7 +23,13 @@ import { taskWithCompatibleModel } from '../../forms/model-compatibility'
 import { resolveClientModel } from '../../forms/registry/client-model-registry'
 import { createStoreId } from '../../store/store-helpers'
 import type { CanvasNodeFramePatch, MediaConnectionInput } from '../../store/store-types'
-import { exportWorkflowSnapshotFromYjs, writeWorkflowNode, type WorkflowYDocHandles } from './yjs-document'
+import {
+  exportWorkflowSnapshotFromYjs,
+  writeWorkflowNode,
+  writeWorkflowNodeTaskPrompt,
+  writeWorkflowTextNodeText,
+  type WorkflowYDocHandles,
+} from './yjs-document'
 import { getWorkflowYjsRuntimeForWorkflow } from './workflow-yjs-store'
 import { validateWorkflowCanvasGraph } from '../../domain/canvas-graph-validation'
 
@@ -33,15 +39,27 @@ export interface WorkflowYjsCommandContext {
   workflowId: string
 }
 
+interface WorkflowYjsCaptureOptions {
+  discrete?: boolean | undefined
+}
+
 const withYDoc = (
   context: WorkflowYjsCommandContext,
   apply: (y: WorkflowYDocHandles, workflowId: string) => void,
+  options: WorkflowYjsCaptureOptions = {},
 ): void => {
   const runtime = getWorkflowYjsRuntimeForWorkflow(context.workflowId)
   if (!runtime) {
     throw new Error(`Yjs runtime not registered for workflow ${context.workflowId}`)
   }
+  const discrete = options.discrete ?? true
+  if (discrete) {
+    runtime.undo.stopCapturing()
+  }
   runtime.y.ydoc.transact(() => apply(runtime.y, runtime.workflowId), 'mina-local')
+  if (discrete) {
+    runtime.undo.stopCapturing()
+  }
   if (!import.meta.env.PROD) {
     const snapshot = exportWorkflowSnapshotFromYjs(runtime.y)
     validateWorkflowCanvasGraph(snapshot.nodes, snapshot.edges)
@@ -51,12 +69,20 @@ const withYDoc = (
 const withNodeFrameYDoc = (
   context: WorkflowYjsCommandContext,
   mutate: (y: WorkflowYDocHandles, workflowId: string) => void,
+  options: WorkflowYjsCaptureOptions = {},
 ): void => {
   const runtime = getWorkflowYjsRuntimeForWorkflow(context.workflowId)
   if (!runtime) {
     return
   }
+  const discrete = options.discrete ?? true
+  if (discrete) {
+    runtime.undo.stopCapturing()
+  }
   runtime.y.ydoc.transact(() => mutate(runtime.y, runtime.workflowId), 'mina-local')
+  if (discrete) {
+    runtime.undo.stopCapturing()
+  }
 }
 
 const frameFromNode = (node: WorkflowCanvasNode): Partial<WorkflowCanvasNode> => ({
@@ -526,13 +552,26 @@ export const workflowYjsCommands = {
     })
   },
 
+  setNodeTaskPrompt(context: WorkflowYjsCommandContext, nodeId: string, prompt: string): void {
+    const node = context.nodes.find((candidate) => candidate.id === nodeId)
+    if (!node || !isMediaGenerationNode(node)) {
+      return
+    }
+    if (!node.data.config.task) {
+      return
+    }
+    withYDoc(context, (y) => {
+      writeWorkflowNodeTaskPrompt(y.nodes, nodeId, prompt)
+    }, { discrete: false })
+  },
+
   setNodeText(context: WorkflowYjsCommandContext, nodeId: string, text: string): void {
-    workflowYjsCommands.updateNodeById(context, nodeId, (node) => {
-      if (node.data.nodeType !== 'text') {
-        return undefined
-      }
-      node.data.config.text = text
-      return node
-    })
+    const node = context.nodes.find((candidate) => candidate.id === nodeId)
+    if (!node || node.data.nodeType !== 'text') {
+      return
+    }
+    withYDoc(context, (y) => {
+      writeWorkflowTextNodeText(y.nodes, nodeId, text)
+    }, { discrete: false })
   },
 }

@@ -363,6 +363,7 @@
   overflow: hidden;
   padding: 4px;
   right: 18px;
+  z-index: 24;
 }
 
 .mina-wc-controls.react-flow__controls button {
@@ -381,6 +382,17 @@
 .mina-wc-controls.react-flow__controls button:hover {
   background: var(--surface-container-low);
   color: var(--foreground);
+}
+
+.mina-wc-controls.react-flow__controls button:disabled {
+  color: var(--foreground-quaternary);
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.mina-wc-controls.react-flow__controls button:disabled:hover {
+  background: transparent;
+  color: var(--foreground-quaternary);
 }
 
 .mina-wc-controls.react-flow__controls button svg {

@@ -188,6 +188,7 @@ function NodeTargetProvider({
   const m = useMessages()
   const [uploading, setUploading] = useState(false)
   const setNodeTaskConfig = useCanvasStore((state) => state.setNodeTaskConfig)
+  const setNodeTaskPrompt = useCanvasStore((state) => state.setNodeTaskPrompt)
 
   const mediaSlots = node.data.mediaSlots ?? emptyMediaSlots
   const task = node.data.config.task
@@ -205,6 +206,17 @@ function NodeTargetProvider({
       onChange: ({ formApi }) => {
         const nextTask = formValueToTask(formApi.state.values)
         if (task && tasksEqual(task, nextTask)) {
+          return
+        }
+        if (
+          task &&
+          task.kind === nextTask.kind &&
+          task.provider === nextTask.provider &&
+          task.model === nextTask.model &&
+          task.prompt !== nextTask.prompt &&
+          tasksEqual({ ...task, prompt: nextTask.prompt }, nextTask)
+        ) {
+          setNodeTaskPrompt(node.id, nextTask.prompt)
           return
         }
         setNodeTaskConfig(node.id, nextTask)

@@ -373,6 +373,47 @@ export const writeWorkflowNode = (
   writeNodeDataToYMap(ensureYMap(nodeMap, 'data').yMap, node.data)
 }
 
+export const writeWorkflowTextNodeText = (
+  nodes: Y.Map<unknown>,
+  nodeId: string,
+  text: string,
+): boolean => {
+  const nodeMap = nodes.get(nodeId)
+  if (!(nodeMap instanceof Y.Map)) {
+    return false
+  }
+  const dataMap = nodeMap.get('data')
+  if (!(dataMap instanceof Y.Map) || dataMap.get('nodeType') !== 'text') {
+    return false
+  }
+  const { yMap: configMap } = ensureYMap(dataMap, 'config')
+  setYText(configMap, 'text', text)
+  return true
+}
+
+export const writeWorkflowNodeTaskPrompt = (
+  nodes: Y.Map<unknown>,
+  nodeId: string,
+  prompt: string,
+): boolean => {
+  const nodeMap = nodes.get(nodeId)
+  if (!(nodeMap instanceof Y.Map)) {
+    return false
+  }
+  const dataMap = nodeMap.get('data')
+  const nodeType = dataMap instanceof Y.Map ? dataMap.get('nodeType') : undefined
+  if (!(dataMap instanceof Y.Map) || (nodeType !== 'image_generation' && nodeType !== 'video_generation')) {
+    return false
+  }
+  const configMap = dataMap.get('config')
+  const taskMap = configMap instanceof Y.Map ? configMap.get('task') : undefined
+  if (!(taskMap instanceof Y.Map)) {
+    return false
+  }
+  setYText(taskMap, 'prompt', prompt)
+  return true
+}
+
 const corruptNodeMessage = (id: unknown, type: unknown, data: WorkflowCanvasNode['data'] | undefined): string =>
   `Corrupt workflow node in Y.Doc: id=${String(id)} type=${String(type)} data=${data ? 'ok' : 'invalid'}`
 

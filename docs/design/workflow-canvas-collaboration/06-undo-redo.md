@@ -12,6 +12,17 @@ Undoing a canvas edit must therefore produce another Yjs operation and flow
 through the same projection, persistence, and broadcast paths as any other
 edit.
 
+This document intentionally corrects three points that are easy to get
+wrong:
+
+- `ignoreRemoteMapChanges` must stay at the Yjs default of `false`; setting
+  it to `true` enables overwriting newer remote map edits.
+- `useSyncExternalStore` snapshots must be referentially stable when
+  `canUndo` and `canRedo` have not changed.
+- Discrete structural commands should call `stopCapturing()` both before
+  and after the Yjs transaction, so they do not merge with nearby text
+  capture windows or following structural edits.
+
 ## Decision
 
 Use one `Y.UndoManager` per mounted workflow Yjs runtime.
@@ -94,8 +105,8 @@ interface WorkflowYjsRuntimeState {
 }
 ```
 
-UndoManager should be added here, because it has the same lifetime and the
-same workflow isolation boundary as the ydoc.
+UndoManager belongs here, because it has the same lifetime and the same
+workflow isolation boundary as the ydoc.
 
 ### Collaborative document shape
 
@@ -389,6 +400,15 @@ Use these UndoManager events:
 `stack-item-updated` is required because Yjs merges changes within the
 capture timeout and emits an update event instead of an add event.
 
+The snapshot reader must return the same object reference when the values
+have not changed. React uses this identity to decide whether the external
+snapshot is stable; returning a fresh `{ canUndo, canRedo }` object on every
+read can trigger repeated renders or a maximum-update-depth failure.
+
+This referential cache is not a second source of truth. It only preserves
+React snapshot identity. The boolean values are still read directly from the
+UndoManager.
+
 Example:
 
 ```ts
@@ -409,11 +429,29 @@ const emptyUndoState: WorkflowUndoState = {
   canUndo: false,
 }
 
+const undoStateCache = new Map<string, WorkflowUndoState>()
+
 const readUndoState = (workflowId: string): WorkflowUndoState => {
   const undo = getWorkflowYjsRuntimeForWorkflow(workflowId)?.undo
-  return undo
-    ? { canRedo: undo.canRedo(), canUndo: undo.canUndo() }
-    : emptyUndoState
+  if (!undo) {
+    undoStateCache.delete(workflowId)
+    return emptyUndoState
+  }
+
+  const next: WorkflowUndoState = {
+    canRedo: undo.canRedo(),
+    canUndo: undo.canUndo(),
+  }
+  const previous = undoStateCache.get(workflowId)
+  if (
+    previous &&
+    previous.canRedo === next.canRedo &&
+    previous.canUndo === next.canUndo
+  ) {
+    return previous
+  }
+  undoStateCache.set(workflowId, next)
+  return next
 }
 
 export function useWorkflowUndoState(workflowId: string): WorkflowUndoState {
@@ -445,8 +483,9 @@ export function useWorkflowUndoState(workflowId: string): WorkflowUndoState {
 }
 ```
 
-This hook must not cache undo state independently. It derives button state
-from the UndoManager every time React asks for a snapshot.
+This hook must not maintain a parallel history stack or independently
+decide whether undo is possible. It may only cache the last derived snapshot
+object for React identity stability.
 
 ## Capture boundaries
 
@@ -464,30 +503,38 @@ The intended user semantics:
 - Dragging a node and immediately deleting an edge should not merge into
   one undo step.
 
-Update both transaction helpers:
+Update both transaction helpers. Call `stopCapturing()` before and after
+discrete transactions:
+
+- The pre-transaction call prevents a structural operation from being
+  appended to a previous prompt/text capture item that is still inside the
+  500ms capture timeout.
+- The post-transaction call prevents the next operation from being appended
+  to this structural operation.
 
 ```ts
 interface WorkflowYjsCaptureOptions {
   discrete?: boolean | undefined
 }
 
-const defaultCaptureOptions: Required<WorkflowYjsCaptureOptions> = {
-  discrete: true,
-}
-
 const withYDoc = (
   context: WorkflowYjsCommandContext,
   apply: (y: WorkflowYDocHandles, workflowId: string) => void,
-  options: WorkflowYjsCaptureOptions = defaultCaptureOptions,
+  options: WorkflowYjsCaptureOptions = {},
 ): void => {
   const runtime = getWorkflowYjsRuntimeForWorkflow(context.workflowId)
   if (!runtime) {
     throw new Error(`Yjs runtime not registered for workflow ${context.workflowId}`)
   }
 
+  const discrete = options.discrete ?? true
+  if (discrete) {
+    runtime.undo.stopCapturing()
+  }
+
   runtime.y.ydoc.transact(() => apply(runtime.y, runtime.workflowId), 'mina-local')
 
-  if (options.discrete ?? true) {
+  if (discrete) {
     runtime.undo.stopCapturing()
   }
 
@@ -504,16 +551,21 @@ And for frame commits:
 const withNodeFrameYDoc = (
   context: WorkflowYjsCommandContext,
   mutate: (y: WorkflowYDocHandles, workflowId: string) => void,
-  options: WorkflowYjsCaptureOptions = defaultCaptureOptions,
+  options: WorkflowYjsCaptureOptions = {},
 ): void => {
   const runtime = getWorkflowYjsRuntimeForWorkflow(context.workflowId)
   if (!runtime) {
     return
   }
 
+  const discrete = options.discrete ?? true
+  if (discrete) {
+    runtime.undo.stopCapturing()
+  }
+
   runtime.y.ydoc.transact(() => mutate(runtime.y, runtime.workflowId), 'mina-local')
 
-  if (options.discrete ?? true) {
+  if (discrete) {
     runtime.undo.stopCapturing()
   }
 }
@@ -521,22 +573,24 @@ const withNodeFrameYDoc = (
 
 Be careful with text commands:
 
-- `setNodeText(...)` is a pure text-node text update and can use
-  `{ discrete: false }`.
+- `setNodeText(...)` must update only the text node's nested `Y.Text` value
+  and can use `{ discrete: false }`.
 - `setNodeTaskConfig(...)` is not necessarily pure text. It may update
   prompt, model, provider, params, and compatibility-derived fields. Do not
   blindly mark the whole command as non-discrete unless the call site is
   known to be a prompt-only edit.
+- Prompt typing must use a dedicated `setNodeTaskPrompt(...)` command. That
+  command must update only the task prompt's nested `Y.Text` value and use
+  `{ discrete: false }`.
 
-Recommended follow-up if prompt typing should merge cleanly:
+The document layer should expose narrow write helpers for these two cases,
+for example `writeWorkflowTextNodeText(...)` and
+`writeWorkflowNodeTaskPrompt(...)`. Avoid routing prompt typing through
+`writeWorkflowNode(...)`, because that rewrites the full node map and can
+pull unrelated task fields into the text capture window.
 
-1. Add a command specifically for prompt text, such as
-   `setNodeTaskPrompt(context, nodeId, prompt)`.
-2. Make that command update only the `Y.Text` prompt field.
-3. Call it with `{ discrete: false }`.
-4. Keep full `setNodeTaskConfig(...)` discrete.
-
-That avoids merging model changes and prompt typing into one undo step.
+This split avoids merging model changes, params changes, media slot
+compatibility changes, and prompt typing into one undo step.
 
 ## UI controls
 
@@ -780,10 +834,7 @@ count only `'mina-local'` and `'mina-bootstrap'` as local:
 const isLocal = origin === 'mina-local' || origin === 'mina-bootstrap'
 ```
 
-This means undo/redo operations may be counted as received updates. That is
-only a diagnostic issue, not a document correctness issue.
-
-Optional improvement:
+UndoManager-generated updates should be counted as local diagnostics too:
 
 ```ts
 const runtime = getWorkflowYjsRuntimeForWorkflow(workflowId)
@@ -793,7 +844,8 @@ const isLocal =
   origin === runtime?.undo
 ```
 
-Do this only if the perf counters matter for undo/redo analysis.
+This is not required for document correctness, but it keeps performance and
+sync counters truthful during undo/redo testing.
 
 ## Tests
 
@@ -850,8 +902,9 @@ Required cases:
 7. **Text capture merge**
    - Perform multiple pure text updates with `{ discrete: false }`.
    - Assert one undo reverts the grouped text changes.
-   - If no prompt-only command exists yet, test only `setNodeText(...)` and
-     leave task prompt merge for the prompt-only command follow-up.
+   - Cover both `setNodeText(...)` and `setNodeTaskPrompt(...)`.
+   - Assert prompt undo restores the previous prompt without changing task
+     kind, provider, model, or params.
 
 8. **Runtime cleanup**
    - Register runtime and capture an undo stack item.
@@ -889,6 +942,42 @@ Implement in this order:
     - `bun --filter @mina/web typecheck`
     - targeted Bun specs for workflow canvas Yjs
     - relevant Playwright workflow canvas tests if UI controls changed
+
+## Implementation status
+
+The current implementation follows this design:
+
+- `WorkflowYjsRuntimeState` owns one `Y.UndoManager` per mounted workflow
+  runtime.
+- The UndoManager scopes `nodes`, `nodeFrames`, `nodeOrder`, `edges`, and
+  `edgeOrder`; it does not scope `meta`.
+- Local user commands use origin `'mina-local'`; remote/provider updates and
+  imports stay out of the local undo stack.
+- Structural commands are discrete and call `stopCapturing()` before and
+  after their transaction.
+- `setNodeText(...)` and `setNodeTaskPrompt(...)` are non-discrete and use
+  narrow nested `Y.Text` writes.
+- React Flow controls and keyboard shortcuts are wired through store actions
+  and do not access Yjs directly.
+- `useWorkflowUndoState(...)` derives `canUndo`/`canRedo` from UndoManager
+  events, rebinds when the runtime is registered or replaced, and keeps
+  snapshot object identity stable for React.
+- Yjs diagnostics classify UndoManager-origin updates as local updates.
+- The minimap and controls have explicit stacking rules so the undo/redo
+  buttons remain clickable.
+
+Validation commands run for this implementation:
+
+```sh
+bun run i18n:compile
+bun --filter @mina/web typecheck
+bun apps/web/src/features/workflow-canvas/sync/yjs/workflow-undo-commands.spec.ts
+bun apps/web/src/features/workflow-canvas/sync/yjs/workflow-yjs-commands.spec.ts
+bun apps/web/src/features/workflow-canvas/sync/yjs/yjs-document.spec.ts
+find apps/web/src/features/workflow-canvas -name '*.spec.ts' -print | sort | xargs -n 1 bun
+bunx playwright test tests/workflow-canvas.spec.ts --project=chromium -g "workflow canvas undo and redo controls"
+bunx playwright test tests/workflow-canvas.spec.ts --project=chromium -g "workflow canvas opens the config card|workflow canvas drag/sync/reload"
+```
 
 ## Non-goals
 

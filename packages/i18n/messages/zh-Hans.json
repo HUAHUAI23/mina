@@ -165,6 +165,8 @@
   "workflow_canvas_minimap_suspended": "小地图暂停中",
   "workflow_canvas_nodes": "节点",
   "workflow_canvas_cut_connection": "断开连接",
+  "workflow_canvas_undo": "撤销",
+  "workflow_canvas_redo": "重做",
   "workflow_canvas_run": "运行",
   "workflow_canvas_running": "运行中",
   "workflow_canvas_synced": "已同步",

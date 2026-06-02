@@ -56,7 +56,7 @@ await submitComposerDraft(
     openNodePanel: () => uploadBlockedCalls.push('openNodePanel'),
     resetComposerDraft: () => uploadBlockedCalls.push('resetComposerDraft'),
     setDraftError: (error) => {
-      if (error !== 'Uploading media') {
+      if (error !== baseMessages.workflow_canvas_error_uploading_media()) {
         throw new Error('Uploading draft submit should expose an upload error.')
       }
       uploadBlockedCalls.push('setDraftError')

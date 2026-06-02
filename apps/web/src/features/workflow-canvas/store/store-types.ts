@@ -42,9 +42,11 @@ export interface CanvasGraphActions {
   }): string
   addNode(type: WorkflowNodeType, task?: TaskDraftConfig | undefined): string
   commitNodeFrames(input: readonly CanvasNodeFramePatch[]): void
+  redo(): void
   removeGraphEdges(edgeIds: readonly string[]): void
   removeGraphNodes(nodeIds: readonly string[]): void
   setNodeFrame(input: CanvasNodeFramePatch): void
+  undo(): void
 }
 
 export interface CanvasDraftState {
@@ -94,6 +96,7 @@ export interface CanvasRemoteActions {}
 
 export interface CanvasTaskConfigActions {
   setNodeTaskConfig(nodeId: string, task: TaskDraftConfig): void
+  setNodeTaskPrompt(nodeId: string, prompt: string): void
   setNodeText(nodeId: string, text: string): void
 }
 

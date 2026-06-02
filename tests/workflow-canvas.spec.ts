@@ -562,6 +562,57 @@ test('workflow canvas opens the config card when a node is clicked', async ({ pa
   await expect(page.locator('.mina-wc-config-card')).toBeVisible()
 })
 
+test('workflow canvas undo and redo controls restore graph edits without intercepting text editing', async ({ page, request }) => {
+  const auth = await register(request)
+  const workflow = await createWorkflow(request, auth.session.token, 20)
+  await installAuthSession(page, auth)
+
+  await page.goto(`/canvas/${workflow.item.id}`)
+  await page.locator('.react-flow').waitFor()
+  await expect(page.locator('.react-flow__node').first()).toBeVisible()
+  await waitForYjsParity(page)
+
+  const undoButton = page.getByRole('button', { name: 'Undo' })
+  const redoButton = page.getByRole('button', { name: 'Redo' })
+  await expect(undoButton).toBeDisabled()
+  await expect(redoButton).toBeDisabled()
+
+  const target = await firstVisibleDraggableNode(page)
+  const before = await readNodeScreenFrame(page, target.id)
+  await dragNodeBy(page, target.id, { x: 80, y: 36 })
+  await waitForYjsParity(page)
+  await expect(undoButton).toBeEnabled()
+
+  await undoButton.click()
+  await waitForYjsParity(page)
+  await expect.poll(async () => {
+    const frame = await readNodeScreenFrame(page, target.id)
+    return Math.abs(frame.x - before.x) < 2 && Math.abs(frame.y - before.y) < 2
+  }).toBe(true)
+  await expect(redoButton).toBeEnabled()
+
+  await redoButton.click()
+  await waitForYjsParity(page)
+  const afterRedo = await readNodeScreenFrame(page, target.id)
+  expect(Math.abs(afterRedo.x - before.x)).toBeGreaterThan(20)
+
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Z' : 'Control+Z')
+  await waitForYjsParity(page)
+  await expect.poll(async () => {
+    const frame = await readNodeScreenFrame(page, target.id)
+    return Math.abs(frame.x - before.x) < 2 && Math.abs(frame.y - before.y) < 2
+  }).toBe(true)
+
+  const textTarget = await firstVisibleDraggableNodeExcept(page, target.id)
+  await page.mouse.click(textTarget.x, textTarget.y)
+  const promptField = page.locator('.mina-wc-config-card textarea').first()
+  await expect(promptField).toBeVisible()
+  await promptField.fill('Native text undo sentinel')
+  await promptField.press(process.platform === 'darwin' ? 'Meta+Z' : 'Control+Z')
+  await expect(promptField).not.toHaveValue('Native text undo sentinel')
+  await expect(redoButton).toBeEnabled()
+})
+
 test('workflow canvas dock shows empty prompt and expands into media composer', async ({ page, request }) => {
   const auth = await register(request)
   const workflow = await createWorkflow(request, auth.session.token, 20)

@@ -1,4 +1,5 @@
 import { workflowYjsCommands, type WorkflowYjsCommandContext } from '../../sync/yjs/workflow-yjs-commands'
+import { workflowUndoCommands } from '../../sync/yjs/workflow-undo-commands'
 import type {
   CanvasGraphActions,
   CanvasGraphState,
@@ -26,8 +27,10 @@ export const createGraphSlice: CanvasSliceCreator<
     addMediaGenerationNode: (input) => workflowYjsCommands.addMediaGenerationNode(context(), input),
     addNode: (type, task) => workflowYjsCommands.addNode(context(), type, task),
     commitNodeFrames: (frames) => workflowYjsCommands.commitNodeFrames(context(), frames),
+    redo: () => workflowUndoCommands.redo(get().workflowId),
     removeGraphEdges: (edgeIds) => workflowYjsCommands.removeGraphEdges(context(), edgeIds),
     removeGraphNodes: (nodeIds) => workflowYjsCommands.removeGraphNodes(context(), nodeIds),
     setNodeFrame: (input) => workflowYjsCommands.setNodeFrame(context(), input),
+    undo: () => workflowUndoCommands.undo(get().workflowId),
   }
 }

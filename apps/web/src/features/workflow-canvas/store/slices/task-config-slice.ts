@@ -15,6 +15,8 @@ export const createTaskConfigSlice: CanvasSliceCreator<
   return {
     setNodeTaskConfig: (nodeId, task) =>
       workflowYjsCommands.setNodeTaskConfig(context(), nodeId, task),
+    setNodeTaskPrompt: (nodeId, prompt) =>
+      workflowYjsCommands.setNodeTaskPrompt(context(), nodeId, prompt),
     setNodeText: (nodeId, text) =>
       workflowYjsCommands.setNodeText(context(), nodeId, text),
   }

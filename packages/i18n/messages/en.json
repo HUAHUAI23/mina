@@ -165,6 +165,8 @@
   "workflow_canvas_minimap_suspended": "Minimap paused",
   "workflow_canvas_nodes": "Nodes",
   "workflow_canvas_cut_connection": "Cut connection",
+  "workflow_canvas_undo": "Undo",
+  "workflow_canvas_redo": "Redo",
   "workflow_canvas_run": "Run",
   "workflow_canvas_running": "Running",
   "workflow_canvas_synced": "Synced",

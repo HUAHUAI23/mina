@@ -3,6 +3,7 @@ import {
   Background,
   BackgroundVariant,
   ConnectionMode,
+  ControlButton,
   Controls,
   MiniMap,
   ReactFlow,
@@ -10,6 +11,7 @@ import {
 } from '@xyflow/react'
 import type { NodeMouseHandler } from '@xyflow/react'
 import { formatNumber } from '@mina/i18n'
+import { Redo2, Undo2 } from 'lucide-react'
 
 import { useI18n, useMessages } from '../../../app/i18n-provider'
 import { usePointerBackground } from '../../../app/use-pointer-background'
@@ -26,7 +28,9 @@ import { useCanvasUiStore } from '../store/canvas-ui-store'
 import { selectWorkflowCanvasNodes } from '../store/canvas-selection-actions'
 import { isIgnoredCanvasTarget, isReactFlowPaneTarget } from '../utils/canvas-dom-scope'
 import { useWorkflowFlowHandlers } from '../react-flow/use-workflow-flow-handlers'
+import { useWorkflowUndoShortcuts } from '../react-flow/use-workflow-undo-shortcuts'
 import { publishLocalSelection } from '../sync/workflow-presence'
+import { useWorkflowUndoState } from '../sync/yjs/use-workflow-undo-state'
 import { recordCanvasProfilerCommit } from '../diagnostics/canvas-profiler-marks'
 import { useFlowRenderStore } from '../render/flow-render-store'
 import { getFlowPerformancePolicy } from '../render/flow-performance-policy'
@@ -96,6 +100,11 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
   useHydrateFlowRender()
   const flowNodes = useFlowRenderStore((state) => state.flowNodes)
   const flowEdges = useFlowRenderStore((state) => state.flowEdges)
+  const workflowId = useCanvasStore((state) => state.workflowId)
+  const redo = useCanvasStore((state) => state.redo)
+  const undo = useCanvasStore((state) => state.undo)
+  const undoState = useWorkflowUndoState(workflowId)
+  useWorkflowUndoShortcuts()
   const nodeCount = useCanvasNodeCount()
   const edgeCount = useCanvasEdgeCount()
   const mediaNodeCount = useCanvasMediaNodeCount()
@@ -240,7 +249,24 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
               size={WORKFLOW_BACKGROUND_GEOMETRY.dotSize}
               variant={BackgroundVariant.Dots}
             />
-            <Controls className="mina-wc-controls" position="bottom-right" showInteractive={false} />
+            <Controls className="mina-wc-controls" position="bottom-right" showInteractive={false}>
+              <ControlButton
+                aria-label={m.workflow_canvas_undo()}
+                disabled={!undoState.canUndo}
+                onClick={undo}
+                title={m.workflow_canvas_undo()}
+              >
+                <Undo2 aria-hidden="true" size={14} />
+              </ControlButton>
+              <ControlButton
+                aria-label={m.workflow_canvas_redo()}
+                disabled={!undoState.canRedo}
+                onClick={redo}
+                title={m.workflow_canvas_redo()}
+              >
+                <Redo2 aria-hidden="true" size={14} />
+              </ControlButton>
+            </Controls>
             <div className="mina-wc-minimap-panel">
               <div className="mina-wc-minimap-frame">
                 {shouldRenderMiniMapFallback ? (

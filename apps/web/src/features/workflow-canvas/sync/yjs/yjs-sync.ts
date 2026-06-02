@@ -20,6 +20,7 @@ import { getCanvasSnapshot, useCanvasStore } from '../../store/canvas-store'
 import { useWorkflowPresenceStore } from '../workflow-presence'
 import {
   getWorkflowYjsRuntimeSnapshotSignature,
+  getWorkflowYjsRuntimeForWorkflow,
   registerWorkflowYjsRuntime,
   unregisterWorkflowYjsRuntime,
   updateWorkflowYjsRuntimeConnection,
@@ -122,7 +123,8 @@ export const useWorkflowYjsSync = (workflowId: string, enabled = true): void => 
     }
 
     const onUpdate = (_update: Uint8Array, origin: unknown) => {
-      const isLocal = origin === 'mina-local' || origin === 'mina-bootstrap'
+      const runtime = getWorkflowYjsRuntimeForWorkflow(workflowId)
+      const isLocal = origin === 'mina-local' || origin === 'mina-bootstrap' || origin === runtime?.undo
       if (isLocal) {
         incrementCanvasPerfCounter('yjsUpdatesSent')
       } else {
