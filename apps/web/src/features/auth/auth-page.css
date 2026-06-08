@@ -1,43 +1,183 @@
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&display=swap');
+
+.font-serif {
+  font-family: 'Lora', Georgia, serif;
+}
+
 .mina-auth-page {
-  background: var(--auth-background);
+  background: #f7f6fa; /* Soft lavender-tinted off-white paper */
+  color: #1a1625;      /* Deep charcoal-violet ink */
+  --brand-accent: #6911d4; /* The exact brand accent from the dashboard */
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
 }
 
-.mina-auth-page::before {
-  background-image: radial-gradient(circle, oklch(0.78 0.006 247 / 42%) 1px, transparent 1.1px);
-  background-size: 24px 24px;
-  content: "";
-  inset: 0;
-  pointer-events: none;
-  position: absolute;
+/* Maintain style regardless of global dark mode class for artistic consistency */
+.dark .mina-auth-page {
+  background: #f7f6fa;
+  color: #1a1625;
+  --brand-accent: #6911d4;
 }
 
-.mina-auth-studio-board {
-  transform: rotate(-2deg);
+.mina-auth-left {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  position: relative;
+  height: 100%;
 }
 
-.mina-auth-link {
-  background: oklch(0.7 0.01 247);
-  height: 2px;
-  position: absolute;
-  transform-origin: left center;
+.mina-auth-right {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 4rem 4rem 4rem 1rem;
+  position: relative;
+  height: 100%;
+  user-select: none;
 }
 
-.mina-auth-link-a {
-  left: 5.3rem;
-  top: 3.8rem;
-  transform: rotate(-24deg);
-  width: 3.7rem;
+.mina-auth-card {
+  background: #ffffff;
+  border: 2px solid #1a1625;
+  box-shadow: 6px 6px 0px #1a1625;
+  position: relative;
+  width: 100%;
+  max-width: 27.5rem;
+  z-index: 10;
 }
 
-.mina-auth-link-b {
-  left: 6.3rem;
-  top: 5.4rem;
-  transform: rotate(55deg);
-  width: 4rem;
+/* Re-enable light-themed styling rules on inputs inside the card to keep the design intact */
+.dark .mina-auth-card {
+  background: #ffffff;
+  border: 2px solid #1a1625;
+  box-shadow: 6px 6px 0px #1a1625;
+  color: #1a1625;
+}
+
+/* Warm input wrappers */
+.mina-auth-card .border-neutral-300 {
+  border-color: #e2e1e6 !important; /* soft cool gray-lavender border */
+  border-width: 1.5px !important;
+}
+
+.mina-auth-card .focus-within\:border-neutral-800:focus-within {
+  border-color: #6911d4 !important;
+  box-shadow: 0 0 0 1px #6911d4;
+}
+
+.dark .mina-auth-card input {
+  color: #1a1625;
+  background-color: #ffffff;
+}
+
+.dark .mina-auth-card input::placeholder {
+  color: #a09cb0;
+}
+
+.dark .mina-auth-card button {
+  color: #1a1625;
+}
+
+/* Style for submit button in login page */
+.mina-auth-card button[type="submit"] {
+  background-color: #6911d4 !important;
+  color: #ffffff !important;
+  border: 1.5px solid #6911d4 !important;
+  transition: all 0.2s ease;
+}
+
+.mina-auth-card button[type="submit"]:hover {
+  background-color: #550cb3 !important;
+  border-color: #550cb3 !important;
+}
+
+.dark .mina-auth-card button[type="submit"] {
+  background-color: #6911d4 !important;
+  color: #ffffff !important;
+}
+
+.dark .mina-auth-card button[type="submit"]:hover {
+  background-color: #550cb3 !important;
+}
+
+/* Style overrides for neutral colors to warm charcoal */
+.mina-auth-page .text-neutral-800 {
+  color: #1a1625 !important;
+}
+
+.mina-auth-page .border-neutral-800 {
+  border-color: #1a1625 !important;
+}
+
+.mina-auth-page .text-neutral-800\/20 {
+  color: rgba(26, 22, 37, 0.20) !important;
+}
+
+.mina-auth-page .text-neutral-800\/25 {
+  color: rgba(26, 22, 37, 0.25) !important;
+}
+
+.mina-auth-page .text-neutral-400 {
+  color: #a09cb0 !important;
+}
+
+.mina-auth-page .text-neutral-500 {
+  color: #656075 !important;
+}
+
+.mina-auth-page .text-neutral-500\/90 {
+  color: rgba(101, 96, 117, 0.9) !important;
+}
+
+@keyframes sketch-float {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(1deg);
+  }
+}
+
+.sketch-animate-float {
+  animation: sketch-float 6s ease-in-out infinite;
 }
 
 @media (max-width: 64rem) {
   .mina-auth-page {
-    background: var(--auth-background-compact);
+    grid-template-columns: 1fr;
   }
+  .mina-auth-right {
+    display: none;
+  }
+  .mina-auth-left {
+    padding: 1.5rem 1rem;
+  }
+}
+
+/* Style for locale switcher on login page */
+.mina-auth-page label {
+  background: transparent !important;
+  border: 1.5px solid #1a1625 !important;
+  color: #1a1625 !important;
+  font-weight: 600 !important;
+  height: 2.25rem !important;
+  border-radius: 0.75rem !important;
+  font-family: inherit !important;
+  box-shadow: none !important;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.mina-auth-page label:hover {
+  background: #eae8f0 !important;
+}
+
+.mina-auth-page label select {
+  font-weight: 700 !important;
+  color: #1a1625 !important;
 }
