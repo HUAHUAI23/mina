@@ -8,12 +8,14 @@ import type {
 } from '@mina/contracts/modules/accounts'
 
 import { HttpError } from '../../lib/http/http-error'
+import { appLogger } from '../../lib/logger/logger'
 import type { AuthActor } from './auth-context'
 import type { AccountsRepository } from './accounts.repository'
 import { hashPassword, verifyPassword } from './password'
 import { createSessionToken, hashSessionToken } from './session-token'
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7
+type AccountHookLogger = Pick<typeof appLogger, 'error'>
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase()
 
@@ -33,8 +35,16 @@ export const toAuthUser = (user: User, avatarUrl?: string): AuthUser => ({
   username: user.username,
 })
 
+export interface AccountsServiceHooks {
+  onAccountCreated?(accountId: string): Promise<void>
+}
+
 export class AccountsService {
-  constructor(private readonly accountsRepository: AccountsRepository) {}
+  constructor(
+    private readonly accountsRepository: AccountsRepository,
+    private readonly hooks: AccountsServiceHooks = {},
+    private readonly logger: AccountHookLogger = appLogger,
+  ) {}
 
   async login(input: LoginInput): Promise<AuthResponse> {
     const identifier = input.identifier.trim()
@@ -110,7 +120,7 @@ export class AccountsService {
     }
 
     const userId = createId('user')
-    const { user } = await this.accountsRepository.registerUserWithAccount({
+    const { account, user } = await this.accountsRepository.registerUserWithAccount({
       account: {
         id: createId('account'),
         name: input.displayName?.trim() || username,
@@ -129,6 +139,11 @@ export class AccountsService {
         username,
       },
     })
+    try {
+      await this.hooks.onAccountCreated?.(account.id)
+    } catch (error) {
+      this.logger.error({ accountId: account.id, error }, 'Account creation hook failed.')
+    }
 
     return {
       session: await this.createSession(user.id),

@@ -1,4 +1,23 @@
 import type {
+  AssetFolderListResponse,
+  AssetFolderResponse,
+  AssetLibraryItemResponse,
+  AssetLibraryListResponse,
+  AssetTagListResponse,
+  AssetTagResponse,
+  CreateAssetFolderInput,
+  CreateAssetFolderWithItemsInput,
+  CreateAssetFromMediaObjectInput,
+  CreateAssetTagInput,
+  DeleteAssetResponse,
+  ListAssetFoldersQuery,
+  ListAssetLibraryItemsQuery,
+  ListAssetTagsQuery,
+  UpdateAssetFolderInput,
+  UpdateAssetLibraryItemInput,
+  UpdateAssetTagInput,
+} from '@mina/contracts/modules/assets'
+import type {
   AccountBillingOverview,
   AccountProfileResponse,
   AccountStorageOverview,
@@ -66,6 +85,16 @@ type AccountAvatarForm = {
   file: File
 }
 
+type CreateAssetUploadForm = {
+  description?: string
+  displayName?: string
+  file: File
+  folderId?: string
+  homeProjectId?: string
+  kind?: 'image' | 'video' | 'audio'
+  tagIds?: string | string[]
+}
+
 type ClientSchema = {
   '/api/account/me': {
     $get: JsonEndpoint<{}, AccountProfileResponse>
@@ -103,6 +132,46 @@ type ClientSchema = {
         timestamp: string
       }
     >
+  }
+  '/api/assets': {
+    $get: JsonEndpoint<{ query?: ListAssetLibraryItemsQuery }, AssetLibraryListResponse>
+  }
+  '/api/assets/upload': {
+    $post: JsonEndpoint<{ form: CreateAssetUploadForm }, AssetLibraryItemResponse, 201>
+  }
+  '/api/assets/from-media-object': {
+    $post: JsonEndpoint<{ json: CreateAssetFromMediaObjectInput }, AssetLibraryItemResponse, 201>
+  }
+  '/api/assets/folders': {
+    $get: JsonEndpoint<{ query?: ListAssetFoldersQuery }, AssetFolderListResponse>
+    $post: JsonEndpoint<{ json: CreateAssetFolderInput }, AssetFolderResponse, 201>
+  }
+  '/api/assets/folders/from-items': {
+    $post: JsonEndpoint<{ json: CreateAssetFolderWithItemsInput }, AssetFolderResponse, 201>
+  }
+  '/api/assets/folders/:folderId': {
+    $patch: JsonEndpoint<{ json: UpdateAssetFolderInput; param: { folderId: string } }, AssetFolderResponse>
+    $delete: JsonEndpoint<{ param: { folderId: string } }, DeleteAssetResponse>
+  }
+  '/api/assets/tags': {
+    $get: JsonEndpoint<{ query?: ListAssetTagsQuery }, AssetTagListResponse>
+    $post: JsonEndpoint<{ json: CreateAssetTagInput }, AssetTagResponse, 201>
+  }
+  '/api/assets/tags/:tagId': {
+    $patch: JsonEndpoint<{ json: UpdateAssetTagInput; param: { tagId: string } }, AssetTagResponse>
+    $delete: JsonEndpoint<{ param: { tagId: string } }, DeleteAssetResponse>
+  }
+  '/api/assets/:id': {
+    $get: JsonEndpoint<{ param: { id: string } }, AssetLibraryItemResponse>
+    $patch: JsonEndpoint<{ json: UpdateAssetLibraryItemInput; param: { id: string } }, AssetLibraryItemResponse>
+    $delete: JsonEndpoint<{ param: { id: string } }, DeleteAssetResponse>
+  }
+  '/api/assets/:id/use': {
+    $post: JsonEndpoint<{ param: { id: string } }, AssetLibraryItemResponse>
+  }
+  '/api/assets/:id/tags/:tagId': {
+    $post: JsonEndpoint<{ param: { id: string; tagId: string } }, AssetLibraryItemResponse>
+    $delete: JsonEndpoint<{ param: { id: string; tagId: string } }, AssetLibraryItemResponse>
   }
   '/api/tasks': {
     $get: JsonEndpoint<{}, TaskListResponse>

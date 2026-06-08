@@ -26,7 +26,7 @@ interface NavigationItem {
 
 const navigationItems: NavigationItem[] = [
   { label: (m) => m.app_nav_projects(), to: '/projects' },
-  { disabled: true, label: (m) => m.app_nav_asset_hub(), to: '/projects' },
+  { label: (m) => m.app_nav_asset_hub(), to: '/assets' },
 ]
 
 const accountNavigationItems: NavigationItem[] = [

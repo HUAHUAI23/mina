@@ -26,7 +26,7 @@
     "db:reset:push": "bun run db:reset && bun run db:push",
     "db:seed": "bun src/db/seed.ts",
     "db:studio": "drizzle-kit studio --config drizzle.config.ts",
-    "typecheck": "bun --filter @mina/i18n i18n:compile && tsc --noEmit -p tsconfig.json",
+    "typecheck": "bun --filter @mina/contracts build && bun --filter @mina/i18n i18n:compile && tsc --noEmit -p tsconfig.json",
     "test": "bun --filter @mina/i18n i18n:compile && NODE_ENV=test MINA_STORAGE_DRIVER=s3 bun test src"
   },
   "dependencies": {

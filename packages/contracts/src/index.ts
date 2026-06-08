@@ -1,4 +1,5 @@
 export * from './modules/accounts/account.schemas'
+export * from './modules/assets/asset-library.schemas'
 export * from './modules/canvas/canvas.schemas'
 export * from './modules/media/media.schemas'
 export * from './modules/media/media-object.schemas'

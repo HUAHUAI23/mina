@@ -234,6 +234,14 @@ export class MediaObjectService {
     return this.repository.updateStatus(input.accountId, input.mediaObjectId, 'ready', nowIso())
   }
 
+  async promoteToLibrary(accountId: string, mediaObjectId: string): Promise<MediaObject> {
+    const mediaObject = await this.getReadyMediaObject(accountId, mediaObjectId)
+    if (mediaObject.retention === 'library') {
+      return mediaObject
+    }
+    return this.repository.updateRetention(accountId, mediaObjectId, 'library', nowIso())
+  }
+
   async findReadyByMediaUrl(accountId: string, url: string): Promise<MediaObject | undefined> {
     const match = /^mina:\/\/media\/([^/?#]+)$/.exec(url)
     if (!match?.[1]) {

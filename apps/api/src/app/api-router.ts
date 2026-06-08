@@ -4,6 +4,8 @@ import { createAccountManagementRoutes } from '../modules/accounts/account-manag
 import type { AccountManagementService } from '../modules/accounts/account-management.service'
 import { createAccountsRoutes } from '../modules/accounts/accounts.routes'
 import type { AccountsService } from '../modules/accounts/accounts.service'
+import { createAssetLibraryRoutes } from '../modules/assets/asset-library.routes'
+import type { AssetLibraryService } from '../modules/assets/asset-library.service'
 import { createHealthRoutes } from '../modules/health/health.routes'
 import { createMediaRoutes } from '../modules/media/media.routes'
 import type { MediaObjectService } from '../modules/media/media-object.service'
@@ -23,6 +25,7 @@ import type { WorkflowsService } from '../modules/workflows/workflows.service'
 export interface ApiRouterDependencies {
   accountManagementService: AccountManagementService
   accountsService: AccountsService
+  assetLibraryService: AssetLibraryService
   mediaObjectService: MediaObjectService
   modelCatalogService: TaskModelCatalogService
   projectsService: ProjectsService
@@ -35,6 +38,7 @@ export interface ApiRouterDependencies {
 export const createApiRouter = ({
   accountManagementService,
   accountsService,
+  assetLibraryService,
   mediaObjectService,
   modelCatalogService,
   projectsService,
@@ -47,6 +51,7 @@ export const createApiRouter = ({
     .basePath('/api')
     .route('/account', createAccountManagementRoutes(accountManagementService, accountsService))
     .route('/auth', createAccountsRoutes(accountsService))
+    .route('/assets', createAssetLibraryRoutes(assetLibraryService, accountsService))
     .route('/health', createHealthRoutes())
     .route('/', createMediaRoutes(mediaObjectService, accountsService))
     .route('/projects', createProjectsRoutes(projectsService, accountsService))

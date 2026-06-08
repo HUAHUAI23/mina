@@ -19,6 +19,7 @@ import { InMemoryWorkflowEventBus } from '../modules/workflows/workflow-event-bu
 import { BusWorkflowRunEventPublisher } from '../modules/workflows/workflow-run-event-publisher'
 import { WorkflowsService } from '../modules/workflows/workflows.service'
 import {
+  FakeAssetLibraryRepository,
   FakeAccountsRepository,
   FakeMediaObjectRepository,
   FakeObjectStorage,
@@ -34,6 +35,7 @@ import {
 } from './fakes'
 import { WorkflowYjsRoomService } from '../modules/workflows/collaboration/workflow-yjs-room.service'
 import { ProjectsService } from '../modules/projects/projects.service'
+import { AssetLibraryService } from '../modules/assets/asset-library.service'
 
 export const createTestApp = () => {
   const accountsRepository = new FakeAccountsRepository()
@@ -91,17 +93,25 @@ export const createTestApp = () => {
     new BusWorkflowRunEventPublisher(workflowEventBus),
     workflowEventBus,
   )
-  const projectsService = new ProjectsService(
-    new FakeProjectRepository(workflowDefinitions),
-    workflowDefinitions,
+  const projectRepository = new FakeProjectRepository(workflowDefinitions)
+  const assetLibraryService = new AssetLibraryService(
+    new FakeAssetLibraryRepository(mediaObjectService),
+    mediaObjectService,
+    projectRepository,
   )
+  const projectServiceWithSharedRepo = new ProjectsService(projectRepository, workflowDefinitions)
+
+  const accountsService = new AccountsService(accountsRepository, {
+    onAccountCreated: (accountId) => assetLibraryService.seedAccount(accountId),
+  })
 
   return createApp({
     accountManagementService: new AccountManagementService(accountsRepository, storage, mediaObjectService),
-    accountsService: new AccountsService(accountsRepository),
+    accountsService,
+    assetLibraryService,
     mediaObjectService,
     modelCatalogService,
-    projectsService,
+    projectsService: projectServiceWithSharedRepo,
     storage,
     tasksService,
     workflowEventBus,

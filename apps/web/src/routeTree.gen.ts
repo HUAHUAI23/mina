@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as CanvasRouteImport } from './routes/canvas'
+import { Route as AssetsRouteImport } from './routes/assets'
 import { Route as AccountRouteImport } from './routes/account'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectsIndexRouteImport } from './routes/projects.index'
@@ -38,6 +39,11 @@ const LoginRoute = LoginRouteImport.update({
 const CanvasRoute = CanvasRouteImport.update({
   id: '/canvas',
   path: '/canvas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssetsRoute = AssetsRouteImport.update({
+  id: '/assets',
+  path: '/assets',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AccountRoute = AccountRouteImport.update({
@@ -104,6 +110,7 @@ const AccountBillingRoute = AccountBillingRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRouteWithChildren
+  '/assets': typeof AssetsRoute
   '/canvas': typeof CanvasRouteWithChildren
   '/login': typeof LoginRoute
   '/projects': typeof ProjectsRouteWithChildren
@@ -120,6 +127,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/assets': typeof AssetsRoute
   '/login': typeof LoginRoute
   '/account/billing': typeof AccountBillingRoute
   '/account/password': typeof AccountPasswordRoute
@@ -136,6 +144,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/account': typeof AccountRouteWithChildren
+  '/assets': typeof AssetsRoute
   '/canvas': typeof CanvasRouteWithChildren
   '/login': typeof LoginRoute
   '/projects': typeof ProjectsRouteWithChildren
@@ -155,6 +164,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/account'
+    | '/assets'
     | '/canvas'
     | '/login'
     | '/projects'
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/assets'
     | '/login'
     | '/account/billing'
     | '/account/password'
@@ -186,6 +197,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/account'
+    | '/assets'
     | '/canvas'
     | '/login'
     | '/projects'
@@ -204,6 +216,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountRoute: typeof AccountRouteWithChildren
+  AssetsRoute: typeof AssetsRoute
   CanvasRoute: typeof CanvasRouteWithChildren
   LoginRoute: typeof LoginRoute
   ProjectsRoute: typeof ProjectsRouteWithChildren
@@ -230,6 +243,13 @@ declare module '@tanstack/react-router' {
       path: '/canvas'
       fullPath: '/canvas'
       preLoaderRoute: typeof CanvasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assets': {
+      id: '/assets'
+      path: '/assets'
+      fullPath: '/assets'
+      preLoaderRoute: typeof AssetsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/account': {
@@ -370,6 +390,7 @@ const ProjectsRouteWithChildren = ProjectsRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRouteWithChildren,
+  AssetsRoute: AssetsRoute,
   CanvasRoute: CanvasRouteWithChildren,
   LoginRoute: LoginRoute,
   ProjectsRoute: ProjectsRouteWithChildren,

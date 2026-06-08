@@ -4,7 +4,15 @@ import { ResourceKindSchema } from '../tasks/task.schemas'
 
 export const MediaObjectStatusSchema = z.enum(['uploading', 'ready', 'failed', 'deleted'])
 export const MediaObjectOriginSchema = z.enum(['user_upload', 'task_output', 'external_import', 'system_generated'])
-export const MediaObjectPurposeSchema = z.enum(['workflow_slot', 'task_input', 'temporary', 'task_output', 'preview', 'public_library'])
+export const MediaObjectPurposeSchema = z.enum([
+  'workflow_slot',
+  'task_input',
+  'temporary',
+  'task_output',
+  'preview',
+  'public_library',
+  'asset_library',
+])
 export const MediaObjectRetentionSchema = z.enum(['temporary', 'task_scoped', 'project_scoped', 'library'])
 
 export const MediaObjectSchema = z.object({

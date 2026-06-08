@@ -197,6 +197,8 @@ During active development, sync the current Drizzle schema directly to the confi
 bun --filter @mina/api db:push
 ```
 
+Schema changes for the asset library tables live in `apps/api/src/db/schema.ts`. Use `db:push` during active local development after pulling these changes, or generate/apply migrations once the schema is ready for a migration-backed environment.
+
 Reset Mina-owned development tables and then sync the current schema:
 
 ```bash
@@ -248,9 +250,10 @@ The test creates and drops an isolated schema inside the configured database.
 2. In production, set `VITE_API_BASE_URL` to the deployed API origin if the frontend and backend are split.
 3. `POST /api/auth/register` and `POST /api/auth/login` use the PostgreSQL-backed accounts repository. OAuth tables are present in the Drizzle schema, but OAuth runtime flows are not implemented yet.
 4. The task/workflow core uses Drizzle repositories for tasks, media objects, pricing rules, workflow definitions, workflow runs, node states, node task links, and lifecycle events.
-5. Set `MINA_SCHEDULER_ENABLED=true` to run the Croner-backed task starter, async task poller, and workflow reconciler in the API process. A future standalone worker can run the same service loop.
-6. `POST /api/tasks` creates a standalone `queued` task and returns immediately. Use `GET /api/tasks/:id` for status and `GET /api/tasks/:id/resources` for persisted input/output resources.
-7. Workflow runs create and link node tasks, then rely on the scheduler/worker path to start providers and reconcile nodes from task status. Workflow creation does not block on provider execution.
-8. Async providers return `pending`, `succeeded`, `failed`, or `cancelled` when polled. Pending tasks remain `running` and are retried after `MINA_TASK_POLL_DEFAULT_INTERVAL_SECONDS` or the provider-specific delay.
-9. Task lifecycle events are recorded in `task_events`; workflow run and node lifecycle events are recorded in `workflow_run_events`.
-10. Object storage keys are account-scoped under `users/{accountId}/...`; use `MINA_STORAGE_DRIVER=s3` plus the S3 variables for S3-compatible providers.
+5. The asset library stores catalog, folder, tag, and source-snapshot rows over existing `media_objects`; deleting an asset library item does not delete the underlying media object.
+6. Set `MINA_SCHEDULER_ENABLED=true` to run the Croner-backed task starter, async task poller, and workflow reconciler in the API process. A future standalone worker can run the same service loop.
+7. `POST /api/tasks` creates a standalone `queued` task and returns immediately. Use `GET /api/tasks/:id` for status and `GET /api/tasks/:id/resources` for persisted input/output resources.
+8. Workflow runs create and link node tasks, then rely on the scheduler/worker path to start providers and reconcile nodes from task status. Workflow creation does not block on provider execution.
+9. Async providers return `pending`, `succeeded`, `failed`, or `cancelled` when polled. Pending tasks remain `running` and are retried after `MINA_TASK_POLL_DEFAULT_INTERVAL_SECONDS` or the provider-specific delay.
+10. Task lifecycle events are recorded in `task_events`; workflow run and node lifecycle events are recorded in `workflow_run_events`.
+11. Object storage keys are account-scoped under `users/{accountId}/...`; use `MINA_STORAGE_DRIVER=s3` plus the S3 variables for S3-compatible providers.

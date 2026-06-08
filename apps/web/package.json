@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "bun --filter @mina/i18n i18n:compile && bun run routes:generate && vite",
-    "build": "bun --filter @mina/i18n i18n:compile && bun run routes:generate && tsc -b tsconfig.json && vite build",
+    "build": "bun --filter @mina/contracts build && bun --filter @mina/i18n i18n:compile && bun run routes:generate && tsc -b tsconfig.json && vite build",
     "routes:generate": "tsr generate",
-    "typecheck": "bun --filter @mina/i18n i18n:compile && bun run routes:generate && tsc -b tsconfig.json",
+    "typecheck": "bun --filter @mina/contracts build && bun --filter @mina/i18n i18n:compile && bun run routes:generate && tsc -b tsconfig.json",
     "preview": "vite preview"
   },
   "dependencies": {

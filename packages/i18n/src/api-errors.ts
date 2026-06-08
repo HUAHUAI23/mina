@@ -58,6 +58,10 @@ export const apiErrorMessageKeys = [
   'api_error_project_workflow_not_found',
   'api_error_project_distinct_workflows_required',
   'api_error_workflow_already_in_project',
+  'api_error_asset_library_item_not_found',
+  'api_error_asset_folder_not_found',
+  'api_error_asset_tag_not_found',
+  'api_error_asset_system_tag_immutable',
 ] as const
 
 export type ApiErrorMessageKey = (typeof apiErrorMessageKeys)[number]
@@ -131,6 +135,10 @@ const apiErrorMessageByKey = {
   api_error_project_workflow_not_found: m.api_error_project_workflow_not_found,
   api_error_project_distinct_workflows_required: m.api_error_project_distinct_workflows_required,
   api_error_workflow_already_in_project: m.api_error_workflow_already_in_project,
+  api_error_asset_library_item_not_found: m.api_error_asset_library_item_not_found,
+  api_error_asset_folder_not_found: m.api_error_asset_folder_not_found,
+  api_error_asset_tag_not_found: m.api_error_asset_tag_not_found,
+  api_error_asset_system_tag_immutable: m.api_error_asset_system_tag_immutable,
 } satisfies Record<ApiErrorMessageKey, ApiMessageFunction>
 
 export const apiErrorMessageKeyByCode = {
@@ -141,6 +149,10 @@ export const apiErrorMessageKeyByCode = {
   ACCOUNT_CURRENT_PASSWORD_INVALID: 'api_error_account_current_password_invalid',
   ACCOUNT_NOT_INITIALIZED: 'api_error_account_not_initialized',
   ADMIN_REQUIRED: 'api_error_admin_required',
+  ASSET_FOLDER_NOT_FOUND: 'api_error_asset_folder_not_found',
+  ASSET_LIBRARY_ITEM_NOT_FOUND: 'api_error_asset_library_item_not_found',
+  ASSET_SYSTEM_TAG_IMMUTABLE: 'api_error_asset_system_tag_immutable',
+  ASSET_TAG_NOT_FOUND: 'api_error_asset_tag_not_found',
   AUTH_INVALID_CREDENTIALS: 'api_error_auth_invalid_credentials',
   EMAIL_ALREADY_REGISTERED: 'api_error_email_already_registered',
   INTERNAL_SERVER_ERROR: 'api_error_internal_server_error',

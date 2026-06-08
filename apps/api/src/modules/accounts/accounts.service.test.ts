@@ -20,6 +20,29 @@ describe('AccountsService', () => {
     expect(actor.accountId).toMatch(/^account_/)
   })
 
+  test('register does not fail when account creation hooks fail', async () => {
+    const repository = new FakeAccountsRepository()
+    const service = new AccountsService(
+      repository,
+      {
+        onAccountCreated: async () => {
+          throw new Error('hook unavailable')
+        },
+      },
+      { error: () => undefined },
+    )
+
+    const response = await service.register({
+      email: 'hook-failure@example.com',
+      password: 'correct horse battery staple',
+      username: 'hook_failure',
+    })
+    const actor = await service.getActorForSessionToken(response.session.token)
+
+    expect(actor.userId).toBe(response.user.id)
+    expect(actor.accountId).toMatch(/^account_/)
+  })
+
   test('login rejects users that do not have an initialized account', async () => {
     const repository = new FakeAccountsRepository()
     await repository.addUser({

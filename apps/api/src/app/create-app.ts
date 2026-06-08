@@ -9,6 +9,7 @@ import { getRequestLocale, resolveHonoRequestLocale } from '@mina/i18n/server'
 import { apiEnv } from '../config/env'
 import { HttpError, createErrorPayload } from '../lib/http/http-error'
 import { appLogger } from '../lib/logger/logger'
+import { redactRequestLogMessage } from '../lib/logger/request-log'
 import { createApiRouter } from './api-router'
 import { createAppDependencies, type AppDependencies } from './dependencies'
 import './hono-context'
@@ -24,7 +25,7 @@ export const createApp = (dependencies: AppDependencies = createAppDependencies(
   app.use('/api/*', cors({ origin: apiEnv.allowedOrigin }))
 
   if (apiEnv.nodeEnv !== 'test') {
-    app.use('*', logger())
+    app.use('*', logger((message) => console.log(redactRequestLogMessage(message))))
   }
 
   app.use('/api/*', async (c, next) => {

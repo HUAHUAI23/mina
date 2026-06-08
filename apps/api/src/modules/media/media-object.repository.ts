@@ -1,4 +1,4 @@
-import type { MediaObject, MediaObjectStatus } from './media-object'
+import type { MediaObject, MediaObjectRetention, MediaObjectStatus } from './media-object'
 
 export interface CreateUploadingMediaObjectInput {
   accountId: string
@@ -22,5 +22,6 @@ export interface MediaObjectRepository {
   getAccountStorageUsage(accountId: string): Promise<number>
   listExpiredUploading(cutoffIso: string): Promise<MediaObject[]>
   softDelete(accountId: string, id: string, deletedAtIso: string): Promise<void>
+  updateRetention(accountId: string, id: string, retention: MediaObjectRetention, updatedAtIso: string): Promise<MediaObject>
   updateStatus(accountId: string, id: string, status: MediaObjectStatus, updatedAtIso: string): Promise<MediaObject>
 }

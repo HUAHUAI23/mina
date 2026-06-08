@@ -2,7 +2,7 @@ import { and, eq, isNull, lte, sum } from 'drizzle-orm'
 
 import type { MinaDbClient } from '../../db/client'
 import { mediaObjects } from '../../db/schema'
-import { MediaObjectSchema, type MediaObject, type MediaObjectStatus } from './media-object'
+import { MediaObjectSchema, type MediaObject, type MediaObjectRetention, type MediaObjectStatus } from './media-object'
 import type { CreateUploadingMediaObjectInput, MediaObjectRepository } from './media-object.repository'
 
 type MediaObjectRow = typeof mediaObjects.$inferSelect
@@ -150,6 +150,23 @@ export class DrizzleMediaObjectRepository implements MediaObjectRepository {
         ...(status === 'deleted' ? { deletedAt: new Date(updatedAtIso) } : {}),
         updatedAt: new Date(updatedAtIso),
       })
+      .where(and(eq(mediaObjects.accountId, accountId), eq(mediaObjects.id, id)))
+      .returning()
+    if (!row) {
+      throw new Error('Media object not found.')
+    }
+    return mediaObjectFromRow(row)
+  }
+
+  async updateRetention(
+    accountId: string,
+    id: string,
+    retention: MediaObjectRetention,
+    updatedAtIso: string,
+  ): Promise<MediaObject> {
+    const [row] = await this.db
+      .update(mediaObjects)
+      .set({ retention, updatedAt: new Date(updatedAtIso) })
       .where(and(eq(mediaObjects.accountId, accountId), eq(mediaObjects.id, id)))
       .returning()
     if (!row) {

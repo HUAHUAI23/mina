@@ -51,6 +51,7 @@ API modules:
 - `apps/api/src/modules/tasks/`
 - `apps/api/src/modules/pricing/`
 - `apps/api/src/modules/workflows/`
+- `apps/api/src/modules/assets/`
 - `apps/api/src/lib/storage/`
 
 Tasks are a standalone execution primitive. `POST /api/tasks` creates a durable queued task and returns before provider execution. The scheduler/worker path starts queued tasks, polls async provider work, and writes terminal task status and resources.
@@ -71,6 +72,8 @@ Workflow internals:
 - `workflow-events.ts`: durable workflow run and node lifecycle event logging.
 
 Task lifecycle logic is split across `tasks.service.ts`, `lifecycle.ts`, `models/*`, `config/*`, `output/*`, `pricing.ts`, `resources.ts`, `retry.ts`, and `providers/*`. Durable task lifecycle logging lives in `apps/api/src/modules/tasks/task-events.ts`.
+
+The asset library module records reusable business relationships over `media_objects`. Asset items can come from local uploads or from existing media objects produced by canvas/task workflows. The library is account-scoped, uses a single-level folder card model rather than a directory tree, supports system/custom tags, and stores source snapshots for project/canvas/task provenance. Canvas and task creation should continue to reference the underlying `mediaObjectId`; the asset item is the library/catalog entry, not a second media identity.
 
 User/account ownership is represented in PostgreSQL by `users` and `accounts`; task and workflow product records reference `accounts.id`. Object storage keys are account-scoped under `users/{accountId}/...`.
 

@@ -5,6 +5,8 @@ import type { ObjectStorage } from '../lib/storage/object-storage'
 import { AccountManagementService } from '../modules/accounts/account-management.service'
 import { DrizzleAccountsRepository } from '../modules/accounts/accounts.drizzle-repository'
 import { AccountsService } from '../modules/accounts/accounts.service'
+import { DrizzleAssetLibraryRepository } from '../modules/assets/asset-library.drizzle-repository'
+import { AssetLibraryService } from '../modules/assets/asset-library.service'
 import { DrizzleMediaObjectRepository } from '../modules/media/media-object.drizzle-repository'
 import { MediaObjectService } from '../modules/media/media-object.service'
 import { FetchRemoteMediaFetcher } from '../modules/media/remote-media-fetcher'
@@ -42,6 +44,7 @@ import { WorkflowYjsRoomService } from '../modules/workflows/collaboration/workf
 export interface AppDependencies {
   accountManagementService: AccountManagementService
   accountsService: AccountsService
+  assetLibraryService: AssetLibraryService
   mediaObjectService: MediaObjectService
   modelCatalogService: TaskModelCatalogService
   projectsService: ProjectsService
@@ -59,6 +62,7 @@ export const createAppDependencies = (): AppDependencies => {
   const repositories = {
     pricingRepository: new DrizzlePricingRepository(db),
     mediaObjectRepository: new DrizzleMediaObjectRepository(db),
+    assetLibraryRepository: new DrizzleAssetLibraryRepository(db),
     projectRepository: new DrizzleProjectRepository(db),
     taskEventLog: new DrizzleTaskEventLog(db),
     taskRepository: new DrizzleTaskRepository(db),
@@ -126,11 +130,19 @@ export const createAppDependencies = (): AppDependencies => {
     repositories.projectRepository,
     repositories.workflowRepositories.definitions,
   )
-  const accountsService = new AccountsService(accountsRepository)
+  const assetLibraryService = new AssetLibraryService(
+    repositories.assetLibraryRepository,
+    mediaObjectService,
+    repositories.projectRepository,
+  )
+  const accountsService = new AccountsService(accountsRepository, {
+    onAccountCreated: (accountId) => assetLibraryService.seedAccount(accountId),
+  })
 
   return {
     accountManagementService: new AccountManagementService(accountsRepository, storage, mediaObjectService),
     accountsService,
+    assetLibraryService,
     mediaObjectService,
     modelCatalogService,
     projectsService,

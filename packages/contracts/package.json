@@ -12,6 +12,10 @@
       "types": "./src/modules/accounts/account.schemas.ts",
       "default": "./src/modules/accounts/account.schemas.ts"
     },
+    "./modules/assets": {
+      "types": "./src/modules/assets/asset-library.schemas.ts",
+      "default": "./src/modules/assets/asset-library.schemas.ts"
+    },
     "./modules/canvas": {
       "types": "./src/modules/canvas/canvas.schemas.ts",
       "default": "./src/modules/canvas/canvas.schemas.ts"

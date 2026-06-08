@@ -198,6 +198,7 @@ Mina now has backend contracts and API services for the generation workflow core
 - `tasks`: durable image/video generation task lifecycle, including standalone task submission, sync image tasks, async video tasks, input/output resource snapshots, output media finalization, idempotent client submission, and task cancellation.
 - `pricing`: model and pricing-key aware estimates for token, image-count, and duration billing.
 - `projects`: account-scoped collections of workflow canvases. Each workflow can belong to at most one project through `project_workflows`; creating a project from two canvases and adding a canvas to a project are validated server-side and exposed through `/api/projects`.
+- `assets`: an account-scoped asset library that records reusable business relationships over `media_objects`. Asset rows reference media objects instead of owning files, can be grouped by one single-level folder, tagged with system/custom tags, searched across display text, descriptions, tags, folders, and source snapshots, and reused by canvas/task creation through the original `mediaObjectId`.
 - `workflows`: normalized React Flow-compatible workflow definitions, ordered node `mediaSlots`, ordinary canvas node execution, flow-group DAG execution, row-level node run states, scheduler leases, and run cancellation.
 
 The workflow module keeps public services small and splits stable internal rules by responsibility:
@@ -231,7 +232,7 @@ append log before snapshot reads or compaction continue.
 
 The application runtime is PostgreSQL-only for business persistence. `createAppDependencies()` wires account, pricing, project, media, task, workflow, and event services to Drizzle repositories backed by the PostgreSQL schema in `apps/api/src/db/schema.ts`. Unit and route tests use fakes under `apps/api/src/test` rather than production in-memory repositories.
 
-User ownership is represented by `users` and `accounts`. Product data that belongs to a tenant stores `account_id`; `tasks`, `task_resources`, `media_objects`, `projects`, `workflows`, and `workflow_runs` reference `accounts.id`. Event and link tables remain subordinate to their parent task or workflow run records.
+User ownership is represented by `users` and `accounts`. Product data that belongs to a tenant stores `account_id`; `tasks`, `task_resources`, `media_objects`, `asset_library_items`, `asset_library_folders`, `asset_tags`, `projects`, `workflows`, and `workflow_runs` reference `accounts.id`. Event and link tables remain subordinate to their parent task or workflow run records.
 
 Background work is handled by a Croner-backed `BackgroundTaskScheduler` when `MINA_SCHEDULER_ENABLED=true`. Each tick starts due `queued` tasks, polls due async provider tasks, and then reconciles running workflow runs. The Drizzle task repository claims due queued/running tasks with `FOR UPDATE SKIP LOCKED` before provider calls. Workflow reconciliation uses the same PostgreSQL coordination model: running workflow runs are claimed by `next_reconcile_at` and expired lease fields, then terminal/release updates include the lease token so another scheduler cannot finish a run it no longer owns.
 
@@ -296,7 +297,15 @@ users/{accountId}/media/{mediaObjectId}/original.{ext}
 users/{accountId}/media/{mediaObjectId}/cover.jpg
 ```
 
-The `media_objects` table is the file entity table. Workflow slots, task input resources, task output resources, and future asset library rows should reference `media_objects` instead of treating object storage URLs as the system of record. Account storage usage is calculated from ready, non-deleted `media_objects.byteSize` values.
+The `media_objects` table is the file entity table. Workflow slots, task input resources, task output resources, and asset library rows reference `media_objects` instead of treating object storage URLs as the system of record. Account storage usage is calculated from ready, non-deleted `media_objects.byteSize` values. Local asset-library uploads use the internal `asset_library` media purpose; `public_library` remains reserved for administrator-managed public resources.
+
+### Asset Library Semantics
+
+The asset library is a business index over managed media, not a second file store. `asset_library_items.media_object_id` is the stable bridge to the underlying media object, and canvas/task references should keep using `{ type: 'media_object', mediaObjectId }` so reuse does not introduce another resource identity.
+
+Folders are intentionally single-level cards rather than a directory tree. A folder is only an optional `folder_id` grouping on an asset item; there is no `parent_id`, path, inherited permission model, recursive delete, or breadcrumb hierarchy. The web asset library renders folder cards first and asset cards after them, matching the projects page resource-grid pattern. Deleting a folder soft-deletes the folder and returns its active assets to the unfiled library. Deleting an asset soft-deletes only the asset library item; the referenced media object remains available to other workflows, task records, and media references.
+
+Tags are account-scoped metadata records with a system/custom source. New accounts are seeded with the system tags `其他`, `人物`, `场景`, `物品`, `风格`, and `音效`. System tags cannot be renamed or deleted, while custom tags remain available for later tag management. Asset search combines filters with AND semantics: free-text query, selected tags, folder, source/home project, source type, media kind, favorite-only, and sort mode. The web grid exposes source type filters for local uploads, canvas/workflow outputs, and external imports; the internal `system` source type is reserved for server-owned records and is not exposed as a first-version user filter. Folder names are searched as folder-card results only; matching a folder name does not automatically expand all assets inside that folder. Asset free-text search covers asset display name, description, source project/name snapshot, tag name, and selected media/source metadata.
 
 `task_resources` remains the task-level resource index. It now stores `media_object_id`, `slot`, `slot_item_id`, `slot_order`, and structured `source` for input lineage and output traceability.
 
@@ -325,7 +334,7 @@ The app-level provider chain includes `I18nProvider` outside auth/session provid
 
 The root route owns the persistent browser-sized application shell through `apps/web/src/app/app-shell.tsx`. The shell defines the floating navigation island, top bar, route frame, footer note, and overall viewport contract. Route components should fill the route frame and must not recreate the global app skeleton. The shell is locked to `100dvh` with `overflow: hidden` on the document root so normal route switches keep the same browser-screen proportion instead of making the page scroll.
 
-Current route content includes Plaza (`/`) and Projects (`/projects`). The Projects route uses one mixed resource grid: project folder cards appear first and ungrouped workflow canvas cards follow them. Dragging one canvas onto another creates a project, and dragging a canvas onto a project adds it. Clicking a project opens `/projects/$projectId`, a scoped project detail route that lists only that project's canvases and exposes the remove-from-project action. The workflow editor still lives at `/canvas/$workflowId`, while `/canvas` redirects to `/projects`. These route pages follow `apps/web/DESIGN.md` with editorial spacing, floating cards, tonal surface hierarchy, and controlled local scrolling inside the route frame. Route pages must not import page-specific shell chrome from static HTML mockups; the shared shell owns navigation, profile chrome, and screen proportions. The page avoids expensive visual effects such as `backdrop-filter`, `filter`, `drop-shadow`, `mix-blend-mode`, masks, and animation-heavy opacity/transform combinations.
+Current route content includes Plaza (`/`), Projects (`/projects`), and Asset Library (`/assets`). The Projects route uses one mixed resource grid: project folder cards appear first and ungrouped workflow canvas cards follow them. Dragging one canvas onto another creates a project, and dragging a canvas onto a project adds it. Clicking a project opens `/projects/$projectId`, a scoped project detail route that lists only that project's canvases and exposes the remove-from-project action. The Asset Library route follows the same card-grid mental model: single-level folder cards appear first, normal asset cards follow, and filter chips/search narrow the grid without showing a directory tree. The workflow editor still lives at `/canvas/$workflowId`, while `/canvas` redirects to `/projects`. These route pages follow `apps/web/DESIGN.md` with editorial spacing, floating cards, tonal surface hierarchy, and controlled local scrolling inside the route frame. Route pages must not import page-specific shell chrome from static HTML mockups; the shared shell owns navigation, profile chrome, and screen proportions. The page avoids expensive visual effects such as `backdrop-filter`, `filter`, `drop-shadow`, `mix-blend-mode`, masks, and animation-heavy opacity/transform combinations.
 
 ## API Contract Boundary
 
@@ -356,7 +365,7 @@ The API uses Bun tests against `app.request(...)`, which allows route-level beha
 
 ## Planned Next Step for Database Work
 
-The account, task, pricing, project, media object, and workflow modules have Drizzle-backed schema coverage. The remaining persistence work is:
+The account, task, pricing, project, media object, asset library, and workflow modules have Drizzle-backed schema coverage. The remaining persistence work is:
 
 1. Add integration tests that run migrations against a disposable PostgreSQL database.
 2. Move the existing scheduler loop from the API process to a separate worker process if API-process scheduling is not enough operationally.

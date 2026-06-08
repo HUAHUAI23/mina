@@ -21,6 +21,7 @@ import type {
   WorkflowRunNodeState,
   WorkflowRunStatus,
 } from '@mina/contracts/modules/workflows'
+import { sql } from 'drizzle-orm'
 import {
   boolean,
   bytea,
@@ -37,8 +38,19 @@ import {
 
 export type MediaObjectStatus = 'uploading' | 'ready' | 'failed' | 'deleted'
 export type MediaObjectOrigin = 'user_upload' | 'task_output' | 'external_import' | 'system_generated'
-export type MediaObjectPurpose = 'task_input' | 'task_output' | 'workflow_slot' | 'temporary' | 'preview' | 'public_library'
+export type MediaObjectPurpose =
+  | 'task_input'
+  | 'task_output'
+  | 'workflow_slot'
+  | 'temporary'
+  | 'preview'
+  | 'public_library'
+  | 'asset_library'
 export type MediaObjectRetention = 'temporary' | 'task_scoped' | 'project_scoped' | 'library'
+export type AssetLibraryItemStatus = 'active' | 'archived' | 'deleted' | 'unavailable'
+export type AssetLibrarySourceType = 'local_upload' | 'workflow_output' | 'external_import' | 'system'
+export type AssetTagSource = 'system' | 'custom'
+export type AssetSystemTagKey = 'other' | 'person' | 'scene' | 'object' | 'style' | 'sound_effect'
 export type OAuthClientType = 'public' | 'confidential'
 export type OAuthConsentStatus = 'granted' | 'revoked'
 export type OAuthGrantType = 'authorization_code' | 'refresh_token' | 'client_credentials'
@@ -425,6 +437,109 @@ export const projects = pgTable(
     ...timestamps(),
   },
   (table) => [index('projects_account_updated_idx').on(table.accountId, table.updatedAt)],
+)
+
+export const assetLibraryFolders = pgTable(
+  'asset_library_folders',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdByUserId: text('created_by_user_id').references(() => users.id),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    ...timestamps(),
+  },
+  (table) => [
+    index('asset_library_folders_account_sort_idx').on(table.accountId, table.sortOrder, table.createdAt),
+    uniqueIndex('asset_library_folders_account_slug_uidx')
+      .on(table.accountId, table.slug)
+      .where(sql`${table.deletedAt} is null`),
+  ],
+)
+
+export const assetTags = pgTable(
+  'asset_tags',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    source: text('source').$type<AssetTagSource>().notNull(),
+    systemKey: text('system_key').$type<AssetSystemTagKey>(),
+    color: text('color'),
+    description: text('description'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    usageCount: integer('usage_count').notNull().default(0),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    ...timestamps(),
+  },
+  (table) => [
+    index('asset_tags_account_sort_idx').on(table.accountId, table.sortOrder, table.name),
+    uniqueIndex('asset_tags_account_slug_uidx')
+      .on(table.accountId, table.slug)
+      .where(sql`${table.deletedAt} is null`),
+  ],
+)
+
+export const assetLibraryItems = pgTable(
+  'asset_library_items',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    mediaObjectId: text('media_object_id')
+      .notNull()
+      .references(() => mediaObjects.id),
+    folderId: text('folder_id').references(() => assetLibraryFolders.id),
+    homeProjectId: text('home_project_id'),
+    displayName: text('display_name').notNull(),
+    description: text('description'),
+    status: text('status').$type<AssetLibraryItemStatus>().notNull().default('active'),
+    sourceType: text('source_type').$type<AssetLibrarySourceType>().notNull(),
+    sourceProjectId: text('source_project_id'),
+    sourceProjectName: text('source_project_name'),
+    sourceRef: jsonb('source_ref').$type<Record<string, unknown>>().notNull().default({}),
+    favoritedAt: timestamp('favorited_at', { withTimezone: true }),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    usageCount: integer('usage_count').notNull().default(0),
+    addedByUserId: text('added_by_user_id').references(() => users.id),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    ...timestamps(),
+  },
+  (table) => [
+    index('asset_library_items_account_created_idx').on(table.accountId, table.createdAt),
+    index('asset_library_items_account_folder_idx').on(table.accountId, table.folderId),
+    index('asset_library_items_account_home_project_idx').on(table.accountId, table.homeProjectId),
+    index('asset_library_items_account_recent_idx').on(table.accountId, table.status, table.updatedAt),
+    index('asset_library_items_account_used_idx').on(table.accountId, table.status, table.lastUsedAt),
+    index('asset_library_items_account_source_project_idx').on(table.accountId, table.sourceProjectId),
+    index('asset_library_items_account_source_type_idx').on(table.accountId, table.sourceType),
+    index('asset_library_items_media_object_idx').on(table.mediaObjectId),
+  ],
+)
+
+export const assetLibraryItemTags = pgTable(
+  'asset_library_item_tags',
+  {
+    assetItemId: text('asset_item_id')
+      .notNull()
+      .references(() => assetLibraryItems.id),
+    tagId: text('tag_id')
+      .notNull()
+      .references(() => assetTags.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.assetItemId, table.tagId] }),
+    index('asset_library_item_tags_tag_idx').on(table.tagId),
+  ],
 )
 
 export const projectWorkflows = pgTable(
