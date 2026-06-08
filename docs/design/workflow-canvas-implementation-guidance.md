@@ -355,9 +355,9 @@ export const TaskModelDescriptorSchema = z.object({
 
 Backend `ModelSpec` may expose a public descriptor method or metadata object. Do not expose raw provider SDK details or raw Zod internals over HTTP.
 
-### 8.5 Add Workflow Event Contracts
+### 8.5 Workflow Event Contracts
 
-Add:
+The active runtime event contract lives in:
 
 ```text
 packages/contracts/src/modules/workflows/workflow-event.schemas.ts
@@ -366,12 +366,8 @@ packages/contracts/src/modules/workflows/workflow-event.schemas.ts
 Event union:
 
 ```ts
-workflow.definition.updated
-workflow.node.mediaView.updated
 workflow.run.updated
 workflow.node.task.updated
-workflow.mediaObject.ready
-workflow.remote.conflict
 ```
 
 Common event fields:
@@ -390,11 +386,10 @@ Common event fields:
 
 Payload rules:
 
-1. `workflow.definition.updated` includes the new workflow version and changed node/edge ids when available.
-2. `workflow.node.mediaView.updated` includes `nodeId`, `mediaView`, and version.
-3. `workflow.run.updated` includes `runId`, status, and version if the workflow definition changed.
-4. `workflow.node.task.updated` includes `nodeId`, `taskId`, and task status.
-5. `workflow.mediaObject.ready` includes `mediaObjectId`.
+1. `workflow.run.updated` includes `runId`, status, and the workflow version.
+2. `workflow.node.task.updated` includes `nodeId`, `taskId`, task status, and task timestamps when available.
+
+Editable graph definition, MediaView changes, media object readiness, and generic remote-conflict notices are not runtime event stream messages. Do not add event types for them unless there is a concrete publisher, consumer, and recovery contract.
 
 ## 9. Backend API Implementation
 
@@ -490,7 +485,7 @@ Rules:
 5. Use `origin: 'user_upload'`.
 6. Use `purpose: 'workflow_slot'` for canvas media slot files.
 7. Return `MediaObjectResponse`.
-8. Publish `workflow.mediaObject.ready` when the media object is tied to an open workflow mutation.
+8. Do not publish workflow WS events for media object readiness. Components observe media objects through their normal query refresh flows.
 
 Presigned route rules:
 
@@ -1381,8 +1376,8 @@ Required media cases:
 
 Required WS cases:
 
-1. Publishing after workflow save emits `workflow.definition.updated`.
-2. Publishing after mediaView patch emits `workflow.node.mediaView.updated`.
+1. Run lifecycle publishing emits `workflow.run.updated`.
+2. Node task lifecycle publishing emits `workflow.node.task.updated`.
 3. Subscribers for another workflow do not receive the event.
 
 ### 25.3 Web Verification

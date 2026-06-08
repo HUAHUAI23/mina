@@ -16,6 +16,10 @@
       "types": "./src/modules/canvas/canvas.schemas.ts",
       "default": "./src/modules/canvas/canvas.schemas.ts"
     },
+    "./modules/canvas/group-conversion": {
+      "types": "./src/modules/canvas/group-conversion.ts",
+      "default": "./src/modules/canvas/group-conversion.ts"
+    },
     "./modules/media": {
       "types": "./src/modules/media/media.schemas.ts",
       "default": "./src/modules/media/media.schemas.ts"

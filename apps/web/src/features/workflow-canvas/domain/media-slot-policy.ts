@@ -3,9 +3,9 @@ import type {
   MediaSlotName,
   NodeMediaSlotItem,
   NodeMediaSlots,
-  NodeOutputSelector,
 } from '@mina/contracts/modules/media'
 import type { ResourceKind } from '@mina/contracts/modules/tasks'
+export { defaultSelectorForMediaSlot } from '@mina/contracts/modules/canvas/group-conversion'
 
 import { baseMessages, type WebMessages } from '../../../lib/i18n-messages'
 import type { ClientModelMediaCapabilities, ImageInputLimit } from '../forms/registry/client-model-registry'
@@ -179,21 +179,6 @@ export const normalizeMediaSlotsForNodeType = (
   }
 
   return next
-}
-
-export const defaultSelectorForMediaSlot = (
-  slot: MediaSlotName,
-): NodeOutputSelector => {
-  if (slot === 'referenceVideos') {
-    return { resourceKind: 'video', role: 'generated_video', index: 0 }
-  }
-  if (slot === 'lastFrame') {
-    return { resourceKind: 'image', role: 'last_frame', index: 0 }
-  }
-  if (slot === 'firstFrame') {
-    return { resourceKind: 'image', role: 'first_frame', index: 0 }
-  }
-  return { resourceKind: 'image', role: 'generated_image', index: 0 }
 }
 
 export const slotItemsForNodeType = (

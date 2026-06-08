@@ -4,6 +4,21 @@
 
 Date: 2026-05-20
 
+Status: historical guidance. The editable-graph autosave, manual-save,
+dirty-state, and REST checkpoint portions of this document are
+superseded by:
+
+- `docs/design/workflow-yjs-ssot-storage-refactor.md`
+- `docs/design/workflow-canvas-collaboration/03-refactor-audit.md`
+- `docs/design/workflow-canvas-collaboration/04-remaining-issues.md`
+- `docs/design/workflow-canvas-implementation-guidance.md`
+
+Use this document only for the original React Flow performance analysis
+and historical migration rationale. Current workflow canvas editing uses
+the live Yjs document as the graph source of truth, does not maintain
+frontend editable-graph `dirty` / `saving` state, and does not use
+frontend autosave or manual-save checkpoint requests.
+
 This document is the implementation guidance for the next Mina workflow canvas refactor. It focuses on React Flow performance, autosave/WebSocket correctness, and the future React Flow + Yjs + y-websocket collaboration path.
 
 The core decision is:
@@ -1414,4 +1429,3 @@ The refactor is complete when:
 9. Projection cache prevents full graph object rebuilds for single-node changes.
 10. Yjs shadow sync can mirror document transactions and export a matching snapshot.
 11. The collaboration path has explicit awareness, conflict, auth, persistence, and rollback rules.
-

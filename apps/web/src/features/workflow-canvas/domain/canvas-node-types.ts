@@ -78,7 +78,7 @@ export const defaultTaskForNodeType = (
 const createId = (prefix: string): string => `${prefix}_${crypto.randomUUID()}`
 
 export const MEDIA_GENERATION_NODE_FRAME = {
-  height: 244,
+  height: 292,
   width: 390,
 } as const
 

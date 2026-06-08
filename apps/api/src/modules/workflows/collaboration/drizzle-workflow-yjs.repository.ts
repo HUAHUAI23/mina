@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, lte } from 'drizzle-orm'
+import { and, asc, eq, gt, inArray } from 'drizzle-orm'
 
 import type { MinaDbClient } from '../../../db/client'
 import { workflowYjsSnapshots, workflowYjsUpdates } from '../../../db/schema'
@@ -22,12 +22,15 @@ export class DrizzleWorkflowYjsRepository implements WorkflowYjsRepository {
     })
   }
 
-  async deleteUpdates(workflowId: string, through?: Date): Promise<void> {
+  async deleteUpdates(workflowId: string, updateIds?: readonly string[]): Promise<void> {
+    if (updateIds && updateIds.length === 0) {
+      return
+    }
     await this.db
       .delete(workflowYjsUpdates)
       .where(
-        through
-          ? and(eq(workflowYjsUpdates.workflowId, workflowId), lte(workflowYjsUpdates.createdAt, through))
+        updateIds
+          ? and(eq(workflowYjsUpdates.workflowId, workflowId), inArray(workflowYjsUpdates.id, [...updateIds]))
           : eq(workflowYjsUpdates.workflowId, workflowId),
       )
   }
@@ -70,7 +73,24 @@ export class DrizzleWorkflowYjsRepository implements WorkflowYjsRepository {
     }))
   }
 
-  async saveSnapshot(input: WorkflowYjsSnapshotRecord): Promise<void> {
+  async saveSnapshot(input: WorkflowYjsSnapshotRecord): Promise<boolean> {
+    if (input.expectedVersion !== undefined) {
+      const [row] = await this.db
+        .update(workflowYjsSnapshots)
+        .set({
+          snapshotBin: Buffer.from(input.snapshotBin),
+          stateVector: Buffer.from(input.stateVector),
+          updatedAt: new Date(),
+          version: input.version,
+        })
+        .where(and(
+          eq(workflowYjsSnapshots.workflowId, input.workflowId),
+          eq(workflowYjsSnapshots.version, input.expectedVersion),
+        ))
+        .returning({ workflowId: workflowYjsSnapshots.workflowId })
+      return row !== undefined
+    }
+
     await this.db
       .insert(workflowYjsSnapshots)
       .values({
@@ -89,5 +109,6 @@ export class DrizzleWorkflowYjsRepository implements WorkflowYjsRepository {
         },
         target: workflowYjsSnapshots.workflowId,
       })
+    return true
   }
 }

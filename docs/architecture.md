@@ -67,6 +67,7 @@ Shared runtime schemas and inferred TypeScript types for the full stack.
 - Response validation schemas
 - Shared DTOs and route data structures
 - User/account, task, pricing, workflow, and React Flow-compatible canvas contracts
+- Shared canvas helpers that must stay identical across the API and web app, including flow-group/node-group conversion rules
 
 ### `packages/i18n`
 
@@ -212,7 +213,21 @@ The workflow module keeps public services small and splits stable internal rules
 - `media/*`: `WorkflowMediaResolver`, media slot helpers, and media input builders for `media_object`, `external_url`, current MediaView, and current workflow-run output sources.
 - `task-config.ts`: media envelope assembly for task config preparation.
 - `validation.ts`: persisted canvas validation, media slot/edge consistency checks, and flow-group scope/cycle validation.
-- `group-conversion.ts`: pure helper for converting `flow_group` nodes to visual-only `node_group` nodes and downgrading `run_output` media slot sources to `current_media`.
+- `group-conversion.ts`: compatibility export for shared `@mina/contracts/modules/canvas/group-conversion` helpers that convert between `flow_group` and `node_group` while keeping node type fields and media slot source semantics aligned.
+
+Workflow canvas collaboration persists Yjs binary updates in an append
+log and compacts them into `workflow_yjs_snapshots`. WebSocket update
+handling appends and broadcasts original updates without full-graph
+validation on the hot path; full `validateCanvas` runs on initial import,
+snapshot replacement, and checkpoint compaction. Snapshot writes use an
+`expectedVersion` conditional update and return
+`WORKFLOW_VERSION_CONFLICT` for stale explicit checkpoints. Compaction
+replays persisted updates before export and deletes only the update ids
+covered by the saved snapshot, so cross-instance background compaction
+cannot drop concurrent append-log entries. If a persisted update makes
+the graph invalid, the room is rebuilt from the last valid snapshot,
+valid updates are replayed, and invalid update ids are removed from the
+append log before snapshot reads or compaction continue.
 
 The application runtime is PostgreSQL-only for business persistence. `createAppDependencies()` wires account, pricing, project, media, task, workflow, and event services to Drizzle repositories backed by the PostgreSQL schema in `apps/api/src/db/schema.ts`. Unit and route tests use fakes under `apps/api/src/test` rather than production in-memory repositories.
 
@@ -257,6 +272,9 @@ Executable node media inputs are owned by target node `data.mediaSlots`. Edges r
 - On the ordinary canvas, running a selected node resolves required upstream media from the source node's persisted `mediaView`. Upstream nodes are not executed automatically.
 - Inside a `flow_group`, execution dependencies are derived from node-output media slot sources. A flow run executes all roots in the group and downstream nodes resolve media from the current run's upstream outputs by resource kind, role, and index.
 - `node_group` is visual only and does not affect execution.
+- Workflow groups are top-level containers. Nested groups are intentionally unsupported: group creation rejects selections that already live inside a group, and graph validation rejects group nodes with `parentId`.
+- Converting `flow_group` to `node_group` changes descendant `run_output` slot sources to `current_media`. Converting `node_group` to `flow_group` changes only in-group `current_media` dependencies to `run_output` and adds default output selectors; outside dependencies remain `current_media`.
+- Dragging a media connection onto empty canvas can open the add menu and create a connected media node. Existing edge actions only cut the connection; inserting a new node into the middle of an existing edge is not a supported workflow surface.
 - Workflow run creation does not call external providers directly. It creates pending node tasks and relies on the task scheduler/worker path to start providers, poll async work, and reconcile workflow nodes.
 
 ### Object Storage
@@ -287,6 +305,7 @@ React Flow compatibility rules:
 - Persist `parentId`, not the old `parentNode` field.
 - Persist only stable node/edge fields, not transient UI fields such as `selected`, `dragging`, or `measured`.
 - Keep parent nodes before child nodes in the persisted `nodes` array.
+- Persist group nodes as top-level nodes only; children may point to groups with `parentId`, but groups must not point to other groups.
 
 ## Frontend Layering
 

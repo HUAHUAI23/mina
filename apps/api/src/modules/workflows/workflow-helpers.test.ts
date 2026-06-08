@@ -8,7 +8,7 @@ import type {
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 
 import { createInitialNodeStates } from './run-state'
-import { downgradeFlowGroupToNodeGroup } from './group-conversion'
+import { downgradeFlowGroupToNodeGroup, upgradeNodeGroupToFlowGroup } from './group-conversion'
 import {
   findOutputByMediaView,
   slotToInputRole,
@@ -67,6 +67,16 @@ const flowGroupNode = (id: string): WorkflowCanvasNode => ({
   height: 400,
   data: {
     nodeType: 'flow_group',
+    title: id,
+    config: {},
+  },
+})
+
+const nodeGroupNode = (id: string): WorkflowCanvasNode => ({
+  ...flowGroupNode(id),
+  type: 'node_group',
+  data: {
+    nodeType: 'node_group',
     title: id,
     config: {},
   },
@@ -290,6 +300,63 @@ describe('workflow helper semantics', () => {
     expect(target.data.mediaSlots?.inputImages?.[0]?.source).toEqual({
       type: 'node_output',
       nodeId: 'a',
+      resolve: 'current_media',
+    })
+  })
+
+  test('upgrades node group internal current_media media slots to run_output selectors', () => {
+    const nodes: WorkflowCanvasNode[] = [
+      nodeGroupNode('group'),
+      imageNode('a', 'group'),
+      imageNode('outside'),
+      imageNodeWithMediaSlots(imageNode('b', 'group'), {
+        inputImages: [
+          {
+            id: 'slot-a',
+            order: 0,
+            required: true,
+            slot: 'inputImages',
+            source: {
+              type: 'node_output',
+              nodeId: 'a',
+              resolve: 'current_media',
+            },
+          },
+          {
+            id: 'slot-outside',
+            order: 1,
+            required: true,
+            slot: 'inputImages',
+            source: {
+              type: 'node_output',
+              nodeId: 'outside',
+              resolve: 'current_media',
+            },
+          },
+        ],
+      }),
+    ]
+
+    const converted = upgradeNodeGroupToFlowGroup(nodes, 'group')
+    expect(converted[0]?.type).toBe('flow_group')
+    expect(converted[0]?.data.nodeType).toBe('flow_group')
+    const target = converted[3]
+    if (!target || target.data.nodeType !== 'image_generation') {
+      throw new Error('Target node missing.')
+    }
+    expect(target.data.mediaSlots?.inputImages?.[0]?.source).toEqual({
+      type: 'node_output',
+      nodeId: 'a',
+      resolve: 'run_output',
+      selector: {
+        resourceKind: 'image',
+        role: 'generated_image',
+        index: 0,
+      },
+    })
+    expect(target.data.mediaSlots?.inputImages?.[1]?.source).toEqual({
+      type: 'node_output',
+      nodeId: 'outside',
       resolve: 'current_media',
     })
   })

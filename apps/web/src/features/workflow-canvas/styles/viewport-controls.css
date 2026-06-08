@@ -1,0 +1,304 @@
+.mina-wc-viewport-controls {
+  align-items: flex-end;
+  bottom: 18px;
+  display: grid;
+  gap: 12px;
+  justify-items: end;
+  position: absolute;
+  right: 18px;
+  z-index: 24;
+}
+
+.mina-wc-viewport-button-stack {
+  align-items: center;
+  display: flex;
+  background: var(--popover);
+  border-radius: 12px;
+  padding: 4px;
+  gap: 3px;
+  box-shadow:
+    0 10px 30px -10px rgba(0, 0, 0, 0.08),
+    0 1px 3px rgba(0, 0, 0, 0.02);
+  border: 1px solid var(--border);
+  transition: all 200ms ease;
+}
+
+.mina-wc-viewport-button-stack:hover {
+  border-color: color-mix(in oklch, var(--foreground-quaternary) 12%, transparent);
+  box-shadow:
+    0 12px 36px -10px rgba(0, 0, 0, 0.12),
+    0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.mina-wc-viewport-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin-inline: 2px;
+}
+
+.mina-wc-viewport-button,
+.mina-wc-viewport-zoom-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--foreground-secondary);
+  display: flex;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  box-shadow: none;
+  transition: all 140ms ease;
+}
+
+.mina-wc-viewport-button {
+  width: 28px;
+}
+
+.mina-wc-viewport-zoom-button {
+  min-width: 46px;
+  padding-inline: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-feature-settings: "tnum";
+}
+
+.mina-wc-viewport-button:hover,
+.mina-wc-viewport-zoom-button:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.mina-wc-viewport-button[data-active="true"],
+.mina-wc-viewport-zoom-button[data-active="true"] {
+  background: var(--accent);
+  color: var(--mina-wc-primary);
+  font-weight: 600;
+}
+
+.mina-wc-viewport-button:active,
+.mina-wc-viewport-zoom-button:active {
+  transform: scale(0.96);
+}
+
+.mina-wc-flow-shell .mina-wc-history-rail.react-flow__panel.top.right {
+  margin: 0;
+  right: clamp(16px, 2.4vw, 34px);
+  top: 96px;
+  z-index: 22;
+}
+
+.mina-wc-minimap-frame {
+  background: var(--mina-wc-floating-surface);
+  border-radius: 16px;
+  box-shadow:
+    var(--mina-wc-floating-shadow),
+    var(--mina-wc-floating-ring);
+  overflow: hidden;
+  padding: 0;
+}
+
+.mina-wc-minimap.react-flow__minimap {
+  background: var(--surface-container-low);
+  border: 0;
+  border-radius: 16px;
+  bottom: auto;
+  display: block;
+  height: 160px;
+  inset: auto;
+  margin: 0;
+  overflow: hidden;
+  padding: 0;
+  position: relative;
+  right: auto;
+  width: 260px;
+}
+
+.mina-wc-minimap.react-flow__minimap svg {
+  background:
+    radial-gradient(circle, var(--canvas-dot) 1px, transparent 1.25px),
+    var(--surface-container-low);
+  background-size: 20px 20px, auto;
+  border-radius: 16px;
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.mina-wc-minimap-fallback {
+  background:
+    radial-gradient(circle, var(--canvas-dot) 1px, transparent 1.25px),
+    var(--surface-container-low);
+  background-size: 20px 20px, auto;
+  border-radius: 18px;
+  color: var(--foreground-tertiary);
+  display: grid;
+  height: 160px;
+  padding: 16px;
+  width: 260px;
+}
+
+.mina-wc-minimap-fallback-label,
+.mina-wc-minimap-fallback span:last-child {
+  font-size: 0.62rem;
+  font-weight: 850;
+  letter-spacing: 0.22em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.mina-wc-minimap-fallback strong {
+  align-self: end;
+  color: var(--foreground-secondary);
+  font-size: 1.65rem;
+  line-height: 1;
+}
+
+.mina-wc-zoom-popover {
+  width: 220px;
+  border-radius: 12px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  padding: 6px;
+  color: var(--popover-foreground);
+  box-shadow:
+    0 10px 30px -10px rgba(0, 0, 0, 0.08),
+    0 1px 3px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 1.5px;
+}
+
+.mina-wc-zoom-input-row {
+  align-items: center;
+  background: var(--muted);
+  border-radius: 8px;
+  color: var(--foreground-secondary);
+  display: flex;
+  height: 32px;
+  padding-inline: 10px;
+  border: 1px solid var(--border);
+  margin-bottom: 4px;
+  transition: all 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mina-wc-zoom-input-row:focus-within {
+  background: var(--background);
+  border-color: var(--mina-wc-primary);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--mina-wc-primary) 15%, transparent);
+}
+
+.mina-wc-zoom-input {
+  appearance: textfield;
+  background: transparent;
+  border: 0;
+  color: var(--foreground);
+  font-size: 0.85rem;
+  font-weight: 500;
+  min-width: 0;
+  outline: 0;
+  width: 100%;
+}
+
+.mina-wc-zoom-input-row span {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--foreground-tertiary);
+  user-select: none;
+}
+
+.mina-wc-zoom-input::-webkit-inner-spin-button,
+.mina-wc-zoom-input::-webkit-outer-spin-button {
+  appearance: none;
+}
+
+.mina-wc-zoom-menu-item {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--foreground-secondary);
+  display: flex;
+  font-size: 0.82rem;
+  font-weight: 500;
+  justify-content: space-between;
+  height: 30px;
+  padding-inline: 8px;
+  text-align: left;
+  width: 100%;
+  transition: all 100ms ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.mina-wc-zoom-menu-item:hover,
+.mina-wc-zoom-menu-item:focus-visible {
+  background: var(--accent);
+  color: var(--accent-foreground);
+  outline: none;
+}
+
+.mina-wc-zoom-menu-item[data-active="true"] {
+  background: color-mix(in oklch, var(--mina-wc-primary) 8%, transparent);
+  color: var(--mina-wc-primary);
+  font-weight: 600;
+}
+
+.mina-wc-zoom-menu-item[data-active="true"]:hover {
+  background: color-mix(in oklch, var(--mina-wc-primary) 12%, transparent);
+}
+
+.mina-wc-zoom-menu-item:active {
+  transform: scale(0.98);
+}
+
+.mina-wc-zoom-menu-item-left {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mina-wc-zoom-menu-icon {
+  color: var(--foreground-tertiary);
+  transition: color 100ms ease;
+  flex-shrink: 0;
+}
+
+.mina-wc-zoom-menu-item:hover .mina-wc-zoom-menu-icon,
+.mina-wc-zoom-menu-item:focus-visible .mina-wc-zoom-menu-icon {
+  color: var(--foreground-secondary);
+}
+
+.mina-wc-zoom-menu-check-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.mina-wc-zoom-menu-check {
+  color: var(--mina-wc-primary);
+}
+
+.mina-wc-zoom-menu-kbd {
+  background: var(--muted);
+  border: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 0.625rem;
+  font-weight: 500;
+  padding: 0 4px;
+  height: 18px;
+  min-width: 18px;
+  border-radius: 4px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
+}
+
+.mina-wc-zoom-menu-separator {
+  background: var(--border);
+  height: 1px;
+  margin: 4px 2px;
+}

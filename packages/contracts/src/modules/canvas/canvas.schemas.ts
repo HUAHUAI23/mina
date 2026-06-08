@@ -84,6 +84,21 @@ export const WorkflowCanvasNodeSchema = z.object({
   width: z.number().positive().optional(),
   height: z.number().positive().optional(),
   data: WorkflowNodeDataSchema,
+}).superRefine((node, ctx) => {
+  if (node.parentId && node.extent !== 'parent') {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'Canvas nodes with parentId must use parent extent.',
+      path: ['extent'],
+    })
+  }
+  if (!node.parentId && node.extent !== undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'Top-level canvas nodes must not use parent extent.',
+      path: ['extent'],
+    })
+  }
 })
 
 export const WorkflowEdgeDataSchema = z.object({

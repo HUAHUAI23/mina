@@ -1,7 +1,11 @@
 import { createFormHook, createFormHookContexts, type AppFieldExtendedReactFormApi } from '@tanstack/react-form'
 import type { FormAsyncValidateOrFn, FormValidateOrFn } from '@tanstack/react-form'
-import type { ComponentType, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { cn } from '@mina/ui/lib/utils'
+import { Input } from '@mina/ui/components/input'
+import { NativeSelect, NativeSelectOption } from '@mina/ui/components/native-select'
+import { Slider } from '@mina/ui/components/slider'
+import { Switch } from '@mina/ui/components/switch'
 
 import type { NodeTaskFormValue } from './model-form-utils'
 import type { NodeTaskFormValidator } from './validation'
@@ -19,13 +23,16 @@ function FormShell({ children }: { children: ReactNode }) {
 }
 
 const fieldClassName = 'grid gap-1.5'
-const fieldLabelClassName = 'text-[0.68rem] font-black text-foreground-tertiary'
-const fieldControlClassName = 'min-h-10 rounded-lg border-0 bg-surface-container-high px-2.5 py-2 text-foreground outline-0 focus:bg-surface-container-lowest focus:shadow-[0_12px_28px_-18px_color-mix(in_oklch,var(--foreground)_18%,transparent)]'
+const fieldLabelClassName = 'text-[0.68rem] font-semibold text-foreground-tertiary'
+const fieldControlClassName = 'h-10 rounded-[14px] border-0 bg-[color-mix(in_oklch,var(--surface-container-lowest)_72%,var(--surface-container-low))] px-3 text-sm font-semibold text-foreground shadow-sm ring-1 ring-foreground-quaternary/10 focus-visible:border-transparent focus-visible:ring-1 focus-visible:bg-surface-container-lowest aria-invalid:ring-destructive/40 [&>svg]:hidden'
 const fieldErrorClassName = 'text-[0.72rem] not-italic text-destructive'
-const toolbarSelectClassName = 'inline-flex min-w-0 flex-none items-center gap-[7px] text-foreground'
-const toolbarControlClassName = 'min-h-10 min-w-0 appearance-none border-0 bg-transparent text-sm font-bold text-foreground outline-0'
+const toolbarFieldFrameClassName = 'group flex min-w-0 items-center'
+const toolbarFieldLabelClassName = 'sr-only'
+const toolbarNumberClassName = 'h-9 w-[3.5rem] rounded-[10px] border-0 bg-black/[0.03] dark:bg-white/[0.05] hover:bg-black/[0.06] dark:hover:bg-white/[0.08] px-2 text-center text-[0.85rem] font-medium text-foreground transition-all shadow-none focus-visible:border-transparent focus-visible:ring-0 focus-visible:bg-black/[0.08] dark:focus-visible:bg-white/[0.12] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [appearance:textfield]'
 const switchFieldClassName = 'flex items-center justify-between gap-2'
-const switchInputClassName = 'relative h-6 w-12 appearance-none rounded-full border-0 bg-surface-container-high after:absolute after:top-[3px] after:left-[3px] after:size-4.5 after:rounded-full after:bg-surface-container-lowest after:shadow-floating checked:bg-foreground-secondary checked:after:translate-x-6'
+const fieldSelectClassName = 'w-full [&_[data-slot=native-select]]:h-10 [&_[data-slot=native-select]]:rounded-[14px] [&_[data-slot=native-select]]:border-0 [&_[data-slot=native-select]]:bg-[color-mix(in_oklch,var(--surface-container-lowest)_72%,var(--surface-container-low))] [&_[data-slot=native-select]]:px-3 [&_[data-slot=native-select]]:text-sm [&_[data-slot=native-select]]:font-semibold [&_[data-slot=native-select]]:text-foreground [&_[data-slot=native-select]]:shadow-sm [&_[data-slot=native-select]]:ring-1 [&_[data-slot=native-select]]:ring-foreground-quaternary/10 [&_[data-slot=native-select]]:focus-visible:border-transparent [&_[data-slot=native-select]]:focus-visible:ring-1 [&_[data-slot=native-select]]:focus-visible:bg-surface-container-lowest [&_[data-slot=native-select-icon]]:hidden'
+const toolbarSelectClassName = 'w-fit flex-none [&_[data-slot=native-select]]:h-9 [&_[data-slot=native-select]]:min-w-[4rem] [&_[data-slot=native-select]]:rounded-[10px] [&_[data-slot=native-select]]:border-0 [&_[data-slot=native-select]]:bg-black/[0.03] dark:[&_[data-slot=native-select]]:bg-white/[0.05] hover:[&_[data-slot=native-select]]:bg-black/[0.06] dark:hover:[&_[data-slot=native-select]]:bg-white/[0.08] [&_[data-slot=native-select]]:pl-3 [&_[data-slot=native-select]]:pr-8 [&_[data-slot=native-select]]:text-[0.85rem] [&_[data-slot=native-select]]:font-medium [&_[data-slot=native-select]]:text-foreground [&_[data-slot=native-select]]:transition-all [&_[data-slot=native-select]]:shadow-none [&_[data-slot=native-select]]:focus-visible:border-transparent [&_[data-slot=native-select]]:focus-visible:ring-0 [&_[data-slot=native-select]]:focus-visible:bg-black/[0.08] dark:[&_[data-slot=native-select]]:focus-visible:bg-white/[0.12] [&_[data-slot=native-select-icon]]:text-foreground-secondary [&_[data-slot=native-select-icon]]:right-2.5'
+const sliderClassName = '[&_[data-slot=slider-track]]:h-1.5 [&_[data-slot=slider-track]]:bg-surface-container-high [&_[data-slot=slider-range]]:bg-foreground-secondary [&_[data-slot=slider-thumb]]:size-4 [&_[data-slot=slider-thumb]]:border-0 [&_[data-slot=slider-thumb]]:bg-surface-container-lowest [&_[data-slot=slider-thumb]]:shadow-sm [&_[data-slot=slider-thumb]]:ring-1 [&_[data-slot=slider-thumb]]:ring-foreground-quaternary/20'
 
 interface SelectOption {
   label: string
@@ -62,7 +69,7 @@ function TextField({ ariaLabel, inputClassName, label, multiline = false, placeh
   return (
     <label className={fieldClassName}>
       {label ? <span className={fieldLabelClassName}>{label}</span> : null}
-      <input
+      <Input
         aria-invalid={error ? true : undefined}
         aria-label={ariaLabel ?? label}
         className={cn(fieldControlClassName, inputClassName)}
@@ -79,40 +86,39 @@ function TextField({ ariaLabel, inputClassName, label, multiline = false, placeh
 
 export interface SelectFieldProps {
   ariaLabel?: string
-  icon?: ComponentType<{ 'aria-hidden'?: boolean; size?: number }>
   label?: string
   options: SelectOption[]
   valueKind?: 'number' | 'string'
 }
 
-function SelectField({ ariaLabel, icon: Icon, label, options, valueKind = 'string' }: SelectFieldProps) {
+function SelectField({ ariaLabel, label, options, valueKind = 'string' }: SelectFieldProps) {
   const field = useFieldContext<unknown>()
   const error = getFieldErrorMessage(field.state.meta)
   const value = valueToString(field.state.value)
 
   const select = (
-    <select
+    <NativeSelect
       aria-invalid={error ? true : undefined}
       aria-label={ariaLabel ?? label}
-      className={label ? fieldControlClassName : toolbarControlClassName}
+      className={label ? fieldSelectClassName : toolbarSelectClassName}
       onBlur={field.handleBlur}
       onChange={(event) => field.handleChange(parseSelectValue(event.target.value, valueKind))}
       value={value}
     >
       {options.map((option) => (
-        <option key={option.value} value={option.value}>
+        <NativeSelectOption key={option.value} value={option.value}>
           {option.label}
-        </option>
+        </NativeSelectOption>
       ))}
-    </select>
+    </NativeSelect>
   )
 
   if (!label) {
     return (
-      <label className={toolbarSelectClassName}>
-        {Icon ? <Icon aria-hidden={true} size={16} /> : null}
+      <div className={toolbarFieldFrameClassName}>
+        {ariaLabel ? <span className={toolbarFieldLabelClassName}>{ariaLabel}</span> : null}
         {select}
-      </label>
+      </div>
     )
   }
 
@@ -127,21 +133,20 @@ function SelectField({ ariaLabel, icon: Icon, label, options, valueKind = 'strin
 
 export interface NumberFieldProps {
   ariaLabel?: string
-  icon?: ComponentType<{ 'aria-hidden'?: boolean; size?: number }>
   label?: string
   max?: number
   min?: number
   step?: number
 }
 
-function NumberField({ ariaLabel, icon: Icon, label, max, min, step }: NumberFieldProps) {
+function NumberField({ ariaLabel, label, max, min, step }: NumberFieldProps) {
   const field = useFieldContext<unknown>()
   const error = getFieldErrorMessage(field.state.meta)
   const input = (
-    <input
+    <Input
       aria-invalid={error ? true : undefined}
       aria-label={ariaLabel ?? label}
-      className={label ? fieldControlClassName : cn(toolbarControlClassName, 'w-[72px]')}
+      className={label ? fieldControlClassName : toolbarNumberClassName}
       max={max}
       min={min}
       onBlur={field.handleBlur}
@@ -157,8 +162,8 @@ function NumberField({ ariaLabel, icon: Icon, label, max, min, step }: NumberFie
 
   if (!label) {
     return (
-      <label className={toolbarSelectClassName}>
-        {Icon ? <Icon aria-hidden={true} size={16} /> : null}
+      <label className={toolbarFieldFrameClassName}>
+        {ariaLabel ? <span className={toolbarFieldLabelClassName}>{ariaLabel}</span> : null}
         {input}
       </label>
     )
@@ -188,16 +193,19 @@ function SliderField({ label, max, min, step }: SliderFieldProps) {
   return (
     <label className={fieldClassName}>
       <span className={fieldLabelClassName}>{label}</span>
-      <input
+      <Slider
         aria-invalid={error ? true : undefined}
-        className={fieldControlClassName}
+        className={sliderClassName}
         max={max}
         min={min}
         onBlur={field.handleBlur}
-        onChange={(event) => field.handleChange(Number(event.target.value))}
-        step={step}
-        type="range"
-        value={value}
+        onValueChange={([nextValue]) => {
+          if (typeof nextValue === 'number') {
+            field.handleChange(nextValue)
+          }
+        }}
+        value={[value]}
+        {...(step === undefined ? {} : { step })}
       />
       {error ? <em className={fieldErrorClassName}>{error}</em> : null}
     </label>
@@ -216,12 +224,12 @@ function SwitchField({ label }: SwitchFieldProps) {
     <div>
       <label className={switchFieldClassName}>
         <span className={fieldLabelClassName}>{label}</span>
-        <input
+        <Switch
           checked={Boolean(field.state.value)}
-          className={switchInputClassName}
+          className="data-checked:bg-foreground-secondary data-unchecked:bg-surface-container-high"
+          size="sm"
           onBlur={field.handleBlur}
-          onChange={(event) => field.handleChange(event.target.checked)}
-          type="checkbox"
+          onCheckedChange={field.handleChange}
         />
       </label>
       {error ? <em className="mt-1 block text-[0.72rem] font-bold not-italic text-destructive">{error}</em> : null}

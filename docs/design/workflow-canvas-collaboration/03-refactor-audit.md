@@ -6,9 +6,11 @@ from `02-ideal-sync-model.md` §5.
 
 Summary: **the structural changes are correct.** All the legacy code
 paths that produced the destructive echo loops have been deleted. The
-new server WebSocket handler is the textbook `validate → persist →
-apply → broadcast(except sender)` shape. A small number of items remain
-unfinished or were left in for now; they are tracked in
+current server WebSocket handler persists, applies, and broadcasts
+original Yjs updates with sender exclusion. Full graph validation and
+checkpoint persistence now happen on the snapshot path, with
+cross-instance snapshot conflicts guarded by persisted version checks.
+Resolved collaboration guardrails are tracked in
 `04-remaining-issues.md`.
 
 ---
@@ -19,16 +21,16 @@ unfinished or were left in for now; they are tracked in
 |---|-----------|--------|-----------------|
 | 1 | Remove `documentTransactions` + `appliedTransactionRevisions` | ✅ | `store/store-helpers.ts` no longer pushes entries; `store-types.ts` has no `documentTransactions` field. |
 | 2 | Drop the `queueMicrotask`-driven `commitDocumentTransaction` | ✅ | Replaced by `withYDoc(() => ydoc.transact(...))` in `sync/yjs/workflow-yjs-commands.ts:32-38`. Writes are now synchronous against ydoc. |
-| 3 | Stop sending `encodeStateAsUpdate` in `/collab/checkpoint` | ✅ | `hooks/use-workflow-autosave.ts:36-43` now sends only `name`; no `stateUpdate` field. |
-| 4 | Delete the `importWorkflowSnapshotToYjs`-on-save path | ✅ | `reconcileLiveWorkflowYjsSnapshot` no longer exists. The function `importWorkflowSnapshotToYjs` itself remains exported only for tests; production code does not call it. |
+| 3 | Stop sending `encodeStateAsUpdate` in `/collab/checkpoint` | ✅ | The old client autosave/checkpoint path is gone; server-side compaction exports the authoritative Yjs room state. |
+| 4 | Delete the `importWorkflowSnapshotToYjs`-on-save path | ✅ | `reconcileLiveWorkflowYjsSnapshot` no longer exists. `importWorkflowSnapshotToYjs` remains for tests and initial document import paths, but production save does not round-trip exported snapshots back into the live client doc. |
 | 5 | Delete `reconcileLiveWorkflowYjsSnapshot` | ✅ | File `sync/yjs/yjs-live-document.ts` and `sync/yjs/yjs-shadow-sync.ts` are gone. |
 | 6 | Convert Zustand mutation actions to thin wrappers | ✅ | `slices/graph-slice.ts`, `slices/media-slots-slice.ts`, `slices/task-config-slice.ts` are one-line delegations to `workflowYjsCommands`. |
-| 7 | Drop `applyRemoteSnapshot`'s `dirty/preserveDirty` branching | ✅ | `slices/hydration-slice.ts:16-28` is now a straight replace. (But see §3.1 of `04-remaining-issues.md` — it lost a needed guard along the way.) |
-| 8 | Remove `draftRevision` / `savedRevision` / `remoteVersion` | ✅ | `slices/draft-slice.ts` keeps only `dirty / saving / version / yjsConnectionStatus`. |
-| 9 | Stop publishing `workflow.definition.updated` | ⚠ partial | The server still emits it (`workflows.service.ts:187-198`). The canvas client ignores it (`WorkflowCanvasPage.tsx:84-86 return`). Cheap to drop entirely but currently harmless. |
-| 10 | Add optimistic locking to `checkpointWorkflow` | ❌ | Still `current.version + 1` unconditional. A per-workflow lock (`#withWorkflowLock`) serializes concurrent checkpoint requests in-process, but there is no cross-instance protection or version validation against client expectation. |
-| 11 | Nest CRDT inside each node (e.g. `Y.Text` for prompts) | ❌ | Nodes are still stored whole with `y.nodes.set(id, fullNode)`. Same-node concurrent field edits remain last-writer-wins on the whole object. |
-| 12 | Derive "saved" from state vectors | ❌ | UI still uses a `dirty` boolean toggled by `markDraftChanged()` and `acknowledgeSaved`. |
+| 7 | Drop `applyRemoteSnapshot`'s `dirty/preserveDirty` branching | ✅ | `applyRemoteSnapshot` now preserves object references for unchanged graph items and rejects empty Yjs snapshots unless explicitly allowed. |
+| 8 | Remove `draftRevision` / `savedRevision` / `remoteVersion` | ✅ | `store-types.ts` no longer exposes revision counters or canvas-level dirty/saving fields. |
+| 9 | Stop publishing `workflow.definition.updated` | ✅ | The server no longer publishes definition-change events, the shared workflow event contract no longer exposes that type, and graph changes flow only through the Yjs sync channel. |
+| 10 | Add optimistic locking to `checkpointWorkflow` | ✅ | `saveSnapshot` accepts `expectedVersion`; the Drizzle repository conditionally updates `workflow_yjs_snapshots`, explicit compaction returns `409 WORKFLOW_VERSION_CONFLICT` on stale rooms, and compaction deletes only covered update ids. |
+| 11 | Nest CRDT inside each node (e.g. `Y.Text` for prompts) | ✅ | Node identity/frame/order fields, text content, generation prompts, and media slot arrays use nested Yjs structures. Text and prompt edits use targeted nested `Y.Text` writes. |
+| 12 | Derive "saved" from state vectors | ✅ retired | The client no longer has a canvas-level autosave dirty path in the active workflow canvas feature. Durability is represented by server append-log persistence plus conditional checkpoint compaction. |
 
 ---
 
@@ -43,7 +45,7 @@ unfinished or were left in for now; they are tracked in
                   └────┬───────────────────────────────────────────┘
                        │
                        │  WebSocket /collab/:room
-                       │   validate → persist → apply → broadcast (except sender)
+                       │   persist → apply → broadcast original update
        ┌───────────────┼────────────────┐
        │               │                │
   ┌────▼────┐     ┌────▼────┐      ┌────▼────┐
@@ -70,46 +72,16 @@ keeps for ergonomic selectors.
 ### Rule 1 — server never modifies the op it receives
 
 Implemented in
-`apps/api/src/modules/workflows/collaboration/workflow-yjs-room.service.ts:188-207`:
-
-```ts
-if (messageType === messageSync) {
-  encoding.writeVarUint(encoder, messageSync)
-  const { syncMessageType, update } = readSyncMessage(decoder, encoder, room.y.ydoc)
-  if (encoding.length(encoder) > 1) {
-    sendBinary(input.connection, encoding.toUint8Array(encoder))
-  }
-  if (
-    (syncMessageType === syncProtocol.messageYjsUpdate ||
-      syncMessageType === syncProtocol.messageYjsSyncStep2) &&
-    update && update.byteLength > 0
-  ) {
-    await this.#withWorkflowLock(room.workflowId, async () => {
-      validateWorkflowYjsUpdate(room, update)
-      await this.#persistUpdate(room, update)
-      Y.applyUpdate(room.y.ydoc, update, input.connection)
-    })
-    broadcast(room, encodeSyncUpdate(update), input.connection)
-  }
-}
-```
-
-Validation runs on a clone (`validateWorkflowYjsUpdate`), so the
-update bytes are not mutated. Broadcast excludes the sender's
-connection.
+`apps/api/src/modules/workflows/collaboration/workflow-yjs-room.service.ts`.
+The WebSocket hot path persists and applies the received update bytes,
+then broadcasts those same bytes with sender exclusion. Full graph
+validation is reserved for initial import, snapshot replacement, and
+checkpoint compaction.
 
 ### Rule 2 — client never reads its own ydoc and writes back
 
-The only client-side write path is `withYDoc` in
-`sync/yjs/workflow-yjs-commands.ts:32-38`:
-
-```ts
-const withYDoc = (mutate: (y: WorkflowYDocHandles, workflowId: string) => void): void => {
-  const runtime = getWorkflowYjsRuntime()
-  if (!runtime) return
-  runtime.y.ydoc.transact(() => mutate(runtime.y, runtime.workflowId), 'mina-local')
-}
-```
+The client-side workflow canvas write path goes through runtime-bound
+commands in `sync/yjs/workflow-yjs-commands.ts`.
 
 All mutations originate from a UI event and call `mutate` with fresh
 data (e.g. `node.position`), never from a previously exported ydoc
@@ -118,59 +90,36 @@ snapshot. The post-save reconcile that used to live in
 
 ### Rule 3 — single commit point
 
-Each UI event reaches one of the methods on `workflowYjsCommands`
-(`workflow-yjs-commands.ts:111-409`) and each method ends in exactly
-one `withYDoc(...)` call. Slices delegate directly:
-
-```ts
-// slices/graph-slice.ts
-setNodeFrame: (input) => workflowYjsCommands.setNodeFrame(input),
-```
+Each UI event reaches one of the methods on `workflowYjsCommands` and
+store slices delegate to those commands.
 
 No queue. No microtask. No fan-out.
 
 ### Rule 4 — one writer into the projection
 
-`sync/yjs/yjs-sync.ts:53-75` defines `projectYjsToStore`, the single
+`sync/yjs/yjs-sync.ts` defines `projectYjsToStore`, the single
 function that copies ydoc state into the Zustand store. It is called
 in three places (`onUpdate`, `onSync`, and once after provider mount),
-all inside the same effect. Nothing else calls `applyRemoteSnapshot`
-in production.
+all inside the same effect. The sink includes an empty-snapshot guard so
+pre-sync empty ydocs cannot wipe a hydrated canvas.
 
 ### Rule 5 — collaboration revisions removed
 
-`store-types.ts` has no `draftRevision`, `savedRevision`,
-`remoteVersion`. The remaining numbers are:
-
-- `state.version` — mirror of `workflow.version` from the DB row,
-  written only by `hydrateFromServer` and `acknowledgeSaved`.
-- `Y.encodeStateVector(ydoc)` — used internally by the Yjs sync
-  protocol; the application code does not read it.
+`store-types.ts` has no `draftRevision`, `savedRevision`, or
+`remoteVersion`. The remaining `version` mirrors the workflow row
+version, and Yjs state vectors stay inside the Yjs sync/storage layer.
 
 The redundant counters from `01-problem-analysis.md` §4 are gone.
 
 ### Rule 6 — save is just a snapshot trigger
 
-`use-workflow-autosave.ts:36-58`:
-
-```ts
-mutationFn: async () => ({
-  response: await checkpointWorkflowCollaboration(workflowId, {
-    ...(snapshot.name || fallbackName ? { name: snapshot.name || fallbackName } : {}),
-  }),
-}),
-onSuccess: ({ response }) => {
-  acknowledgeSaved({ version: response.item.version })
-  queryClient.setQueryData(workflowKeys.detail(workflowId), response)
-},
-```
-
-No state goes up. No state comes down (other than the workflow `version`
-to refresh the read model). The endpoint's server-side handler
-(`workflow-collaboration.routes.ts:24-45`,
-`workflow-yjs-room.service.ts:250-276`) exports the *current* server
-ydoc snapshot, persists it as the DB read-model row, and returns the
-new version. The client's ydoc is never touched.
+No client graph state goes up for checkpointing. The endpoint's
+server-side handler exports the *current* server ydoc snapshot, persists
+it as the DB read-model row, and returns the new version. Checkpoint
+writes are conditional on the room's expected snapshot version; stale
+rooms return `409 WORKFLOW_VERSION_CONFLICT` and reload from the latest
+persisted snapshot plus update log. The client's ydoc is never touched by
+the checkpoint response.
 
 ---
 
@@ -179,8 +128,9 @@ new version. The client's ydoc is never touched.
 These behaviours can be verified by reading the new code without
 running it:
 
-1. **No client-side ydoc round-trip.** Search confirms zero call sites
-   of `importWorkflowSnapshotToYjs` outside of `yjs-document.spec.ts`.
+1. **No client-side save round-trip.** Production save/checkpoint code
+   does not export a client ydoc snapshot and import it back into the
+   same live doc.
 2. **Server broadcast excludes sender.** `broadcast(room, …,
    input.connection)` in `workflow-yjs-room.service.ts:205`.
 3. **All Zustand graph mutations route through ydoc.** Every action in
@@ -189,31 +139,27 @@ running it:
 4. **`applyRemoteSnapshot` has a single production caller.** That
    caller is `projectYjsToStore` inside `yjs-sync.ts`, which is the
    ydoc → store sink described by Rule 4.
-5. **Per-workflow lock guarantees in-order updates and checkpoints.**
-   `#withWorkflowLock` chains promises by workflow id; both the
-   validate-persist-apply triple and the checkpoint compaction acquire
-   it.
+5. **Per-workflow in-process lock plus DB version checks guard checkpoints.**
+   `#withWorkflowLock` chains promises by workflow id inside one
+   process, while `expectedVersion` on snapshot writes rejects
+   cross-instance stale checkpoint saves.
 6. **Saved binary updates can rebuild the room on cold start.**
    `#createRoom` in `workflow-yjs-room.service.ts:288-318` applies the
    snapshot and then every appended update before publishing the room,
    so a server restart is transparent to clients.
+7. **Compaction does not drop concurrent append-log updates.**
+   The room reloads persisted updates before export and deletes only the
+   update ids included in the saved snapshot.
+8. **Invalid append-log updates do not poison snapshots.**
+   Snapshot reads and compaction validate the exported graph. If the
+   persisted update log contains an invalid graph update, the room is
+   rebuilt from the last valid snapshot, valid updates are replayed, and
+   invalid update ids are deleted.
 
 ---
 
-## 5. Items deferred to the next iteration
+## 5. Deferred Work
 
-The audit table at the top shows three items that did not land. None
-of them are required for the new model to function safely under
-typical concurrent use; they are quality improvements.
-
-- **Optimistic locking on `checkpointWorkflow`** would protect against
-  cross-instance races if the API is ever horizontally scaled.
-- **Nested CRDTs per node** would give finer-grained merge semantics
-  (text fields collaborable at character level).
-- **State-vector-derived saved indicator** would tighten the UX
-  contract for offline edits — see `04-remaining-issues.md` §2 for the
-  scenario where the current `dirty` flag desynchronizes from real
-  durability state.
-
-These can be picked up independently of the residual bugs in §1 of
-that document.
+No P1/P2/P3 collaboration guardrail from the refactor audit remains
+open. Future node-internal fields should use the same nested Yjs
+structure if they become collaboratively edited.

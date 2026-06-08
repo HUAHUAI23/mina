@@ -1,9 +1,11 @@
+import { expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { NodeMediaSlotItem } from '@mina/contracts/modules/media'
 
 import { I18nProvider } from '../../../../app/i18n-provider'
 import { useCanvasUiStore, type ComposerDraftState } from '../../store/canvas-ui-store'
+import { listAllClientModels } from '../../forms/registry/client-model-registry'
 import { MediaTaskFormProvider } from '../media-task-form'
 import { composerRegistry } from '../registry'
 import type { ComposerRuntime } from '../types'
@@ -60,7 +62,6 @@ const renderDraftComposer = (draft: ComposerDraftState, mode: 'collapsed' | 'exp
               runError={draft.error}
               running={Boolean(runtime.runningNodeId)}
               submitDisabled={Object.values(draft.uploads).some((entry) => entry.status === 'uploading')}
-              submitLabel="Insert node"
             />
           )}
         </MediaTaskFormProvider>
@@ -69,66 +70,56 @@ const renderDraftComposer = (draft: ComposerDraftState, mode: 'collapsed' | 'exp
   )
 }
 
-const emptyBlocks = composerRegistry.resolve({ kind: 'empty' })
-if (emptyBlocks.length !== 1 || emptyBlocks[0]?.id !== 'empty-media-composer') {
-  throw new Error('Empty selection should resolve to the explicit empty media composer block only.')
-}
+test('empty media composer resolves and renders collapsed, expanded, and uploading states', () => {
+  const emptyBlocks = composerRegistry.resolve({ kind: 'empty' })
+  expect(emptyBlocks).toHaveLength(1)
+  expect(emptyBlocks[0]?.id).toBe('empty-media-composer')
 
-const collapsedDraft: ComposerDraftState = {
-  expanded: false,
-  mediaSlots: {},
-  task: draftTask,
-  uploads: {},
-}
-const collapsedHtml = renderDraftComposer(collapsedDraft, 'collapsed')
+  const collapsedDraft: ComposerDraftState = {
+    expanded: false,
+    mediaSlots: {},
+    task: draftTask,
+    uploads: {},
+  }
+  const collapsedHtml = renderDraftComposer(collapsedDraft, 'collapsed')
 
-if (!collapsedHtml.includes('aria-label="Draft composer"')) {
-  throw new Error('Collapsed empty composer should render the draft composer surface.')
-}
-if (!collapsedHtml.includes('grid-cols-[auto_minmax(0,1fr)_auto]')) {
-  throw new Error('Collapsed empty composer should use a content-sized media column.')
-}
-if (!collapsedHtml.includes('data-variant="collapsed"') || !collapsedHtml.includes('[--composer-media-width:46px]')) {
-  throw new Error('Collapsed empty composer should render the compact media slot variant.')
-}
-if (!collapsedHtml.includes('aria-label="Insert node"') || !collapsedHtml.includes('aria-label="Prompt"')) {
-  throw new Error('Collapsed empty composer should expose prompt and insert controls.')
-}
-if (collapsedHtml.includes('Attach file') || collapsedHtml.includes('Add image') || collapsedHtml.includes('Video model') || collapsedHtml.includes('Image model')) {
-  throw new Error('Collapsed empty composer should not render separate attach buttons or model hints.')
-}
-if (collapsedHtml.includes('Model configuration') || collapsedHtml.includes('Advanced settings')) {
-  throw new Error('Collapsed empty composer should not render expanded model configuration.')
-}
+  expect(collapsedHtml).toContain('aria-label="Draft composer"')
+  expect(collapsedHtml).toContain('grid-cols-[auto_minmax(0,1fr)_auto]')
+  expect(collapsedHtml).toContain('data-variant="collapsed"')
+  expect(collapsedHtml).toContain('[--composer-media-width:46px]')
+  expect(collapsedHtml).toContain('aria-label="Run"')
+  expect(collapsedHtml).toContain('aria-label="Prompt"')
+  expect(collapsedHtml).not.toContain('Insert node')
+  expect(collapsedHtml).not.toContain('Attach file')
+  expect(collapsedHtml).not.toContain('Add image')
+  expect(collapsedHtml).not.toContain('Video model')
+  expect(collapsedHtml).not.toContain('Image model')
+  expect(collapsedHtml).not.toContain('Model configuration')
+  expect(collapsedHtml).not.toContain('Advanced settings')
 
-const expandedHtml = renderDraftComposer({
-  expanded: true,
-  mediaSlots: { inputImages: [uploadedMedia] },
-  task: draftTask,
-  uploads: {},
-}, 'expanded')
+  const expandedHtml = renderDraftComposer({
+    expanded: true,
+    mediaSlots: { inputImages: [uploadedMedia] },
+    task: draftTask,
+    uploads: {},
+  }, 'expanded')
 
-if (!expandedHtml.includes('aria-label="Node composer"') || !expandedHtml.includes('aria-label="Model configuration"')) {
-  throw new Error('Expanded empty composer should reuse the full media composer shell.')
-}
-if (!expandedHtml.includes('Gemini 3.1 Flash Image') || !expandedHtml.includes('Veo 3.1')) {
-  throw new Error('Expanded empty composer should expose registered image and video models.')
-}
-if (!expandedHtml.includes('data-variant="attachment"')) {
-  throw new Error('Expanded empty composer should render media slots in attachment mode.')
-}
+  expect(expandedHtml).toContain('aria-label="Node composer"')
+  expect(expandedHtml).toContain('aria-label="Model configuration"')
+  expect(expandedHtml).toContain('Gemini 3.1 Flash Image')
+  expect(listAllClientModels('image_generation').some((spec) => spec.displayName === 'Gemini 3.1 Flash Image')).toBe(true)
+  expect(listAllClientModels('video_generation').some((spec) => spec.displayName === 'Veo 3.1')).toBe(true)
+  expect(expandedHtml).toContain('data-variant="attachment"')
 
-const uploadingHtml = renderDraftComposer({
-  expanded: false,
-  mediaSlots: {},
-  task: draftTask,
-  uploads: {
-    upload_1: { slot: 'inputImages', status: 'uploading' },
-  },
-}, 'collapsed')
+  const uploadingHtml = renderDraftComposer({
+    expanded: false,
+    mediaSlots: {},
+    task: draftTask,
+    uploads: {
+      upload_1: { slot: 'inputImages', status: 'uploading' },
+    },
+  }, 'collapsed')
 
-if (!uploadingHtml.includes('disabled=""') || !uploadingHtml.includes('title="Uploading"')) {
-  throw new Error('Uploading draft composer should disable send and expose upload status.')
-}
-
-console.log('empty media composer behavior checks passed')
+  expect(uploadingHtml).toContain('disabled=""')
+  expect(uploadingHtml).toContain('aria-label="Uploading"')
+})

@@ -1,33 +1,28 @@
+import { expect, test } from 'bun:test'
+
 import { createCanvasPerformanceFixture } from '../utils/performance-fixture'
 import { FlowProjectionCache } from './flow-projection-cache'
 
-const fixture = createCanvasPerformanceFixture(20)
-const cache = new FlowProjectionCache()
-const first = cache.projectGraph(fixture)
-const second = cache.projectGraph(fixture)
+test('flow projection cache reuses unchanged projections', () => {
+  const fixture = createCanvasPerformanceFixture(20)
+  const cache = new FlowProjectionCache()
+  const first = cache.projectGraph(fixture)
+  const second = cache.projectGraph(fixture)
 
-if (first.nodes !== second.nodes || first.edges !== second.edges) {
-  throw new Error('Projection cache did not reuse graph arrays for identical input.')
-}
+  expect(second.nodes).toBe(first.nodes)
+  expect(second.edges).toBe(first.edges)
 
-const nextNodes = fixture.nodes.map((node, index) =>
-  index === 0
-    ? {
-        ...node,
-        data: { ...node.data, title: 'Changed title' },
-      }
-    : node,
-)
-const third = cache.projectGraph({ edges: fixture.edges, nodes: nextNodes })
+  const nextNodes = fixture.nodes.map((node, index) =>
+    index === 0
+      ? {
+          ...node,
+          data: { ...node.data, title: 'Changed title' },
+        }
+      : node,
+  )
+  const third = cache.projectGraph({ edges: fixture.edges, nodes: nextNodes })
 
-if (third.nodes === first.nodes) {
-  throw new Error('Projection cache reused node array after a node changed.')
-}
-if (third.nodes[1] !== first.nodes[1]) {
-  throw new Error('Projection cache rebuilt an unrelated flow node.')
-}
-if (third.edges !== first.edges) {
-  throw new Error('Projection cache rebuilt unchanged edge array.')
-}
-
-console.log('flow projection cache checks passed')
+  expect(third.nodes).not.toBe(first.nodes)
+  expect(third.nodes[1]).toBe(first.nodes[1])
+  expect(third.edges).toBe(first.edges)
+})

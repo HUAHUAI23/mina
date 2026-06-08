@@ -1,4 +1,6 @@
+import { test } from 'bun:test'
 import type { NodeMediaSlotItem } from '@mina/contracts/modules/media'
+import { Position } from '@xyflow/react'
 
 import { selectWorkflowCanvasNodes } from './canvas-selection-actions'
 import { useCanvasStore } from './canvas-store'
@@ -21,22 +23,79 @@ const mediaObjectItem: NodeMediaSlotItem = {
   source: { type: 'media_object', mediaObjectId: 'media_uploaded' },
 }
 
-useCanvasUiStore.setState({
-  activeNodePanel: undefined,
-  composerDraft: {
-    expanded: false,
-    mediaSlots: {},
-    task: defaultTask,
-    uploads: {},
-  },
-  selectedNodeIds: [],
-})
+test('canvas ui store handles panels, add menu, and draft composer state', () => {
+  useCanvasUiStore.setState({
+    activeNodePanel: undefined,
+    addMenu: undefined,
+    composerDraft: {
+      expanded: false,
+      mediaSlots: {},
+      task: defaultTask,
+      uploads: {},
+    },
+    selectedNodeIds: [],
+  })
 
 useCanvasUiStore.getState().openNodePanel('node_1', 'config')
 useCanvasUiStore.getState().selectNodeIds([])
 
+if (useCanvasUiStore.getState().activeNodePanel) {
+  throw new Error('Clearing selection should close the active config panel.')
+}
+
+useCanvasUiStore.getState().openNodePanel('node_1', 'config')
+useCanvasUiStore.getState().selectNodeIds(['node_1', 'node_2'])
+if (useCanvasUiStore.getState().activeNodePanel) {
+  throw new Error('Multi-selection should close the active config panel.')
+}
+
+useCanvasUiStore.getState().openNodePanel('node_1', 'config')
+useCanvasUiStore.getState().selectNodeIds(['node_1'])
 if (useCanvasUiStore.getState().activeNodePanel?.nodeId !== 'node_1') {
-  throw new Error('Selection changes should not close the active config panel.')
+  throw new Error('Selecting the active node should keep its config panel open.')
+}
+
+useCanvasUiStore.getState().openAddMenu({
+  containerSize: { height: 600, width: 800 },
+  flowPosition: { x: 120, y: 160 },
+  scope: { scope: 'root' },
+  screenPosition: { x: 220, y: 260 },
+  trigger: 'canvas',
+})
+if (useCanvasUiStore.getState().activeNodePanel) {
+  throw new Error('Opening the canvas add menu should close the active config panel.')
+}
+if (useCanvasUiStore.getState().addMenu?.trigger !== 'canvas') {
+  throw new Error('openAddMenu should store the current add menu state.')
+}
+useCanvasUiStore.getState().openNodePanel('node_1', 'config')
+if (useCanvasUiStore.getState().addMenu) {
+  throw new Error('Opening a config panel should close the canvas add menu.')
+}
+useCanvasUiStore.getState().openAddMenu({
+  containerSize: { height: 600, width: 800 },
+  flowPosition: { x: 120, y: 160 },
+  scope: { scope: 'root' },
+  screenPosition: { x: 220, y: 260 },
+  sourceId: 'node_1',
+  trigger: 'connection',
+}, {
+  sourcePosition: Position.Right,
+  sourceX: 120,
+  sourceY: 160,
+  targetPosition: Position.Left,
+  targetX: 220,
+  targetY: 260,
+})
+if (!useCanvasUiStore.getState().addMenuPreviewLine) {
+  throw new Error('openAddMenu should store the optional menu preview line.')
+}
+useCanvasUiStore.getState().closeAddMenu()
+if (useCanvasUiStore.getState().addMenu) {
+  throw new Error('closeAddMenu should clear add menu state.')
+}
+if (useCanvasUiStore.getState().addMenuPreviewLine) {
+  throw new Error('closeAddMenu should clear add menu preview line state.')
 }
 
 useCanvasUiStore.getState().closeNodePanel()
@@ -147,8 +206,7 @@ if (draftAfterUpload.uploads.upload_2 || draftAfterUpload.mediaSlots.inputImages
 useCanvasUiStore.getState().setDraftExpanded(true)
 selectWorkflowCanvasNodes([])
 
-if (useCanvasUiStore.getState().composerDraft.expanded) {
-  throw new Error('Clicking the canvas with no selected node should collapse the draft composer.')
-}
-
-console.log('canvas ui store checks passed')
+  if (useCanvasUiStore.getState().composerDraft.expanded) {
+    throw new Error('Clicking the canvas with no selected node should collapse the draft composer.')
+  }
+})

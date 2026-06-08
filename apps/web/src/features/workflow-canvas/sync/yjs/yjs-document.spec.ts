@@ -1,150 +1,175 @@
+import { expect, test } from 'bun:test'
 import * as Y from 'yjs'
-import { createCanvasPerformanceFixture } from '../../utils/performance-fixture'
+
 import { isMediaGenerationNode } from '../../domain/canvas-node-types'
+import { createCanvasPerformanceFixture } from '../../utils/performance-fixture'
 import {
   createWorkflowYDoc,
   exportWorkflowSnapshotFromYjs,
   importWorkflowSnapshotToYjs,
   readWorkflowNodeFromYjs,
-  writeWorkflowNode,
   workflowYjsSnapshotMatches,
+  writeWorkflowNode,
 } from './yjs-document'
 
-const fixture = createCanvasPerformanceFixture(20)
-const y = createWorkflowYDoc()
+test('workflow yjs document imports workflow snapshots into nested maps', () => {
+  const fixture = createCanvasPerformanceFixture(20)
+  const y = createWorkflowYDoc()
 
-importWorkflowSnapshotToYjs(y, fixture)
+  importWorkflowSnapshotToYjs(y, fixture)
 
-if (!workflowYjsSnapshotMatches(exportWorkflowSnapshotFromYjs(y), fixture)) {
-  throw new Error('Yjs snapshot did not match imported workflow fixture.')
-}
-
-if (!(y.nodes.get('perf_node_0') instanceof Y.Map)) {
-  throw new Error('Yjs import should store workflow nodes as nested maps.')
-}
-
-y.nodeFrames.set('perf_node_0', { position: { x: 99, y: 101 } })
-
-const moved = exportWorkflowSnapshotFromYjs(y).nodes.find((node) => node.id === 'perf_node_0')
-if (moved?.position.x !== 99 || moved.position.y !== 101) {
-  throw new Error('Yjs node frame did not update exported node position.')
-}
-
-y.nodes.set('remote_only_node', {
-  ...fixture.nodes[0]!,
-  id: 'remote_only_node',
-  position: { x: 999, y: 999 },
+  expect(workflowYjsSnapshotMatches(exportWorkflowSnapshotFromYjs(y), fixture)).toBe(true)
+  expect(y.nodes.get('perf_node_0') instanceof Y.Map).toBe(true)
 })
-const remoteOnlyNode = exportWorkflowSnapshotFromYjs(y).nodes.find((node) => node.id === 'remote_only_node')
-if (!remoteOnlyNode) {
-  throw new Error('Yjs export dropped a node that was missing from nodeOrder.')
-}
 
-const importedNode = readWorkflowNodeFromYjs(y.nodes.get('perf_node_0'))
-const fixtureNode = fixture.nodes[0]
-if (
-  importedNode?.data.nodeType === 'image_generation' &&
-  fixtureNode?.data.nodeType === 'image_generation' &&
-  importedNode.data.config.task?.prompt !== fixtureNode.data.config.task?.prompt
-) {
-  throw new Error('Nested Yjs node export should preserve task prompt text.')
-}
+test('workflow yjs document exports frame overrides and normalizes parent extent', () => {
+  const fixture = createCanvasPerformanceFixture(20)
+  const y = createWorkflowYDoc()
 
-const fallbackNode = readWorkflowNodeFromYjs(y.nodes.get('perf_node_0'))
-if (!fallbackNode || !fixtureNode || fallbackNode.position.x !== fixtureNode.position.x || fallbackNode.position.y !== fixtureNode.position.y) {
-  throw new Error('Nested Yjs node export should preserve fallback node position without nodeFrames.')
-}
+  importWorkflowSnapshotToYjs(y, fixture)
+  y.nodeFrames.set('perf_node_0', { position: { x: 99, y: 101 } })
 
-const legacyY = createWorkflowYDoc()
-const legacyNode = fixture.nodes[1]
-if (!isMediaGenerationNode(legacyNode) || legacyNode.data.nodeType !== 'image_generation' || !legacyNode.data.config.task) {
-  throw new Error('Yjs legacy migration fixture should use an image-generation node.')
-}
-const legacyNext = structuredClone(legacyNode)
-legacyNext.data.config.task = {
-  ...legacyNode.data.config.task,
-  prompt: 'Patched legacy JSON node',
-}
-legacyY.nodes.set(legacyNode.id, structuredClone(legacyNode))
-writeWorkflowNode(legacyY.nodes, legacyNext)
-const legacyPatched = readWorkflowNodeFromYjs(legacyY.nodes.get(legacyNode.id))
-if (
-  !legacyPatched ||
-  !(legacyY.nodes.get(legacyNode.id) instanceof Y.Map) ||
-  legacyPatched.type !== legacyNode.type ||
-  legacyPatched.data.title !== legacyNode.data.title ||
-  legacyPatched.data.nodeType !== 'image_generation' ||
-  legacyPatched.data.config.task?.prompt !== 'Patched legacy JSON node'
-) {
-  throw new Error('Writing a legacy JSON node should migrate it to a complete nested Y.Map node.')
-}
+  const moved = exportWorkflowSnapshotFromYjs(y).nodes.find((node) => node.id === 'perf_node_0')
+  expect(moved?.position).toEqual({ x: 99, y: 101 })
 
-const invariantY = createWorkflowYDoc()
-const invariantNode = fixture.nodes[2]
-if (!isMediaGenerationNode(invariantNode) || invariantNode.data.nodeType !== 'image_generation' || !invariantNode.data.config.task) {
-  throw new Error('Yjs invariant fixture should use an image-generation node.')
-}
-const invariantTask = invariantNode.data.config.task
-writeWorkflowNode(invariantY.nodes, invariantNode)
-invariantY.nodeOrder.push([invariantNode.id])
-const invariantRoundTrip = exportWorkflowSnapshotFromYjs(invariantY).nodes[0]
-if (
-  !invariantRoundTrip ||
-  invariantRoundTrip.type !== invariantNode.type ||
-  invariantRoundTrip.data.title !== invariantNode.data.title ||
-  invariantRoundTrip.data.nodeType !== invariantNode.data.nodeType
-) {
-  throw new Error('writeWorkflowNode should round-trip node identity fields.')
-}
+  const legacyExtentNode = {
+    ...fixture.nodes[1]!,
+    extent: 'parent' as const,
+    id: 'legacy_extent_node',
+    parentId: 'legacy_group',
+  }
+  y.nodes.set('legacy_extent_node', structuredClone(legacyExtentNode))
+  y.nodeFrames.set('legacy_extent_node', {
+    parentId: 'legacy_group',
+    position: { x: 12, y: 34 },
+    width: legacyExtentNode.width,
+  })
 
-const rewrittenNode = structuredClone(invariantNode)
-rewrittenNode.data.title = 'Identity fields survive rewrites'
-writeWorkflowNode(invariantY.nodes, rewrittenNode)
-const promptNode = structuredClone(rewrittenNode)
-promptNode.data.config.task = {
-  ...invariantTask,
-  prompt: 'Prompt rewritten through Y.Text',
-}
-writeWorkflowNode(invariantY.nodes, promptNode)
-const storedNode = invariantY.nodes.get(invariantNode.id)
-if (!(storedNode instanceof Y.Map)) {
-  throw new Error('writeWorkflowNode should store nodes as Y.Map entries.')
-}
-if (storedNode.get('id') !== invariantNode.id || storedNode.get('type') !== invariantNode.type) {
-  throw new Error('writeWorkflowNode should keep top-level identity fields across rewrites.')
-}
-const storedData = storedNode.get('data')
-if (!(storedData instanceof Y.Map)) {
-  throw new Error('writeWorkflowNode should store node data as a Y.Map.')
-}
-if (storedData.get('nodeType') !== invariantNode.data.nodeType || storedData.get('title') !== 'Identity fields survive rewrites') {
-  throw new Error('writeWorkflowNode should keep data identity fields across rewrites.')
-}
-const storedConfig = storedData.get('config')
-const storedTask = storedConfig instanceof Y.Map ? storedConfig.get('task') : undefined
-const storedPrompt = storedTask instanceof Y.Map ? storedTask.get('prompt') : undefined
-if (!(storedPrompt instanceof Y.Text) || storedPrompt.toString() !== 'Prompt rewritten through Y.Text') {
-  throw new Error('writeWorkflowNode should preserve prompt as Y.Text across rewrites.')
-}
+  const legacyExtentExport = exportWorkflowSnapshotFromYjs(y).nodes.find((node) => node.id === 'legacy_extent_node')
+  expect(legacyExtentExport?.parentId).toBe('legacy_group')
+  expect(legacyExtentExport?.extent).toBe('parent')
+})
 
-const corruptY = createWorkflowYDoc()
-const corruptNode = new Y.Map<unknown>()
-corruptNode.set('id', 'corrupt_node')
-corruptY.nodes.set('corrupt_node', corruptNode)
-let corruptNodeThrew = false
-try {
-  readWorkflowNodeFromYjs(corruptNode)
-} catch {
-  corruptNodeThrew = true
-}
-if (!corruptNodeThrew) {
-  throw new Error('readWorkflowNodeFromYjs should throw on corrupt nested Y.Map nodes in development.')
-}
+test('workflow yjs export keeps remote-only nodes and nested text content', () => {
+  const fixture = createCanvasPerformanceFixture(20)
+  const y = createWorkflowYDoc()
 
-y.nodeOrder.delete(0, y.nodeOrder.length)
-const nodesAfterOrderClear = exportWorkflowSnapshotFromYjs(y).nodes
-if (nodesAfterOrderClear.length !== y.nodes.size) {
-  throw new Error('Yjs export should fall back to nodes map when nodeOrder is empty.')
-}
+  importWorkflowSnapshotToYjs(y, fixture)
+  y.nodes.set('remote_only_node', {
+    ...fixture.nodes[0]!,
+    id: 'remote_only_node',
+    position: { x: 999, y: 999 },
+  })
 
-console.log('workflow yjs document checks passed')
+  const exported = exportWorkflowSnapshotFromYjs(y)
+  expect(exported.nodes.some((node) => node.id === 'remote_only_node')).toBe(true)
+
+  const importedNode = readWorkflowNodeFromYjs(y.nodes.get('perf_node_0'))
+  const fixtureNode = fixture.nodes[0]
+  if (importedNode?.data.nodeType === 'image_generation' && fixtureNode?.data.nodeType === 'image_generation') {
+    expect(importedNode.data.config.task?.prompt).toBe(fixtureNode.data.config.task?.prompt)
+  }
+
+  const fallbackNode = readWorkflowNodeFromYjs(y.nodes.get('perf_node_0'))
+  expect(fallbackNode?.position).toEqual(fixtureNode?.position)
+})
+
+test('writeWorkflowNode migrates legacy JSON nodes into complete nested Y.Map nodes', () => {
+  const fixture = createCanvasPerformanceFixture(20)
+  const legacyY = createWorkflowYDoc()
+  const legacyNode = fixture.nodes[1]
+
+  expect(isMediaGenerationNode(legacyNode)).toBe(true)
+  expect(legacyNode?.data.nodeType).toBe('image_generation')
+  if (!isMediaGenerationNode(legacyNode) || legacyNode.data.nodeType !== 'image_generation' || !legacyNode.data.config.task) {
+    throw new Error('Invalid test fixture.')
+  }
+
+  const legacyNext = structuredClone(legacyNode)
+  legacyNext.data.config.task = {
+    ...legacyNode.data.config.task,
+    prompt: 'Patched legacy JSON node',
+  }
+  legacyY.nodes.set(legacyNode.id, structuredClone(legacyNode))
+  writeWorkflowNode(legacyY.nodes, legacyNext)
+
+  const legacyPatched = readWorkflowNodeFromYjs(legacyY.nodes.get(legacyNode.id))
+  expect(legacyY.nodes.get(legacyNode.id) instanceof Y.Map).toBe(true)
+  expect(legacyPatched?.type).toBe(legacyNode.type)
+  expect(legacyPatched?.data.title).toBe(legacyNode.data.title)
+  expect(legacyPatched?.data.nodeType).toBe('image_generation')
+  if (legacyPatched?.data.nodeType === 'image_generation') {
+    expect(legacyPatched.data.config.task?.prompt).toBe('Patched legacy JSON node')
+  }
+})
+
+test('writeWorkflowNode preserves identity fields and prompt Y.Text across rewrites', () => {
+  const fixture = createCanvasPerformanceFixture(20)
+  const invariantY = createWorkflowYDoc()
+  const invariantNode = fixture.nodes[2]
+
+  expect(isMediaGenerationNode(invariantNode)).toBe(true)
+  expect(invariantNode?.data.nodeType).toBe('image_generation')
+  if (!isMediaGenerationNode(invariantNode) || invariantNode.data.nodeType !== 'image_generation' || !invariantNode.data.config.task) {
+    throw new Error('Invalid test fixture.')
+  }
+
+  const invariantTask = invariantNode.data.config.task
+  writeWorkflowNode(invariantY.nodes, invariantNode)
+  invariantY.nodeOrder.push([invariantNode.id])
+
+  const invariantRoundTrip = exportWorkflowSnapshotFromYjs(invariantY).nodes[0]
+  expect(invariantRoundTrip?.type).toBe(invariantNode.type)
+  expect(invariantRoundTrip?.data.title).toBe(invariantNode.data.title)
+  expect(invariantRoundTrip?.data.nodeType).toBe(invariantNode.data.nodeType)
+
+  const rewrittenNode = structuredClone(invariantNode)
+  rewrittenNode.data.title = 'Identity fields survive rewrites'
+  writeWorkflowNode(invariantY.nodes, rewrittenNode)
+
+  const promptNode = structuredClone(rewrittenNode)
+  promptNode.data.config.task = {
+    ...invariantTask,
+    prompt: 'Prompt rewritten through Y.Text',
+  }
+  writeWorkflowNode(invariantY.nodes, promptNode)
+
+  const storedNode = invariantY.nodes.get(invariantNode.id)
+  expect(storedNode instanceof Y.Map).toBe(true)
+  if (!(storedNode instanceof Y.Map)) {
+    throw new Error('Invalid stored node.')
+  }
+
+  expect(storedNode.get('id')).toBe(invariantNode.id)
+  expect(storedNode.get('type')).toBe(invariantNode.type)
+
+  const storedData = storedNode.get('data')
+  expect(storedData instanceof Y.Map).toBe(true)
+  if (!(storedData instanceof Y.Map)) {
+    throw new Error('Invalid stored node data.')
+  }
+
+  expect(storedData.get('nodeType')).toBe(invariantNode.data.nodeType)
+  expect(storedData.get('title')).toBe('Identity fields survive rewrites')
+
+  const storedConfig = storedData.get('config')
+  const storedTask = storedConfig instanceof Y.Map ? storedConfig.get('task') : undefined
+  const storedPrompt = storedTask instanceof Y.Map ? storedTask.get('prompt') : undefined
+  expect(storedPrompt instanceof Y.Text).toBe(true)
+  expect(storedPrompt instanceof Y.Text ? storedPrompt.toString() : undefined).toBe('Prompt rewritten through Y.Text')
+})
+
+test('workflow yjs document rejects corrupt nested nodes and falls back when node order is empty', () => {
+  const fixture = createCanvasPerformanceFixture(20)
+  const y = createWorkflowYDoc()
+  const corruptY = createWorkflowYDoc()
+  const corruptNode = new Y.Map<unknown>()
+
+  corruptNode.set('id', 'corrupt_node')
+  corruptY.nodes.set('corrupt_node', corruptNode)
+  expect(() => readWorkflowNodeFromYjs(corruptNode)).toThrow()
+
+  importWorkflowSnapshotToYjs(y, fixture)
+  y.nodeOrder.delete(0, y.nodeOrder.length)
+  expect(exportWorkflowSnapshotFromYjs(y).nodes).toHaveLength(y.nodes.size)
+})

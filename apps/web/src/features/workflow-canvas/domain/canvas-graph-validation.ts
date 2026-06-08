@@ -44,11 +44,19 @@ export const collectWorkflowCanvasGraphViolations = (
     if (node.type !== node.data.nodeType) {
       violations.push(`Workflow node ${node.id} type must match node data type.`)
     }
+    if (isGroupNodeType(node.data.nodeType) && node.parentId) {
+      violations.push(`Workflow group node ${node.id} must be top-level; nested groups are not supported.`)
+    }
     if (node.parentId) {
       const parent = nodeMap.get(node.parentId)
       if (!parent || !isGroupNodeType(parent.data.nodeType)) {
         violations.push(`Workflow node ${node.id} parent must be a group node.`)
       }
+      if (node.extent !== 'parent') {
+        violations.push(`Workflow node ${node.id} must use parent extent when it has a parent.`)
+      }
+    } else if (node.extent !== undefined) {
+      violations.push(`Workflow node ${node.id} must not use parent extent without a parent.`)
     }
   }
 

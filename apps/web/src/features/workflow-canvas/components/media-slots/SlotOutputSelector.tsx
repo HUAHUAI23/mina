@@ -29,7 +29,7 @@ export function SlotOutputSelector({ item, onChange }: SlotOutputSelectorProps) 
     <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
       <select
         aria-label={m.workflow_canvas_output_role()}
-        className="min-h-10 rounded-lg border-0 bg-surface-container-high px-2.5 py-2 text-foreground outline-0 focus:bg-surface-container-lowest focus:shadow-[0_12px_28px_-18px_color-mix(in_oklch,var(--foreground)_18%,transparent)]"
+        className="min-h-10 rounded-lg border-0 bg-surface-container-high px-2.5 py-2 text-foreground outline-0 focus:bg-surface-container-lowest focus:shadow-sm"
         value={selector.role}
         onChange={(event) => {
           if (!isSelectorRole(event.target.value)) {
@@ -52,7 +52,7 @@ export function SlotOutputSelector({ item, onChange }: SlotOutputSelectorProps) 
       </select>
       <input
         aria-label={m.workflow_canvas_output_index()}
-        className="min-h-10 w-[72px] rounded-lg border-0 bg-surface-container-high px-2.5 py-2 text-foreground outline-0 focus:bg-surface-container-lowest focus:shadow-[0_12px_28px_-18px_color-mix(in_oklch,var(--foreground)_18%,transparent)]"
+        className="min-h-10 w-[72px] rounded-lg border-0 bg-surface-container-high px-2.5 py-2 text-foreground outline-0 focus:bg-surface-container-lowest focus:shadow-sm"
         min={0}
         type="number"
         value={selector.index}

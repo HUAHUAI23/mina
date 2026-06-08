@@ -1,9 +1,8 @@
 import { useStore } from '@tanstack/react-form'
 import type { DeepKeys } from '@tanstack/react-form'
-import { Plus, Zap, type LucideIcon } from 'lucide-react'
 
 import { useMessages } from '../../../../app/i18n-provider'
-import { AdvancedConfigGroup } from '../../forms/field-groups/AdvancedConfigGroup'
+import { RunControls } from '../../components/panels/RunControls'
 import { ModelConfigToolbar } from '../../forms/field-groups/ModelConfigToolbar'
 import {
   deriveGenerationMode,
@@ -24,19 +23,17 @@ interface MediaComposerShellProps {
   runError?: string | undefined
   running?: boolean | undefined
   submitDisabled?: boolean | undefined
-  submitIcon?: LucideIcon | undefined
   submitLabel?: string | undefined
 }
 
-const configSectionClassName = 'mina-wc-config-section relative grid gap-2 border-t border-[color:color-mix(in_oklch,var(--foreground-quaternary)_10%,transparent)] pt-3.5'
-const composerCardClassName = 'mina-wc-composer-card relative grid min-w-0 gap-(--composer-row-gap) overflow-visible [--composer-media-column:96px] [--composer-media-gap:14px] [--composer-media-width:64px] [--composer-row-gap:12px]'
-const composerBodyClassName = 'mina-wc-composer-body relative grid min-h-28 min-w-0 grid-cols-[var(--composer-media-column)_minmax(0,1fr)] items-start gap-(--composer-media-gap) overflow-visible'
+const configSectionClassName = 'mina-wc-config-section relative grid min-h-0 gap-2 rounded-[16px] bg-transparent p-0'
+const composerCardClassName = 'mina-wc-composer-card relative grid min-h-0 min-w-0 grid-rows-[minmax(0,auto)_minmax(0,1fr)] gap-(--composer-row-gap) overflow-hidden [--composer-media-column:80px] [--composer-media-gap:12px] [--composer-media-width:64px] [--composer-row-gap:10px]'
+const composerBodyClassName = 'mina-wc-composer-body relative grid min-h-24 min-w-0 grid-cols-[var(--composer-media-column)_minmax(0,1fr)] items-start gap-(--composer-media-gap) overflow-hidden rounded-[18px] bg-[color-mix(in_oklch,var(--surface-container-lowest)_44%,transparent)] p-2'
 const attachmentLayerClassName = 'mina-wc-attachment-layer pointer-events-none relative z-[4] min-w-0 w-(--composer-media-column)'
-const composerPromptClassName = 'mina-wc-composer-prompt relative z-[1] min-h-28 min-w-0'
-const composerPromptTextareaClassName = 'box-border max-h-[min(34dvh,320px)] min-h-28 overflow-y-auto p-0'
+const composerPromptClassName = 'mina-wc-composer-prompt relative z-[1] min-h-24 min-w-0 rounded-2xl bg-transparent p-0'
+const composerPromptTextareaClassName = 'box-border max-h-[min(24dvh,220px)] min-h-24 overflow-y-auto p-0'
 const collapsedShellClassName = 'mina-wc-empty-composer grid min-h-[52px] min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 bg-transparent p-0 max-[720px]:gap-2'
-const collapsedPromptInputClassName = 'h-11 max-h-11 min-h-11 min-w-0 truncate rounded-[14px] border-0 bg-transparent px-0 py-0 text-left text-[0.98rem] font-semibold leading-[2.75rem] text-foreground outline-0 placeholder:text-foreground-quaternary hover:bg-surface-container-low focus:bg-surface-container-low focus-visible:bg-surface-container-low'
-const collapsedRunButtonClassName = 'flex size-12 flex-none items-center justify-center rounded-full border-0 bg-foreground text-primary-foreground disabled:bg-surface-container-high disabled:text-foreground-quaternary'
+const collapsedPromptInputClassName = 'h-11 max-h-11 min-h-11 min-w-0 truncate rounded-[14px] border-0 bg-transparent px-2 py-0 text-left text-[0.98rem] font-semibold leading-[2.75rem] text-foreground outline-0 placeholder:text-foreground-quaternary hover:bg-surface-container-low focus:bg-surface-container-low focus-visible:bg-surface-container-low'
 const emptyErrorClassName = 'col-span-full m-0 text-[0.72rem] text-destructive'
 
 interface ComposerModelState {
@@ -213,13 +210,11 @@ function ComposerConfigSection({
   modelState,
   runError,
   running,
-  submitIcon,
   submitLabel,
 }: {
   modelState: ComposerModelState & { spec: ClientModelSpec }
   runError?: string | undefined
   running?: boolean | undefined
-  submitIcon?: LucideIcon | undefined
   submitLabel: string
 }) {
   const m = useMessages()
@@ -241,20 +236,13 @@ function ComposerConfigSection({
           void form.handleSubmit()
         }}
         runError={runError}
-        runIcon={submitIcon}
         running={running}
         setAdvancedOpen={(open) => setComposerAdvancedOpen(composerId, open)}
         spec={modelState.spec}
         submitLabel={submitLabel}
       />
 
-      {advancedOpen ? <AdvancedConfigGroup form={form} spec={modelState.spec} /> : null}
       {modelState.paramError ? <em className="mt-1 block text-[0.72rem] font-bold not-italic text-destructive">{modelState.paramError}</em> : null}
-
-      <div className="flex min-h-0 items-center justify-end gap-1.5 text-[0.78rem] font-black text-foreground-quaternary">
-        <Zap aria-hidden="true" size={13} />
-        <span>14</span>
-      </div>
     </section>
   )
 }
@@ -266,7 +254,6 @@ export function MediaComposerShell({
   runError,
   running,
   submitDisabled,
-  submitIcon,
   submitLabel,
 }: MediaComposerShellProps) {
   const m = useMessages()
@@ -274,7 +261,6 @@ export function MediaComposerShell({
   const modelState = useComposerModel({ modelScope, submitDisabled })
   const { canSubmit, currentValue, generationMode, spec } = modelState
   const resolvedSubmitLabel = submitLabel ?? m.workflow_canvas_run()
-  const SubmitIcon = submitIcon ?? (submitLabel ? Plus : Zap)
 
   if (!spec) {
     return (
@@ -291,18 +277,15 @@ export function MediaComposerShell({
           <ComposerMediaSection modelSpec={spec} onExpand={onExpand} variant="collapsed" />
         </div>
         <ComposerPromptSection currentValue={currentValue} mode="collapsed" nodeType={nodeType} onExpand={onExpand} />
-        <button
-          aria-label={resolvedSubmitLabel}
-          className={collapsedRunButtonClassName}
-          disabled={!canSubmit || running}
-          onClick={() => {
+        <RunControls
+          compact
+          disabled={!canSubmit || Boolean(running)}
+          label={mediaActions.uploading ? m.workflow_canvas_uploading() : m.workflow_canvas_run()}
+          onRun={() => {
             void form.handleSubmit()
           }}
-          title={mediaActions.uploading ? m.workflow_canvas_uploading() : resolvedSubmitLabel}
-          type="button"
-        >
-          <SubmitIcon aria-hidden="true" size={20} />
-        </button>
+          running={running}
+        />
         {runError ? <p className={emptyErrorClassName}>{runError}</p> : null}
       </section>
     )
@@ -319,7 +302,7 @@ export function MediaComposerShell({
         </div>
       </div>
 
-      <ComposerConfigSection modelState={{ ...modelState, spec }} runError={runError} running={running} submitIcon={SubmitIcon} submitLabel={resolvedSubmitLabel} />
+      <ComposerConfigSection modelState={{ ...modelState, spec }} runError={runError} running={running} submitLabel={resolvedSubmitLabel} />
     </section>
   )
 }

@@ -11,24 +11,27 @@ export interface NodeFrameSnapshot {
 
 export interface NodeDragSession {
   baseline: Record<string, NodeFrameSnapshot>
+  draggedNodeIds: string[]
   latest: Record<string, NodeFrameSnapshot>
   nodeIds: string[]
   startedAt: number
 }
 
-const frameFromFlowNode = (node: WorkflowFlowNode): NodeFrameSnapshot => ({
-  height: node.type === 'flow_group' || node.type === 'node_group' ? node.height ?? node.measured?.height : node.height,
+export const frameFromFlowNode = (node: WorkflowFlowNode): NodeFrameSnapshot => ({
+  height: node.height ?? node.measured?.height,
   parentId: node.parentId,
   position: node.position,
-  width: node.type === 'flow_group' || node.type === 'node_group' ? node.width ?? node.measured?.width : node.width,
+  width: node.width ?? node.measured?.width,
 })
 
 export const createNodeDragSession = (
   nodes: readonly WorkflowFlowNode[],
+  draggedNodeIds: readonly string[] = nodes.map((node) => node.id),
 ): NodeDragSession => {
   const baseline = Object.fromEntries(nodes.map((node) => [node.id, frameFromFlowNode(node)]))
   return {
     baseline,
+    draggedNodeIds: Array.from(new Set(draggedNodeIds)),
     latest: baseline,
     nodeIds: nodes.map((node) => node.id),
     startedAt: performance.now(),

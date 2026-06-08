@@ -1,6 +1,12 @@
 import { expect, test } from '@playwright/test'
 import type { APIRequestContext, Page } from '@playwright/test'
 
+declare const process: {
+  env: Record<string, string | undefined>
+  platform: string
+}
+
+
 interface AuthResponse {
   session: {
     expiresAt: string
@@ -27,6 +33,11 @@ interface WorkflowCreateResponse {
 
 interface WorkflowDetailResponse {
   item: {
+    edges: Array<{
+      id: string
+      source: string
+      target: string
+    }>
     id: string
     nodes: Array<{
       data: {
@@ -39,12 +50,19 @@ interface WorkflowDetailResponse {
         }>>
         nodeType: string
         title: string
+        config?: {
+          text?: string
+        }
       }
       id: string
+      extent?: 'parent'
+      parentId?: string
       position: {
         x: number
         y: number
       }
+      width?: number
+      height?: number
     }>
     version: number
   }
@@ -53,6 +71,17 @@ interface WorkflowDetailResponse {
 interface NodeScreenFrame {
   x: number
   y: number
+}
+
+interface NodeScreenBox extends NodeScreenFrame {
+  height: number
+  width: number
+}
+
+interface ViewportTransform {
+  x: number
+  y: number
+  zoom: number
 }
 
 interface CanvasPerfCounters {
@@ -83,6 +112,16 @@ declare global {
     __minaWorkflowCanvasYjs?: {
       matchesDocument(): boolean
       stateVector(): Uint8Array
+    }
+    __minaWorkflowCanvasRender?: {
+      nodes: Array<{
+        height?: number
+        id: string
+        parentId?: string
+        position: { x: number; y: number }
+        type: string
+        width?: number
+      }>
     }
     __minaWorkflowCanvasUi?: {
       activeNodePanel: { nodeId: string; panel: string } | undefined
@@ -193,10 +232,17 @@ const videoNodeWithMixedSlots = (id: string, index: number) => ({
     config: {
       task: {
         kind: 'video_generation',
-        provider: 'dev',
-        model: 'dev-video',
+        provider: 'volcengine',
+        model: 'doubao-seedance-2-0-260128',
         prompt: `Motion ${index}`,
-        params: { durationSeconds: 5, outputLastFrame: false, resolution: '720p' },
+        params: {
+          durationSeconds: 5,
+          generateAudio: false,
+          ratio: '16:9',
+          resolution: '720p',
+          returnLastFrame: false,
+          webSearch: false,
+        },
       },
     },
     mediaSlots: {
@@ -372,6 +418,32 @@ const firstVisibleDraggableNodeExcept = async (page: Page, excludedNodeId: strin
     throw new Error('No secondary draggable React Flow node is visible in the viewport.')
   }, excludedNodeId)
 
+const visibleDraggableNodeByType = async (page: Page, nodeType: string): Promise<VisibleNodeTarget> =>
+  page.locator(`.react-flow__node-${nodeType}.draggable`).evaluateAll((nodes) => {
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    for (const node of nodes) {
+      const rect = node.getBoundingClientRect()
+      const centerX = rect.left + rect.width / 2
+      const centerY = rect.top + rect.height / 2
+      if (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        centerX >= 0 &&
+        centerX <= viewportWidth &&
+        centerY >= 0 &&
+        centerY <= viewportHeight
+      ) {
+        const id = node.getAttribute('data-id')
+        if (!id) {
+          continue
+        }
+        return { id, x: centerX, y: centerY }
+      }
+    }
+    throw new Error(`No visible draggable ${nodeType} node is visible in the viewport.`)
+  })
+
 const visibleDraggableNodes = async (page: Page, count: number): Promise<VisibleNodeTarget[]> =>
   page.locator('.react-flow__node.draggable').evaluateAll((nodes, requestedCount) => {
     const viewportWidth = window.innerWidth
@@ -410,8 +482,53 @@ const readNodeScreenFrame = async (page: Page, nodeId: string): Promise<NodeScre
     }
   })
 
+const readNodeScreenBox = async (page: Page, nodeId: string): Promise<NodeScreenBox> =>
+  page.locator(`.react-flow__node[data-id="${nodeId}"]`).evaluate((node) => {
+    const rect = node.getBoundingClientRect()
+    return {
+      height: rect.height,
+      width: rect.width,
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    }
+  })
+
+const readFirstInteractiveSourceHandleFrame = async (page: Page): Promise<NodeScreenFrame> =>
+  page.locator('.mina-wc-handle-source .mina-wc-handle-orb').evaluateAll((handles) => {
+    for (const handle of handles) {
+      const rect = handle.getBoundingClientRect()
+      const x = rect.left + rect.width / 2
+      const y = rect.top + rect.height / 2
+      if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) {
+        continue
+      }
+      const topElement = document.elementFromPoint(x, y)
+      if (topElement?.closest('.react-flow__handle')) {
+        return { x, y }
+      }
+    }
+    throw new Error('No interactive source handle is visible in the viewport.')
+  })
+
+const readViewportTransform = async (page: Page): Promise<ViewportTransform> =>
+  page.locator('.react-flow__viewport').evaluate((viewport) => {
+    const transform = getComputedStyle(viewport).transform
+    const matrix = new DOMMatrixReadOnly(transform === 'none' ? undefined : transform)
+    return {
+      x: matrix.m41,
+      y: matrix.m42,
+      zoom: matrix.a,
+    }
+  })
+
 const readSelectedNodeIds = async (page: Page): Promise<string[]> =>
   page.evaluate(() => window.__minaWorkflowCanvasUi?.selectedNodeIds ?? [])
+
+const readActiveNodePanelId = async (page: Page): Promise<string | undefined> =>
+  page.evaluate(() => window.__minaWorkflowCanvasUi?.activeNodePanel?.nodeId)
+
+const readRenderNodeFrame = async (page: Page, nodeId: string) =>
+  page.evaluate((id) => window.__minaWorkflowCanvasRender?.nodes.find((node) => node.id === id), nodeId)
 
 const waitForYjsParity = async (page: Page): Promise<void> => {
   await expect
@@ -467,6 +584,25 @@ const selectNodes = async (page: Page, nodeIds: readonly string[]): Promise<void
       return nodeIds.every((nodeId) => selected.includes(nodeId))
     })
     .toBe(true)
+}
+
+const openCanvasAddMenuFromPane = async (
+  page: Page,
+  position: { x: number; y: number } = { x: 24, y: 24 },
+): Promise<void> => {
+  await page.locator('.react-flow__pane').evaluate((pane, inputPosition) => {
+    const rect = pane.getBoundingClientRect()
+    pane.dispatchEvent(new MouseEvent('dblclick', {
+      bubbles: true,
+      button: 0,
+      buttons: 0,
+      cancelable: true,
+      clientX: rect.left + inputPosition.x,
+      clientY: rect.top + inputPosition.y,
+      detail: 2,
+    }))
+  }, position)
+  await expect(page.getByRole('dialog', { name: 'Add node' })).toBeVisible()
 }
 
 test('workflow canvas drag/sync/reload keeps document commits bounded and Yjs parity intact', async ({ page, request }) => {
@@ -559,7 +695,37 @@ test('workflow canvas opens the config card when a node is clicked', async ({ pa
   const target = await firstVisibleDraggableNode(page)
   await page.mouse.click(target.x, target.y)
 
-  await expect(page.locator('.mina-wc-config-card')).toBeVisible()
+  await expect(page.locator('.mina-wc-composer-card')).toBeVisible()
+})
+
+test('workflow canvas edits text nodes inline without opening the dock', async ({ page, request }) => {
+  const auth = await register(request)
+  const workflow = await createWorkflow(request, auth.session.token, 20)
+  await installAuthSession(page, auth)
+
+  await page.goto(`/canvas/${workflow.item.id}`)
+  await page.locator('.react-flow').waitFor()
+  await expect(page.locator('.react-flow__node-text').first()).toBeVisible()
+  await waitForYjsParity(page)
+
+  const target = await visibleDraggableNodeByType(page, 'text')
+  await page.mouse.click(target.x, target.y)
+
+  const dockShell = page.locator('.mina-wc-dock-shell')
+  await expect(dockShell).toHaveAttribute('data-hidden', 'true')
+  await expect.poll(() => readActiveNodePanelId(page)).toBeUndefined()
+
+  const editor = page.locator(`.react-flow__node[data-id="${target.id}"] textarea`)
+  await expect(editor).toBeVisible()
+  await editor.fill('Inline canvas note')
+  await waitForYjsParity(page)
+
+  await expect
+    .poll(async () => {
+      const detail = await getWorkflowDetail(request, auth.session.token, workflow.item.id)
+      return detail.item.nodes.find((node) => node.id === target.id)?.data.config?.text
+    })
+    .toBe('Inline canvas note')
 })
 
 test('workflow canvas undo and redo controls restore graph edits without intercepting text editing', async ({ page, request }) => {
@@ -572,26 +738,20 @@ test('workflow canvas undo and redo controls restore graph edits without interce
   await expect(page.locator('.react-flow__node').first()).toBeVisible()
   await waitForYjsParity(page)
 
-  const undoButton = page.getByRole('button', { name: 'Undo' })
-  const redoButton = page.getByRole('button', { name: 'Redo' })
-  await expect(undoButton).toBeDisabled()
-  await expect(redoButton).toBeDisabled()
-
   const target = await firstVisibleDraggableNode(page)
   const before = await readNodeScreenFrame(page, target.id)
   await dragNodeBy(page, target.id, { x: 80, y: 36 })
   await waitForYjsParity(page)
-  await expect(undoButton).toBeEnabled()
+  await page.locator('.react-flow__pane').click({ position: { x: 10, y: 10 } })
 
-  await undoButton.click()
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Z' : 'Control+Z')
   await waitForYjsParity(page)
   await expect.poll(async () => {
     const frame = await readNodeScreenFrame(page, target.id)
     return Math.abs(frame.x - before.x) < 2 && Math.abs(frame.y - before.y) < 2
   }).toBe(true)
-  await expect(redoButton).toBeEnabled()
 
-  await redoButton.click()
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+Z' : 'Control+Shift+Z')
   await waitForYjsParity(page)
   const afterRedo = await readNodeScreenFrame(page, target.id)
   expect(Math.abs(afterRedo.x - before.x)).toBeGreaterThan(20)
@@ -603,14 +763,13 @@ test('workflow canvas undo and redo controls restore graph edits without interce
     return Math.abs(frame.x - before.x) < 2 && Math.abs(frame.y - before.y) < 2
   }).toBe(true)
 
-  const textTarget = await firstVisibleDraggableNodeExcept(page, target.id)
-  await page.mouse.click(textTarget.x, textTarget.y)
-  const promptField = page.locator('.mina-wc-config-card textarea').first()
+  const textTarget = await visibleDraggableNodeByType(page, 'text')
+  const promptField = page.locator(`.react-flow__node[data-id="${textTarget.id}"] textarea`)
   await expect(promptField).toBeVisible()
+  await promptField.click()
   await promptField.fill('Native text undo sentinel')
   await promptField.press(process.platform === 'darwin' ? 'Meta+Z' : 'Control+Z')
   await expect(promptField).not.toHaveValue('Native text undo sentinel')
-  await expect(redoButton).toBeEnabled()
 })
 
 test('workflow canvas dock shows empty prompt and expands into media composer', async ({ page, request }) => {
@@ -629,7 +788,7 @@ test('workflow canvas dock shows empty prompt and expands into media composer', 
   await expect(shell).toHaveAttribute('data-context', 'empty')
   await expect(emptyComposer).toBeVisible()
   await expect(emptyComposer.getByRole('textbox', { name: 'Prompt' })).toBeVisible()
-  await expect(emptyComposer.getByRole('button', { name: 'Insert node' })).toBeVisible()
+  await expect(emptyComposer.getByRole('button', { name: 'Run' })).toBeVisible()
   const emptyDockFrame = await dock.boundingBox()
   expect(emptyDockFrame).not.toBeNull()
   expect(emptyDockFrame?.y ?? 0).toBeGreaterThan(360)
@@ -645,7 +804,7 @@ test('workflow canvas dock shows empty prompt and expands into media composer', 
     }
   })
   await emptyComposer.getByRole('textbox', { name: 'Prompt' }).fill('A glass greenhouse at sunset')
-  await shell.getByRole('button', { name: 'Insert node' }).click()
+  await shell.getByRole('button', { name: 'Run' }).click()
   await expect(page.locator('.react-flow__node')).toHaveCount(21)
   await expect.poll(() => readSelectedNodeIds(page)).toHaveLength(1)
   await page.waitForTimeout(250)
@@ -702,6 +861,180 @@ test('workflow canvas dock shows empty prompt and expands into media composer', 
   expect(expandedDockFrame?.y ?? 0).toBeGreaterThan(250)
 })
 
+test('workflow canvas hides config during multi-selection operations and opens canvas add menu', async ({ page, request }) => {
+  const auth = await register(request)
+  const workflow = await createWorkflow(request, auth.session.token, 20)
+  await installAuthSession(page, auth)
+
+  await page.goto(`/canvas/${workflow.item.id}`)
+  await page.locator('.react-flow').waitFor()
+  await expect(page.locator('.react-flow__node').first()).toBeVisible()
+  await waitForYjsParity(page)
+
+  const target = await firstVisibleDraggableNode(page)
+  await page.mouse.click(target.x, target.y)
+  const dockShell = page.locator('.mina-wc-dock-shell')
+  await expect(dockShell).toHaveAttribute('data-context', 'node')
+  await expect.poll(() => readActiveNodePanelId(page)).toBe(target.id)
+
+  const secondary = await firstVisibleDraggableNodeExcept(page, target.id)
+  await selectNodes(page, [target.id, secondary.id])
+  await expect(page.locator('.mina-wc-persistent-selection-bounds')).toBeVisible()
+  await expect(dockShell).toHaveAttribute('data-context', 'multi')
+  await expect.poll(() => readActiveNodePanelId(page)).toBeUndefined()
+
+  await page.locator('.react-flow__pane').click({ position: { x: 24, y: 24 } })
+  await expect.poll(() => readSelectedNodeIds(page)).toHaveLength(0)
+  await openCanvasAddMenuFromPane(page)
+  await expect(page.getByRole('button', { name: /Text node/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Node group/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Flow group/ })).toBeVisible()
+  const beforeCount = await page.locator('.react-flow__node').count()
+  await page.getByRole('button', { name: /Text node/ }).click()
+  await expect(page.locator('.react-flow__node')).toHaveCount(beforeCount + 1)
+  await expect.poll(() => readSelectedNodeIds(page)).toHaveLength(1)
+  await expect(page.locator('.mina-wc-persistent-selection-bounds')).toHaveCount(0)
+  await expect.poll(() => readActiveNodePanelId(page)).toBeUndefined()
+  await expect(dockShell).toHaveAttribute('data-hidden', 'true')
+
+  await page.locator('.react-flow__pane').click({ position: { x: 24, y: 24 } })
+  await openCanvasAddMenuFromPane(page, { x: 120, y: 24 })
+  await page.getByRole('button', { name: /Node group/ }).click()
+  await expect(page.locator('.react-flow__node-node_group')).toHaveCount(1)
+  await expect.poll(() => readActiveNodePanelId(page)).toBeUndefined()
+  await expect(dockShell).toHaveAttribute('data-hidden', 'true')
+
+  await page.locator('.react-flow__pane').click({ position: { x: 24, y: 24 } })
+  await openCanvasAddMenuFromPane(page, { x: 220, y: 24 })
+  await page.getByRole('button', { name: /Flow group/ }).click()
+  await expect(page.locator('.react-flow__node-flow_group')).toHaveCount(1)
+  await expect.poll(() => readActiveNodePanelId(page)).toBeUndefined()
+  await expect(dockShell).toHaveAttribute('data-hidden', 'true')
+})
+
+test('workflow canvas uses design-tool viewport controls for trackpads', async ({ page, request }) => {
+  const auth = await register(request)
+  const workflow = await createWorkflow(request, auth.session.token, 20)
+  await installAuthSession(page, auth)
+
+  await page.goto(`/canvas/${workflow.item.id}`)
+  await page.locator('.react-flow').waitFor()
+  await expect(page.locator('.react-flow__node').first()).toBeVisible()
+  await waitForYjsParity(page)
+
+  const flow = page.locator('.react-flow')
+  const box = await flow.boundingBox()
+  if (!box) {
+    throw new Error('React Flow viewport did not render a bounding box.')
+  }
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+
+  const beforePan = await readViewportTransform(page)
+  await page.mouse.wheel(96, 72)
+  await expect
+    .poll(async () => {
+      const current = await readViewportTransform(page)
+      return {
+        moved: Math.abs(current.x - beforePan.x) > 8 || Math.abs(current.y - beforePan.y) > 8,
+        zoomStable: Math.abs(current.zoom - beforePan.zoom) < 0.01,
+      }
+    })
+    .toEqual({ moved: true, zoomStable: true })
+
+  const beforeZoom = await readViewportTransform(page)
+  await page.keyboard.down('Control')
+  await page.mouse.wheel(0, -240)
+  await page.keyboard.up('Control')
+  await expect
+    .poll(async () => {
+      const current = await readViewportTransform(page)
+      return Math.abs(current.zoom - beforeZoom.zoom) > 0.02
+    })
+    .toBe(true)
+})
+
+test('workflow canvas creates logical groups from the add menu', async ({ page, request }) => {
+  const auth = await register(request)
+  const workflow = await createWorkflow(request, auth.session.token, 8)
+  await installAuthSession(page, auth)
+
+  await page.goto(`/canvas/${workflow.item.id}`)
+  await page.locator('.react-flow').waitFor()
+  await expect(page.locator('.react-flow__node').first()).toBeVisible()
+  await waitForYjsParity(page)
+
+  await openCanvasAddMenuFromPane(page, { x: 160, y: 24 })
+  await page.getByRole('button', { name: /Node group/ }).click()
+  await expect(page.locator('.react-flow__node-node_group')).toHaveCount(1)
+  const groupId = (await readSelectedNodeIds(page))[0]
+  if (!groupId) {
+    throw new Error('Expected the newly created node group to be selected.')
+  }
+
+  const attachedSnapshot = await getWorkflowDetail(request, auth.session.token, workflow.item.id)
+  const groupAfterAttach = attachedSnapshot.item.nodes.find((node) => node.id === groupId)
+  if (!groupAfterAttach?.width || !groupAfterAttach.height) {
+    throw new Error('Expected the node group to persist dimensions.')
+  }
+  expect(groupAfterAttach.data.nodeType).toBe('node_group')
+
+  await page.locator('.react-flow__pane').click({ position: { x: 24, y: 24 } })
+  await openCanvasAddMenuFromPane(page, { x: 220, y: 24 })
+  await page.getByRole('button', { name: /Flow group/ }).click()
+  await expect(page.locator('.react-flow__node-flow_group')).toHaveCount(1)
+  await expect.poll(() => readActiveNodePanelId(page)).toBeUndefined()
+  await expect(page.locator('.mina-wc-dock-shell')).toHaveAttribute('data-hidden', 'true')
+})
+
+test('workflow canvas edge action menu only offers cutting the connection', async ({ page, request }) => {
+  const auth = await register(request)
+  const workflow = await createWorkflow(request, auth.session.token, 4)
+  await installAuthSession(page, auth)
+
+  await page.goto(`/canvas/${workflow.item.id}`)
+  await page.locator('.react-flow').waitFor()
+  await expect(page.locator('.react-flow__node')).toHaveCount(4)
+  await waitForYjsParity(page)
+
+  const edgePath = page.locator('.mina-wc-media-edge-hit').first()
+  const edgeBox = await edgePath.boundingBox()
+  expect(edgeBox).not.toBeNull()
+  await edgePath.click({ force: true })
+  await expect(page.getByRole('button', { name: 'Insert node on connection' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Cut connection' }).first()).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Insert node on connection' })).toHaveCount(0)
+  await expect(page.locator('.mina-wc-floating-connection-line')).toHaveCount(0)
+})
+
+test('workflow canvas opens the add menu when a connection is dropped on empty canvas', async ({ page, request }) => {
+  const auth = await register(request)
+  const workflow = await createWorkflow(request, auth.session.token, 1)
+  await installAuthSession(page, auth)
+
+  await page.goto(`/canvas/${workflow.item.id}`)
+  await page.locator('.react-flow').waitFor()
+  await expect(page.locator('.react-flow__node')).toHaveCount(1)
+  await waitForYjsParity(page)
+
+  const sourceHandle = await readFirstInteractiveSourceHandleFrame(page)
+  await page.mouse.move(sourceHandle.x, sourceHandle.y)
+  await page.mouse.down()
+  await page.mouse.move(sourceHandle.x + 260, sourceHandle.y + 80, { steps: 16 })
+  await page.mouse.up()
+
+  await expect(page.getByRole('dialog', { name: 'Insert node on connection' })).toBeVisible()
+  await expect(page.locator('.mina-wc-floating-connection-line')).toHaveCount(1)
+  await expect(page.getByRole('button', { name: /Image node/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Video node/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Text node/ })).toHaveCount(0)
+
+  const beforeCount = await page.locator('.react-flow__node').count()
+  await page.getByRole('button', { name: /Image node/ }).click()
+  await expect(page.locator('.react-flow__node')).toHaveCount(beforeCount + 1)
+  await expect(page.locator('.mina-wc-floating-connection-line')).toHaveCount(0)
+  await expect.poll(() => readSelectedNodeIds(page)).toHaveLength(1)
+})
+
 test('workflow canvas video media dock uses one active stack with slot tabs', async ({ page, request }) => {
   const auth = await register(request)
   const response = await request.post(`${apiBaseUrl}/api/workflows`, {
@@ -728,7 +1061,8 @@ test('workflow canvas video media dock uses one active stack with slot tabs', as
   await page.mouse.move((stackFrame?.x ?? 0) + 24, (stackFrame?.y ?? 0) + 24)
   await expect(page.locator('.mina-wc-slot-section')).toHaveAttribute('data-expanded', 'true')
   await expect(page.locator('.mina-wc-slot-tabs')).toBeVisible()
-  await expect(page.locator('.mina-wc-slot-tab')).toHaveCount(4)
+  await expect(page.locator('.mina-wc-slot-tab')).toHaveCount(5)
+  await expect(page.getByRole('tab', { name: /Reference video/ })).toBeVisible()
   await expect(page.locator('.mina-wc-slot-section')).toHaveCount(1)
   await expect(page.locator('.mina-wc-slot-thumb')).toHaveCount(2)
   await page.getByRole('tab', { name: /Reference video/ }).click()
@@ -962,7 +1296,7 @@ test('workflow canvas keeps the config card open after config document updates',
 
   const target = await firstVisibleDraggableNode(page)
   await page.mouse.click(target.x, target.y)
-  const configCard = page.locator('.mina-wc-config-card')
+  const configCard = page.locator('.mina-wc-composer-card')
   await expect(configCard).toBeVisible()
 
   const prompt = configCard.getByRole('textbox', { name: 'Prompt' })
@@ -989,7 +1323,7 @@ test('workflow canvas collaboration keeps remote moves, nodes, and config intera
 
   const target = await firstVisibleDraggableNode(page)
   await page.mouse.click(target.x, target.y)
-  const configCard = page.locator('.mina-wc-config-card')
+  const configCard = page.locator('.mina-wc-composer-card')
   await expect(configCard).toBeVisible()
 
   const collaboratorTargetBefore = await readNodeScreenFrame(collaborator, target.id)
@@ -1050,7 +1384,7 @@ test('workflow canvas collaboration lets a synced peer immediately move the same
 
   const target = await firstVisibleDraggableNode(page)
   await page.mouse.click(target.x, target.y)
-  await expect(page.locator('.mina-wc-config-card')).toBeVisible()
+  await expect(page.locator('.mina-wc-composer-card')).toBeVisible()
 
   const pageMove = await dragNodeBy(page, target.id, { x: 150, y: 70 })
   await expect
@@ -1074,7 +1408,7 @@ test('workflow canvas collaboration lets a synced peer immediately move the same
     })
     .toBe(true)
 
-  await expect(page.locator('.mina-wc-config-card')).toBeVisible()
+  await expect(page.locator('.mina-wc-composer-card')).toBeVisible()
   await expect
     .poll(() => page.evaluate(() => window.__minaWorkflowCanvasUi?.activeNodePanel?.nodeId))
     .toBe(target.id)
@@ -1222,7 +1556,9 @@ test('workflow canvas 500-node fixture renders with visible-element clipping and
   if (!box) throw new Error('React Flow viewport did not render a bounding box.')
 
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.keyboard.down('Control')
   await page.mouse.wheel(0, -900)
+  await page.keyboard.up('Control')
   await page.mouse.down()
   await page.mouse.move(box.x + box.width / 2 - 220, box.y + box.height / 2 - 120, { steps: 15 })
   await page.mouse.up()

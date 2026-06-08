@@ -9,15 +9,32 @@ import type {
   WorkflowFlowEdge,
   WorkflowFlowNode,
 } from '../domain/flow-types'
+import { MEDIA_GENERATION_NODE_FRAME } from '../domain/canvas-node-types'
 
-const flowNodeFrame = (node: WorkflowCanvasNode) => ({
-  id: node.id,
-  position: node.position,
-  ...(node.parentId ? { parentId: node.parentId } : {}),
-  ...(node.extent ? { extent: node.extent } : {}),
-  ...(node.width !== undefined ? { width: node.width } : {}),
-  ...(node.height !== undefined ? { height: node.height } : {}),
-})
+const flowNodeDimensions = (node: WorkflowCanvasNode) => {
+  if (node.data.nodeType === 'image_generation' || node.data.nodeType === 'video_generation') {
+    return {
+      height: MEDIA_GENERATION_NODE_FRAME.height,
+      width: MEDIA_GENERATION_NODE_FRAME.width,
+    }
+  }
+  return {
+    ...(node.width !== undefined ? { width: node.width } : {}),
+    ...(node.height !== undefined ? { height: node.height } : {}),
+  }
+}
+
+const flowNodeFrame = (node: WorkflowCanvasNode) => {
+  const isGroupNode = node.data.nodeType === 'flow_group' || node.data.nodeType === 'node_group'
+  return {
+    id: node.id,
+    position: node.position,
+    ...(node.parentId ? { parentId: node.parentId } : {}),
+    ...(node.parentId ? { extent: 'parent' as const, expandParent: true } : {}),
+    ...(isGroupNode ? { dragHandle: '.workflow-group-drag-handle' } : {}),
+    ...flowNodeDimensions(node),
+  }
+}
 
 export const toFlowNode = (node: WorkflowCanvasNode): WorkflowFlowNode => {
   if (node.data.nodeType === 'image_generation') {
@@ -102,23 +119,26 @@ export const fromFlowEdge = (
 export const fromFlowNodeFrame = (
   node: WorkflowFlowNode,
   existing: WorkflowCanvasNode,
-): WorkflowCanvasNode => ({
-  ...existing,
-  position: node.position,
-  ...(node.parentId ? { parentId: node.parentId } : {}),
-  ...((existing.type === 'flow_group' || existing.type === 'node_group') &&
-  node.measured?.width
-    ? { width: node.measured.width }
-    : existing.width !== undefined
-      ? { width: existing.width }
-      : {}),
-  ...((existing.type === 'flow_group' || existing.type === 'node_group') &&
-  node.measured?.height
-    ? { height: node.measured.height }
-    : existing.height !== undefined
-      ? { height: existing.height }
-      : {}),
-})
+): WorkflowCanvasNode => {
+  const { extent: _extent, parentId: _parentId, ...base } = existing
+  return {
+    ...base,
+    position: node.position,
+    ...(node.parentId ? { parentId: node.parentId, extent: 'parent' as const } : {}),
+    ...((existing.type === 'flow_group' || existing.type === 'node_group' || existing.type === 'text') &&
+    node.measured?.width
+      ? { width: node.measured.width }
+      : existing.width !== undefined
+        ? { width: existing.width }
+        : {}),
+    ...((existing.type === 'flow_group' || existing.type === 'node_group' || existing.type === 'text') &&
+    node.measured?.height
+      ? { height: node.measured.height }
+      : existing.height !== undefined
+        ? { height: existing.height }
+        : {}),
+  }
+}
 
 export const hasPersistedNodeFrameChanged = (
   left: WorkflowCanvasNode,
@@ -127,5 +147,6 @@ export const hasPersistedNodeFrameChanged = (
   left.position.x !== right.position.x ||
   left.position.y !== right.position.y ||
   left.parentId !== right.parentId ||
+  left.extent !== right.extent ||
   left.width !== right.width ||
   left.height !== right.height

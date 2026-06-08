@@ -21,8 +21,8 @@ This documentation captures:
    code had.
 3. An **audit of the current refactor** against that ideal model — what
    the refactor accomplished and where it deviated.
-4. The **remaining issues** that can still reproduce a subset of the
-   original symptoms today, with concrete fix directions.
+4. The **remaining issues** that remain after the resolved guardrails,
+   with concrete fix directions.
 5. The **runtime event stream** that runs beside Yjs, including how task
    and run events refresh client runtime facts and React Query caches.
 6. The **undo/redo model** for collaborative canvas edits, including why
@@ -41,7 +41,7 @@ This documentation captures:
 | 1 | [`01-problem-analysis.md`](./01-problem-analysis.md) | Anyone debugging collab regressions | What was wrong with the original architecture, expressed as **symptom → root cause → architectural reason** |
 | 2 | [`02-ideal-sync-model.md`](./02-ideal-sync-model.md) | Engineers extending collab features | The CRDT model for A/B/C clients, the three invariants, and the six hard rules that prevent broadcast loops |
 | 3 | [`03-refactor-audit.md`](./03-refactor-audit.md) | Reviewers of the recent refactor | Checklist of what changed, where the code now matches the ideal model, where it still diverges |
-| 4 | [`04-remaining-issues.md`](./04-remaining-issues.md) | Whoever picks up the next iteration | Concrete residual bugs in the current code (most importantly the **initial-mount wipe** which can still reproduce symptom 2) with proposed minimal fixes |
+| 4 | [`04-remaining-issues.md`](./04-remaining-issues.md) | Engineers checking collaboration regressions | Resolved guardrails that must not regress after the Yjs refactor |
 | 5 | [`05-runtime-event-stream.md`](./05-runtime-event-stream.md) | Engineers working on task status, media previews, history rail, or run state | How the workflow event WebSocket, runtime facts store, and React Query invalidation cooperate with Yjs without becoming collaborative document state |
 | 6 | [`06-undo-redo.md`](./06-undo-redo.md) | Engineers implementing or reviewing canvas undo/redo | The Yjs UndoManager-based undo model, capture boundaries, UI hooks, keyboard shortcuts, and tests required for collaborative correctness |
 | - | [`../workflow-canvas-media-runtime.md`](../workflow-canvas-media-runtime.md) | Engineers working on media task outputs or previews | Media output count semantics, partial image success, video posters, active video lifecycle, history thumbnails, and media selection boundaries |
@@ -64,14 +64,18 @@ This documentation captures:
   on save, `documentTransactions`, `appliedTransactionRevisions`,
   `draftRevision`/`savedRevision`/`remoteVersion` counters) have been
   removed and UI commands now write to ydoc directly. The new server
-  handler is `validate → persist → apply → broadcast(except sender)`
-  which is the correct shape.
-- **Critical residual**: on first mount, `projectYjsToStore` runs once
-  with a freshly-created empty ydoc and **wipes** the REST-hydrated
-  store until the WebSocket sync handshake completes. This is the most
-  likely remaining cause of "B updates and A's canvas is empty,
-  refreshing brings it back." Detailed fix in
-  [`04-remaining-issues.md`](./04-remaining-issues.md) §2.1.
+  WebSocket hot path is `persist → apply → broadcast original update
+  (except sender)`, while full graph validation runs on import,
+  replacement, and checkpoint compaction.
+- **Resolved guardrail**: first-mount empty Yjs projection no longer
+  wipes the REST-hydrated store. The client skips empty pre-sync
+  projection and `applyRemoteSnapshot` rejects empty snapshots unless
+  the caller explicitly allows them; see
+  [`04-remaining-issues.md`](./04-remaining-issues.md).
+- **Current residuals**: hot-path per-update validation,
+  cross-instance checkpoint races, invalid append-log recovery, and
+  nested CRDT ownership for current high-churn node fields are resolved.
+  Future node-internal fields should follow the same nested Yjs pattern.
 - **Undo/redo**: canvas history is now specified as a per-runtime
   `Y.UndoManager` that tracks only local `'mina-local'` transactions and
   emits ordinary Yjs updates. Do not add React Flow snapshot history or a

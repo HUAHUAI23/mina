@@ -82,18 +82,6 @@ export class WorkflowsService {
     })
     const yjsSnapshot = await this.workflowYjsRoomService.initializeWorkflow(metadata, { edges, nodes })
     const workflow = this.workflowFromSnapshot(metadata, yjsSnapshot)
-    this.publishWorkflowEvent({
-      id: createWorkflowEventId(),
-      accountId: workflow.accountId,
-      createdAt: timestamp,
-      payload: {
-        changedEdgeIds: workflow.edges.map((edge) => edge.id),
-        changedNodeIds: workflow.nodes.map((node) => node.id),
-      },
-      type: 'workflow.definition.updated',
-      version: workflow.version,
-      workflowId: workflow.id,
-    })
     return workflow
   }
 

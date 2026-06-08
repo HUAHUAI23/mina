@@ -12,8 +12,9 @@ import {
   importWorkflowSnapshotToYDoc,
   type WorkflowYDocHandles,
 } from './workflow-yjs-document'
+import { HttpError } from '../../../lib/http/http-error'
 import { appLogger, type AppLogger } from '../../../lib/logger/logger'
-import type { WorkflowYjsRepository } from './workflow-yjs-repository'
+import type { WorkflowYjsRepository, WorkflowYjsUpdateRecord } from './workflow-yjs-repository'
 import { validateCanvas } from '../validation'
 import { normalizeWorkflowEdge, normalizeWorkflowNode } from '../repositories/workflow-mappers'
 
@@ -40,6 +41,10 @@ interface WorkflowCollaborationRoom {
   snapshotVersion: number
   y: WorkflowYDocHandles
   workflowId: string
+}
+
+interface WorkflowCompactionResult {
+  rejectedUpdateIds: string[]
 }
 
 export interface WorkflowYjsSnapshot {
@@ -136,6 +141,12 @@ const normalizeSnapshot = (snapshot: {
   nodes: snapshot.nodes.map((node) => normalizeWorkflowNode(node as Workflow['nodes'][number])),
 })
 
+const workflowVersionConflict = (): HttpError =>
+  new HttpError(409, 'WORKFLOW_VERSION_CONFLICT', {
+    fallbackMessage: 'Workflow snapshot version has changed. Reload the latest workflow and retry.',
+    messageKey: 'api_error_workflow_version_conflict',
+  })
+
 interface WorkflowYjsRoomServiceOptions {
   onSnapshotSaved?: (input: {
     reason: string
@@ -205,13 +216,18 @@ export class WorkflowYjsRoomService {
         update.byteLength > 0
       ) {
         await this.#withWorkflowLock(room.workflowId, async () => {
-          await this.#persistUpdate(room, update)
+          const updateId = await this.#persistUpdate(room, update)
           Y.applyUpdate(room.y.ydoc, update, input.connection)
+          let currentUpdateRejected = false
           if (room.persistedUpdatesSinceSnapshot >= snapshotCompactionThreshold) {
-            await this.#compactRoomWithoutLock(room, 'update_threshold')
+            const compaction = await this.#compactRoomWithoutLock(room, 'update_threshold', { throwOnConflict: false })
+            currentUpdateRejected = compaction.rejectedUpdateIds.includes(updateId)
           }
+          if (currentUpdateRejected) {
+            return
+          }
+          broadcast(room, encodeSyncUpdate(update), input.connection)
         })
-        broadcast(room, encodeSyncUpdate(update), input.connection)
       }
       return
     }
@@ -258,16 +274,20 @@ export class WorkflowYjsRoomService {
   async snapshotForWorkflow(workflow: WorkflowSummary): Promise<WorkflowYjsSnapshot> {
     const room = await this.#getRoom(workflow)
     this.#clearRoomCleanup(room)
-    const snapshot = normalizeSnapshot(exportWorkflowSnapshotFromYDoc(room.y))
+    const result = await this.#withWorkflowLock(room.workflowId, async () => {
+      await this.#syncRoomFromPersistence(room)
+      const snapshot = normalizeSnapshot(exportWorkflowSnapshotFromYDoc(room.y))
+      return {
+        ...snapshot,
+        version: room.snapshotVersion,
+        workflowId: workflow.id,
+        yjsStateVector: Y.encodeStateVector(room.y.ydoc),
+      }
+    })
     if (room.connections.size === 0) {
       this.#scheduleRoomCleanup(room)
     }
-    return {
-      ...snapshot,
-      version: room.snapshotVersion,
-      workflowId: workflow.id,
-      yjsStateVector: Y.encodeStateVector(room.y.ydoc),
-    }
+    return result
   }
 
   async getSnapshotVersion(workflowId: string): Promise<number | undefined> {
@@ -288,20 +308,27 @@ export class WorkflowYjsRoomService {
     const room = await this.#getRoom(workflow)
     this.#clearRoomCleanup(room)
     const result = await this.#withWorkflowLock(workflow.id, async () => {
+      const replacedUpdateIds = (await this.repository.listUpdates(workflow.id)).map((update) => update.id)
       importWorkflowSnapshotToYDoc(room.y, normalized, 'mina-server-replace')
       const stateVector = Y.encodeStateVector(room.y.ydoc)
       const snapshotBin = Y.encodeStateAsUpdate(room.y.ydoc)
       const nextSnapshotVersion = Math.max(room.snapshotVersion + 1, workflow.version + 1)
-      await this.repository.saveSnapshot({
+      const saved = await this.repository.saveSnapshot({
+        expectedVersion: room.snapshotVersion,
         snapshotBin,
         stateVector,
         version: nextSnapshotVersion,
         workflowId: workflow.id,
       })
-      await this.repository.deleteUpdates(workflow.id)
+      if (!saved) {
+        await this.#reloadRoomFromPersistedSnapshot(room)
+        throw workflowVersionConflict()
+      }
+      await this.repository.deleteUpdates(workflow.id, replacedUpdateIds)
       await this.#notifySnapshotSaved(workflow.id, nextSnapshotVersion, reason)
       room.persistedUpdatesSinceSnapshot = 0
       room.snapshotVersion = nextSnapshotVersion
+      await this.#applyPersistedUpdates(room)
       this.logger.info(
         {
           edgeCount: normalized.edges.length,
@@ -357,14 +384,30 @@ export class WorkflowYjsRoomService {
       const result = await this.#withWorkflowLock(
         workflow.id,
         async () => {
+          const loadUpdatesStartedAt = Date.now()
+          let compactedUpdateIds = await this.#applyPersistedUpdates(room)
+          let rejectedUpdateIds: string[] = []
+          finishTiming('loadPersistedUpdatesMs', loadUpdatesStartedAt)
+
           const exportStartedAt = Date.now()
-          const snapshot = normalizeSnapshot(exportWorkflowSnapshotFromYDoc(room.y))
+          let snapshot = normalizeSnapshot(exportWorkflowSnapshotFromYDoc(room.y))
           nodeCount = snapshot.nodes.length
           edgeCount = snapshot.edges.length
           finishTiming('exportSnapshotMs', exportStartedAt)
 
           const validateStartedAt = Date.now()
-          validateCanvas(snapshot.nodes, snapshot.edges)
+          try {
+            validateCanvas(snapshot.nodes, snapshot.edges)
+          } catch (error) {
+            const recovery = await this.#recoverInvalidPersistedUpdates(room)
+            if (recovery.rejectedUpdateIds.length === 0) {
+              throw error
+            }
+            compactedUpdateIds = recovery.acceptedUpdateIds
+            rejectedUpdateIds = recovery.rejectedUpdateIds
+            snapshot = normalizeSnapshot(exportWorkflowSnapshotFromYDoc(room.y))
+            validateCanvas(snapshot.nodes, snapshot.edges)
+          }
           finishTiming('validateCanvasMs', validateStartedAt)
 
           const encodeStateVectorStartedAt = Date.now()
@@ -377,23 +420,29 @@ export class WorkflowYjsRoomService {
           snapshotBytes = snapshotBin.byteLength
           finishTiming('encodeSnapshotMs', encodeSnapshotStartedAt)
 
-          const nextSnapshotVersion = room.persistedUpdatesSinceSnapshot > 0
+          const nextSnapshotVersion = compactedUpdateIds.length > 0
             ? Math.max(room.snapshotVersion + 1, workflow.version)
             : Math.max(room.snapshotVersion, workflow.version)
           const saveSnapshotStartedAt = Date.now()
-          await this.repository.saveSnapshot({
+          const saved = await this.repository.saveSnapshot({
+            expectedVersion: room.snapshotVersion,
             snapshotBin,
             stateVector,
             version: nextSnapshotVersion,
             workflowId: workflow.id,
           })
+          if (!saved) {
+            await this.#reloadRoomFromPersistedSnapshot(room)
+            throw workflowVersionConflict()
+          }
           finishTiming('saveYjsSnapshotMs', saveSnapshotStartedAt)
           await this.#notifySnapshotSaved(workflow.id, nextSnapshotVersion, reason)
           room.persistedUpdatesSinceSnapshot = 0
           room.snapshotVersion = nextSnapshotVersion
 
           const pruneStartedAt = Date.now()
-          await this.repository.deleteUpdates(workflow.id)
+          await this.repository.deleteUpdates(workflow.id, [...compactedUpdateIds, ...rejectedUpdateIds])
+          await this.#applyPersistedUpdates(room)
           finishTiming('pruneUpdatesMs', pruneStartedAt)
 
           return {
@@ -501,7 +550,7 @@ export class WorkflowYjsRoomService {
         if (currentRoom !== room || room.connections.size > 0) {
           return
         }
-        await this.#compactRoom(room, 'idle_cleanup')
+        await this.#compactRoom(room, 'idle_cleanup', { throwOnConflict: false })
         room.awareness.destroy()
         room.y.ydoc.destroy()
         this.#rooms.delete(room.workflowId)
@@ -510,40 +559,88 @@ export class WorkflowYjsRoomService {
     ;(room.cleanupTimer as { unref?: () => void }).unref?.()
   }
 
-  async #persistUpdate(room: WorkflowCollaborationRoom, update: Uint8Array): Promise<void> {
+  async #persistUpdate(room: WorkflowCollaborationRoom, update: Uint8Array): Promise<string> {
+    const id = createId('workflow_yjs_update')
     await this.repository.appendUpdate({
-      id: createId('workflow_yjs_update'),
+      id,
       updateBin: update,
       workflowId: room.workflowId,
     })
     room.persistedUpdatesSinceSnapshot += 1
+    return id
   }
 
-  async #compactRoom(room: WorkflowCollaborationRoom, reason: string): Promise<void> {
+  async #compactRoom(
+    room: WorkflowCollaborationRoom,
+    reason: string,
+    options: { throwOnConflict: boolean },
+  ): Promise<void> {
     await this.#withWorkflowLock(room.workflowId, async () => {
-      await this.#compactRoomWithoutLock(room, reason)
+      await this.#compactRoomWithoutLock(room, reason, options)
     })
   }
 
-  async #compactRoomWithoutLock(room: WorkflowCollaborationRoom, reason: string): Promise<void> {
+  async #compactRoomWithoutLock(
+    room: WorkflowCollaborationRoom,
+    reason: string,
+    options: { throwOnConflict: boolean },
+  ): Promise<WorkflowCompactionResult> {
     if (room.persistedUpdatesSinceSnapshot === 0 && reason !== 'idle_cleanup') {
-      return
+      return { rejectedUpdateIds: [] }
+    }
+    let compactedUpdateIds = await this.#applyPersistedUpdates(room)
+    let rejectedUpdateIds: string[] = []
+    if (compactedUpdateIds.length === 0 && reason !== 'idle_cleanup') {
+      return { rejectedUpdateIds: [] }
+    }
+    let snapshot = normalizeSnapshot(exportWorkflowSnapshotFromYDoc(room.y))
+    try {
+      validateCanvas(snapshot.nodes, snapshot.edges)
+    } catch (error) {
+      const recovery = await this.#recoverInvalidPersistedUpdates(room)
+      if (recovery.rejectedUpdateIds.length === 0) {
+        if (options.throwOnConflict) {
+          throw error
+        }
+        await this.#reloadRoomFromPersistedSnapshot(room)
+        return { rejectedUpdateIds: [] }
+      }
+      compactedUpdateIds = recovery.acceptedUpdateIds
+      rejectedUpdateIds = recovery.rejectedUpdateIds
+      snapshot = normalizeSnapshot(exportWorkflowSnapshotFromYDoc(room.y))
+      validateCanvas(snapshot.nodes, snapshot.edges)
     }
     const snapshotBin = Y.encodeStateAsUpdate(room.y.ydoc)
     const stateVector = Y.encodeStateVector(room.y.ydoc)
-    const nextSnapshotVersion = room.persistedUpdatesSinceSnapshot > 0
+    const nextSnapshotVersion = compactedUpdateIds.length > 0
       ? room.snapshotVersion + 1
       : room.snapshotVersion
-    await this.repository.saveSnapshot({
+    const saved = await this.repository.saveSnapshot({
+      expectedVersion: room.snapshotVersion,
       snapshotBin,
       stateVector,
       version: nextSnapshotVersion,
       workflowId: room.workflowId,
     })
-    await this.repository.deleteUpdates(room.workflowId)
+    if (!saved) {
+      if (options.throwOnConflict) {
+        throw workflowVersionConflict()
+      }
+      await this.#reloadRoomFromPersistedSnapshot(room)
+      this.logger.info(
+        {
+          reason,
+          workflowId: room.workflowId,
+        },
+        'Workflow Yjs room compaction skipped because the persisted snapshot version changed.',
+      )
+      return { rejectedUpdateIds: [] }
+    }
+    await this.repository.deleteUpdates(room.workflowId, [...compactedUpdateIds, ...rejectedUpdateIds])
     await this.#notifySnapshotSaved(room.workflowId, nextSnapshotVersion, reason)
     room.persistedUpdatesSinceSnapshot = 0
     room.snapshotVersion = nextSnapshotVersion
+    await this.#applyPersistedUpdates(room)
     this.logger.info(
       {
         reason,
@@ -554,6 +651,108 @@ export class WorkflowYjsRoomService {
       },
       'Workflow Yjs room compacted.',
     )
+    return { rejectedUpdateIds }
+  }
+
+  async #applyPersistedUpdates(room: WorkflowCollaborationRoom): Promise<string[]> {
+    const updates = await this.repository.listUpdates(room.workflowId)
+    for (const update of updates) {
+      Y.applyUpdate(room.y.ydoc, update.updateBin, 'mina-server-load')
+    }
+    room.persistedUpdatesSinceSnapshot = updates.length
+    return updates.map((update) => update.id)
+  }
+
+  async #syncRoomFromPersistence(room: WorkflowCollaborationRoom): Promise<void> {
+    const persistedSnapshot = await this.repository.getSnapshot(room.workflowId)
+    if (!persistedSnapshot) {
+      throw new Error('Workflow Yjs snapshot not found.')
+    }
+    if (persistedSnapshot.version > room.snapshotVersion) {
+      await this.#reloadRoomFromPersistedSnapshot(room, persistedSnapshot)
+    } else {
+      await this.#applyPersistedUpdates(room)
+    }
+    const snapshot = normalizeSnapshot(exportWorkflowSnapshotFromYDoc(room.y))
+    try {
+      validateCanvas(snapshot.nodes, snapshot.edges)
+    } catch (error) {
+      const recovery = await this.#recoverInvalidPersistedUpdates(room)
+      if (recovery.rejectedUpdateIds.length === 0) {
+        throw error
+      }
+      await this.repository.deleteUpdates(room.workflowId, recovery.rejectedUpdateIds)
+    }
+  }
+
+  async #recoverInvalidPersistedUpdates(room: WorkflowCollaborationRoom): Promise<{
+    acceptedUpdateIds: string[]
+    rejectedUpdateIds: string[]
+  }> {
+    const persistedSnapshot = await this.repository.getSnapshot(room.workflowId)
+    if (!persistedSnapshot) {
+      throw new Error('Workflow Yjs snapshot not found.')
+    }
+    const updates = await this.repository.listUpdates(room.workflowId)
+    let current = createWorkflowYDoc()
+    Y.applyUpdate(current.ydoc, persistedSnapshot.snapshotBin, 'mina-server-recover')
+    const baseSnapshot = normalizeSnapshot(exportWorkflowSnapshotFromYDoc(current))
+    validateCanvas(baseSnapshot.nodes, baseSnapshot.edges)
+
+    const acceptedUpdates: WorkflowYjsUpdateRecord[] = []
+    const rejectedUpdateIds: string[] = []
+
+    for (const update of updates) {
+      const candidate = createWorkflowYDoc()
+      Y.applyUpdate(candidate.ydoc, Y.encodeStateAsUpdate(current.ydoc), 'mina-server-recover')
+      Y.applyUpdate(candidate.ydoc, update.updateBin, 'mina-server-recover')
+      try {
+        const snapshot = normalizeSnapshot(exportWorkflowSnapshotFromYDoc(candidate))
+        validateCanvas(snapshot.nodes, snapshot.edges)
+        current.ydoc.destroy()
+        current = candidate
+        acceptedUpdates.push(update)
+      } catch {
+        candidate.ydoc.destroy()
+        rejectedUpdateIds.push(update.id)
+      }
+    }
+
+    room.y.ydoc.destroy()
+    room.y = current
+    room.awareness.destroy()
+    room.awareness = new awarenessProtocol.Awareness(room.y.ydoc)
+    room.awareness.setLocalState(null)
+    room.snapshotVersion = persistedSnapshot.version
+    room.persistedUpdatesSinceSnapshot = acceptedUpdates.length
+
+    return {
+      acceptedUpdateIds: acceptedUpdates.map((update) => update.id),
+      rejectedUpdateIds,
+    }
+  }
+
+  async #reloadRoomFromPersistedSnapshot(
+    room: WorkflowCollaborationRoom,
+    persistedSnapshot?: Awaited<ReturnType<WorkflowYjsRepository['getSnapshot']>>,
+  ): Promise<void> {
+    persistedSnapshot ??= await this.repository.getSnapshot(room.workflowId)
+    if (!persistedSnapshot) {
+      throw new Error('Workflow Yjs snapshot not found.')
+    }
+    const replacement = createWorkflowYDoc()
+    Y.applyUpdate(replacement.ydoc, persistedSnapshot.snapshotBin, 'mina-server-load')
+    const updates = await this.repository.listUpdates(room.workflowId)
+    for (const update of updates) {
+      Y.applyUpdate(replacement.ydoc, update.updateBin, 'mina-server-load')
+    }
+    room.y.ydoc.destroy()
+    room.y = replacement
+    room.awareness.destroy()
+    room.awareness = new awarenessProtocol.Awareness(room.y.ydoc)
+    room.awareness.setLocalState(null)
+    room.snapshotVersion = persistedSnapshot.version
+    room.persistedUpdatesSinceSnapshot = updates.length
   }
 
   async #withWorkflowLock<T>(

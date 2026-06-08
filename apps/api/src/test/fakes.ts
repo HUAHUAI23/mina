@@ -549,14 +549,18 @@ export class FakeWorkflowYjsRepository implements WorkflowYjsRepository {
     this.#updates.set(input.workflowId, updates)
   }
 
-  async deleteUpdates(workflowId: string, through?: Date): Promise<void> {
-    if (!through) {
+  async deleteUpdates(workflowId: string, updateIds?: readonly string[]): Promise<void> {
+    if (!updateIds) {
       this.#updates.delete(workflowId)
       return
     }
+    if (updateIds.length === 0) {
+      return
+    }
+    const deletedIds = new Set(updateIds)
     this.#updates.set(
       workflowId,
-      (this.#updates.get(workflowId) ?? []).filter((update) => new Date(update.createdAt) > through),
+      (this.#updates.get(workflowId) ?? []).filter((update) => !deletedIds.has(update.id)),
     )
   }
 
@@ -583,13 +587,19 @@ export class FakeWorkflowYjsRepository implements WorkflowYjsRepository {
       }))
   }
 
-  async saveSnapshot(input: WorkflowYjsSnapshotRecord): Promise<void> {
+  async saveSnapshot(input: WorkflowYjsSnapshotRecord): Promise<boolean> {
+    const current = this.#snapshots.get(input.workflowId)
+    if (input.expectedVersion !== undefined && current?.version !== input.expectedVersion) {
+      return false
+    }
+
     this.#snapshots.set(input.workflowId, {
       snapshotBin: new Uint8Array(input.snapshotBin),
       stateVector: new Uint8Array(input.stateVector),
       version: input.version,
       workflowId: input.workflowId,
     })
+    return true
   }
 }
 

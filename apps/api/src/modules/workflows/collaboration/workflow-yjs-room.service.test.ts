@@ -7,6 +7,12 @@ import * as Y from 'yjs'
 
 import type { Workflow } from '@mina/contracts/modules/workflows'
 
+import {
+  createWorkflowYDoc,
+  importWorkflowSnapshotToYDoc,
+  writeWorkflowNode,
+} from './workflow-yjs-document'
+import type { WorkflowYjsSnapshotRecord } from './workflow-yjs-repository'
 import type { WorkflowYjsRoomMessage } from './workflow-yjs-room.service'
 import { WorkflowYjsRoomService } from './workflow-yjs-room.service'
 import { FakeWorkflowYjsRepository } from '../../../test/fakes'
@@ -96,6 +102,44 @@ const readServerMessagesIntoDoc = (doc: Y.Doc, messages: Uint8Array[]): void => 
 
 const binaryMessage = (message: Uint8Array): WorkflowYjsRoomMessage => message
 
+const saveRepositorySnapshot = async (
+  repository: FakeWorkflowYjsRepository,
+  input: {
+    nodes: Workflow['nodes']
+    version: number
+    workflowId?: string
+  },
+): Promise<void> => {
+  const workflowId = input.workflowId ?? workflow.id
+  const y = createWorkflowYDoc()
+  const existing = await repository.getSnapshot(workflowId)
+  if (existing) {
+    Y.applyUpdate(y.ydoc, existing.snapshotBin, 'test-existing-snapshot')
+  } else {
+    importWorkflowSnapshotToYDoc(y, { edges: [], nodes: workflow.nodes }, 'test-remote-snapshot')
+  }
+  const orderedNodeIds = new Set(y.nodeOrder.toArray())
+  for (const node of input.nodes) {
+    writeWorkflowNode(y.nodes, node)
+    y.nodeFrames.set(node.id, {
+      position: node.position,
+      ...(node.width !== undefined ? { width: node.width } : {}),
+      ...(node.height !== undefined ? { height: node.height } : {}),
+      ...(node.parentId ? { parentId: node.parentId, extent: 'parent' } : {}),
+    })
+    if (!orderedNodeIds.has(node.id)) {
+      y.nodeOrder.push([node.id])
+      orderedNodeIds.add(node.id)
+    }
+  }
+  await repository.saveSnapshot({
+    snapshotBin: Y.encodeStateAsUpdate(y.ydoc),
+    stateVector: Y.encodeStateVector(y.ydoc),
+    version: input.version,
+    workflowId,
+  })
+}
+
 const createInitializedService = async (
   repository = new FakeWorkflowYjsRepository(),
 ): Promise<{ repository: FakeWorkflowYjsRepository; service: WorkflowYjsRoomService }> => {
@@ -105,6 +149,29 @@ const createInitializedService = async (
     nodes: workflow.nodes,
   })
   return { repository, service }
+}
+
+class ConflictingSnapshotRepository extends FakeWorkflowYjsRepository {
+  conflictNextConditionalSave = false
+
+  override async saveSnapshot(input: WorkflowYjsSnapshotRecord): Promise<boolean> {
+    if (this.conflictNextConditionalSave && input.expectedVersion !== undefined) {
+      this.conflictNextConditionalSave = false
+      await saveRepositorySnapshot(this, {
+        nodes: [
+          {
+            id: 'node_remote',
+            type: 'text',
+            position: { x: 800, y: 120 },
+            data: { nodeType: 'text', title: 'Remote Text', config: { text: 'remote' } },
+          },
+        ],
+        version: input.expectedVersion + 1,
+        workflowId: input.workflowId,
+      })
+    }
+    return super.saveSnapshot(input)
+  }
 }
 
 describe('WorkflowYjsRoomService', () => {
@@ -265,6 +332,91 @@ describe('WorkflowYjsRoomService', () => {
     expect(await repository.listUpdates(workflow.id)).toHaveLength(0)
   })
 
+  test('rejects explicit compaction when another instance already advanced the snapshot', async () => {
+    const { repository, service } = await createInitializedService()
+    const connection = new MockConnection()
+    await service.connect({ connection, workflow })
+
+    const clientDoc = new Y.Doc()
+    readServerMessagesIntoDoc(clientDoc, connection.received)
+    await service.handleMessage({
+      connection,
+      message: binaryMessage(encodeClientSyncStep1(clientDoc)),
+      workflow,
+    })
+    readServerMessagesIntoDoc(clientDoc, connection.received)
+    clientDoc.getMap('nodeFrames').set('node_1', { position: { x: 520, y: 310 } })
+    await service.handleMessage({
+      connection,
+      message: binaryMessage(encodeClientUpdate(Y.encodeStateAsUpdate(clientDoc))),
+      workflow,
+    })
+
+    await saveRepositorySnapshot(repository, {
+      nodes: [
+        {
+          id: 'node_remote',
+          type: 'text',
+          position: { x: 800, y: 120 },
+          data: { nodeType: 'text', title: 'Remote Text', config: { text: 'remote' } },
+        },
+      ],
+      version: workflow.version + 1,
+    })
+
+    await expect(service.compactWorkflow(workflow, 'stale_compaction')).rejects.toMatchObject({
+      code: 'WORKFLOW_VERSION_CONFLICT',
+      status: 409,
+    })
+    expect((await repository.getSnapshot(workflow.id))?.version).toBe(workflow.version + 1)
+    expect(await repository.listUpdates(workflow.id)).toHaveLength(1)
+
+    const snapshot = await service.snapshotForWorkflow({ ...workflow, version: workflow.version + 1 })
+    const node = snapshot.nodes.find((item) => item.id === 'node_1') as
+      | { position: { x: number; y: number } }
+      | undefined
+    expect(snapshot.version).toBe(workflow.version + 1)
+    expect(snapshot.nodes.some((item) => item.id === 'node_remote')).toBe(true)
+    expect(node?.position).toEqual({ x: 520, y: 310 })
+  })
+
+  test('keeps update logs when background threshold compaction loses a cross-instance race', async () => {
+    const repository = new ConflictingSnapshotRepository()
+    const { service } = await createInitializedService(repository)
+    const connection = new MockConnection()
+    await service.connect({ connection, workflow })
+
+    const clientDoc = new Y.Doc()
+    readServerMessagesIntoDoc(clientDoc, connection.received)
+    await service.handleMessage({
+      connection,
+      message: binaryMessage(encodeClientSyncStep1(clientDoc)),
+      workflow,
+    })
+    readServerMessagesIntoDoc(clientDoc, connection.received)
+
+    repository.conflictNextConditionalSave = true
+    for (let index = 1; index <= 50; index += 1) {
+      clientDoc.getMap('nodeFrames').set('node_1', { position: { x: index, y: 300 + index } })
+      await service.handleMessage({
+        connection,
+        message: binaryMessage(encodeClientUpdate(Y.encodeStateAsUpdate(clientDoc))),
+        workflow,
+      })
+    }
+
+    expect(connection.closed).toBe(false)
+    expect((await repository.getSnapshot(workflow.id))?.version).toBe(workflow.version + 1)
+    expect(await repository.listUpdates(workflow.id)).toHaveLength(50)
+
+    const snapshot = await service.snapshotForWorkflow({ ...workflow, version: workflow.version + 1 })
+    const movedNode = snapshot.nodes.find((node) => node.id === 'node_1') as
+      | { position: { x: number; y: number } }
+      | undefined
+    expect(snapshot.nodes.some((node) => node.id === 'node_remote')).toBe(true)
+    expect(movedNode?.position).toEqual({ x: 50, y: 350 })
+  })
+
   test('returns persisted and active room snapshot versions', async () => {
     const { service } = await createInitializedService()
     expect(await service.getSnapshotVersion(workflow.id)).toBe(workflow.version)
@@ -329,7 +481,7 @@ describe('WorkflowYjsRoomService', () => {
     ])
   })
 
-  test('rejects invalid yjs graph during compaction validation', async () => {
+  test('isolates invalid persisted yjs updates during compaction validation', async () => {
     const { repository, service } = await createInitializedService()
     const connection = new MockConnection()
     await service.connect({ connection, workflow })
@@ -365,13 +517,66 @@ describe('WorkflowYjsRoomService', () => {
 
     expect(await repository.listUpdates(workflow.id)).toHaveLength(1)
 
-    await expect(service.compactWorkflow(workflow, 'invalid_graph')).rejects.toThrow(
-      'Workflow edge source and target must exist.',
-    )
+    const compacted = await service.compactWorkflow(workflow, 'invalid_graph')
 
     const snapshot = await service.snapshotForWorkflow(workflow)
-    expect(snapshot.edges).toHaveLength(1)
+    expect(compacted.edges).toHaveLength(0)
+    expect(snapshot.edges).toHaveLength(0)
     expect((await repository.getSnapshot(workflow.id))?.version).toBe(workflow.version)
+    expect(await repository.listUpdates(workflow.id)).toHaveLength(0)
+  })
+
+  test('does not broadcast an invalid update rejected by threshold compaction', async () => {
+    const { repository, service } = await createInitializedService()
+    const first = new MockConnection()
+    const second = new MockConnection()
+    await service.connect({ connection: first, workflow })
+    await service.connect({ connection: second, workflow })
+
+    const firstDoc = new Y.Doc()
+    readServerMessagesIntoDoc(firstDoc, first.received)
+    await service.handleMessage({
+      connection: first,
+      message: binaryMessage(encodeClientSyncStep1(firstDoc)),
+      workflow,
+    })
+    readServerMessagesIntoDoc(firstDoc, first.received)
+    second.received = []
+
+    for (let index = 1; index < 50; index += 1) {
+      firstDoc.getMap('nodeFrames').set('node_1', { position: { x: index, y: index } })
+      await service.handleMessage({
+        connection: first,
+        message: binaryMessage(encodeClientUpdate(Y.encodeStateAsUpdate(firstDoc))),
+        workflow,
+      })
+    }
+
+    firstDoc.getMap('edges').set('edge_invalid', {
+      id: 'edge_invalid',
+      type: 'media',
+      source: 'node_missing',
+      target: 'node_1',
+      data: {
+        connection: {
+          kind: 'media_link',
+          targetSlot: 'inputImages',
+          targetSlotItemId: 'slot_missing',
+        },
+      },
+    })
+    firstDoc.getArray<string>('edgeOrder').push(['edge_invalid'])
+    await service.handleMessage({
+      connection: first,
+      message: binaryMessage(encodeClientUpdate(Y.encodeStateAsUpdate(firstDoc))),
+      workflow,
+    })
+
+    const secondDoc = new Y.Doc()
+    readServerMessagesIntoDoc(secondDoc, second.received)
+    expect(secondDoc.getMap('edges').has('edge_invalid')).toBe(false)
+    expect(await repository.listUpdates(workflow.id)).toHaveLength(0)
+    expect((await repository.getSnapshot(workflow.id))?.version).toBe(workflow.version + 1)
   })
 
   test('applies client yjs state update during compaction before websocket delivery', async () => {

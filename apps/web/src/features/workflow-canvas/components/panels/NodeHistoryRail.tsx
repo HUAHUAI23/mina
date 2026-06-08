@@ -1,6 +1,6 @@
 import { Panel } from '@xyflow/react'
 import { useQuery } from '@tanstack/react-query'
-import { Check, Clapperboard, Loader2, X } from 'lucide-react'
+import { AlertCircle, Check, Clapperboard, Clock, Loader2, X } from 'lucide-react'
 import type { TaskStatus } from '@mina/contracts/modules/tasks'
 import { formatDateTime } from '@mina/i18n'
 import { cn } from '@mina/ui/lib/utils'
@@ -18,21 +18,18 @@ import { useNodeRuntimeStore } from '../../store/node-runtime-store'
 import { useCanvasNode, useCanvasWorkflowId } from '../../store/selectors'
 
 const railPanelClassName = 'mina-wc-history-rail nodrag nowheel nopan pointer-events-auto'
-const railShellClassName = 'grid max-h-[min(78dvh,46rem)] w-[26.5rem] min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-3 overflow-hidden rounded-2xl bg-surface-container-lowest/96 p-4 shadow-floating ring-1 ring-inset ring-outline-ghost'
-const railHeaderClassName = 'flex items-start justify-between gap-3'
-const closeButtonClassName = 'flex size-8 flex-none items-center justify-center rounded-full border-0 bg-surface-container-low p-0 text-foreground-tertiary hover:bg-surface-container-high hover:text-foreground'
-const followButtonClassName = 'group flex min-h-11 items-center justify-between gap-3 rounded-2xl border-0 bg-surface-container-low px-3.5 py-2.5 text-left text-sm font-bold text-foreground-secondary hover:bg-surface-container aria-pressed:bg-surface-container-high aria-pressed:text-foreground'
+const railShellClassName = 'mina-wc-floating-surface grid max-h-[min(78dvh,46rem)] w-[26.5rem] min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-2.5 overflow-hidden rounded-[22px] p-4 border border-zinc-200/50 bg-zinc-50/98 dark:border-zinc-800/50 dark:bg-zinc-950/98'
+const railHeaderClassName = 'flex items-center justify-between gap-3 pb-1'
+const closeButtonClassName = 'flex size-8 flex-none items-center justify-center rounded-full border border-zinc-200/80 bg-zinc-50 p-0 text-zinc-400 shadow-sm transition-all duration-200 hover:bg-zinc-100 hover:text-zinc-800 dark:border-zinc-800/80 dark:bg-zinc-900 dark:text-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-200'
+const followButtonClassName = 'group flex min-h-11 items-center justify-between gap-3 rounded-[16px] border border-zinc-200 bg-zinc-50/50 px-3.5 py-2.5 text-left text-sm font-semibold text-zinc-600 shadow-sm transition-all duration-200 hover:bg-zinc-100/50 hover:text-zinc-950 aria-pressed:border-zinc-400 aria-pressed:bg-zinc-100/80 aria-pressed:text-zinc-950 dark:border-zinc-800 dark:bg-zinc-900/30 dark:text-zinc-400 dark:hover:bg-zinc-900/60 dark:hover:text-zinc-50 dark:aria-pressed:border-zinc-600 dark:aria-pressed:bg-zinc-900/80 dark:aria-pressed:text-zinc-50'
 const listClassName = 'grid min-h-0 content-start gap-2.5 overflow-auto pr-1 [scrollbar-gutter:stable]'
-const taskCardClassName = 'group grid min-w-0 gap-2.5 py-1'
-const statusDotClassName = 'size-1.5 rounded-full bg-foreground-faint'
-const statusDotActiveClassName = 'bg-brand-accent'
-const historyPreviewClassName = 'relative flex aspect-[16/10] w-full min-w-0 items-center justify-center overflow-hidden rounded-2xl border-0 bg-transparent p-0 text-xs font-black text-foreground-tertiary shadow-[0_28px_58px_-34px_color-mix(in_oklch,var(--foreground)_30%,transparent),inset_0_0_0_1px_color-mix(in_oklch,var(--foreground-quaternary)_12%,transparent)]'
-const historyPreviewSelectedClassName = 'shadow-[0_30px_60px_-34px_color-mix(in_oklch,var(--foreground)_30%,transparent),inset_0_0_0_2px_color-mix(in_oklch,var(--primary)_58%,var(--foreground-secondary))]'
-const outputStripClassName = 'flex max-w-full gap-2 overflow-x-auto px-0.5'
-const thumbButtonClassName = 'relative flex size-9 flex-none items-center justify-center overflow-hidden rounded-md border-0 bg-surface-container-lowest/76 p-0 text-xs font-black text-foreground-tertiary opacity-72 shadow-[0_10px_24px_-22px_color-mix(in_oklch,var(--foreground)_24%,transparent),inset_0_0_0_1px_color-mix(in_oklch,var(--foreground-quaternary)_10%,transparent)] hover:opacity-100 aria-pressed:opacity-100 aria-pressed:shadow-[0_12px_26px_-22px_color-mix(in_oklch,var(--foreground)_26%,transparent),inset_0_0_0_2px_color-mix(in_oklch,var(--primary)_58%,var(--foreground-secondary))]'
-const selectedBadgeClassName = 'absolute right-1 top-1 grid size-4 place-items-center rounded-full bg-primary text-primary-foreground shadow-[0_8px_16px_-10px_color-mix(in_oklch,var(--foreground)_30%,transparent)]'
-const emptyClassName = 'grid min-h-32 place-items-center rounded-2xl bg-surface-container-low p-5 text-center text-sm font-bold text-foreground-quaternary'
-const historyPlaceholderClassName = 'absolute inset-0 grid place-items-center bg-surface-container-high text-center text-xs font-bold text-foreground-quaternary'
+const taskCardClassName = 'group grid min-w-0 gap-2.5 rounded-[16px] border border-zinc-200/50 bg-zinc-50/30 p-3 shadow-sm transition-all duration-200 hover:bg-zinc-50/80 hover:shadow-md dark:border-zinc-800/40 dark:bg-zinc-900/10 dark:hover:bg-zinc-900/30'
+const historyPreviewClassName = 'relative flex aspect-[16/10] w-full min-w-0 items-center justify-center overflow-hidden rounded-[14px] border border-zinc-200/60 bg-zinc-100 p-0 text-xs font-semibold text-zinc-400 shadow-sm transition-all duration-300 hover:border-zinc-300 dark:border-zinc-800/60 dark:bg-zinc-900 dark:text-zinc-600 dark:hover:border-zinc-700'
+const historyPreviewSelectedClassName = 'border-zinc-500 ring-2 ring-zinc-400/20 dark:border-zinc-400 dark:ring-zinc-600/20'
+const outputStripClassName = 'flex max-w-full gap-2.5 overflow-x-auto px-0.5 py-1.5'
+const thumbButtonClassName = 'relative flex aspect-[16/10] h-9 flex-none items-center justify-center overflow-hidden rounded-md border border-zinc-200 bg-zinc-100/40 p-0 text-xs font-semibold text-zinc-400 transition-all duration-200 hover:scale-105 hover:border-zinc-400 hover:text-zinc-800 aria-pressed:scale-105 aria-pressed:border-zinc-900 aria-pressed:ring-1 aria-pressed:ring-zinc-900 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-500 dark:hover:border-zinc-600 dark:hover:text-zinc-200 dark:aria-pressed:border-zinc-100 dark:aria-pressed:ring-zinc-100'
+const emptyClassName = 'grid min-h-32 place-items-center rounded-[16px] border border-dashed border-zinc-200 bg-zinc-50/50 p-5 text-center text-sm font-semibold text-zinc-400 dark:border-zinc-800 dark:bg-zinc-900/30 dark:text-zinc-500'
+const historyPlaceholderClassName = 'absolute inset-0 grid place-items-center bg-zinc-100/80 text-center text-xs font-semibold text-zinc-400 dark:bg-zinc-900/80 dark:text-zinc-600'
 
 const statusLabel = (status: TaskStatus | undefined, m: ReturnType<typeof useMessages>): string => {
   switch (status) {
@@ -81,14 +78,18 @@ export function NodeHistoryRail() {
     <Panel position="top-right" className={railPanelClassName} data-mina-canvas-ignore="true" data-mina-canvas-panel-root="true">
       <section className={railShellClassName} aria-label={m.workflow_canvas_task_history()}>
         <div className={railHeaderClassName}>
-          <div className="grid min-w-0 gap-1">
-            <span className="text-xs leading-none font-black tracking-[0.22em] text-foreground-quaternary uppercase">
+          <div className="grid min-w-0 gap-0.5">
+            <span className="text-[9px] font-bold tracking-[0.22em] text-zinc-400 dark:text-zinc-500 uppercase">
               {m.workflow_canvas_history_eyebrow()}
             </span>
-            <strong className="font-display text-xl leading-tight text-foreground">{m.workflow_canvas_task_history()}</strong>
-            <span className="text-xs font-bold text-foreground-tertiary">
-              {m.workflow_canvas_history_count({ count: query.data?.items.length ?? 0 })}
-            </span>
+            <div className="flex items-center gap-2">
+              <strong className="font-display text-[17px] font-semibold tracking-tight text-zinc-800 dark:text-zinc-100">
+                {m.workflow_canvas_task_history()}
+              </strong>
+              <span className="inline-flex items-center justify-center rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                {query.data?.items.length ?? 0}
+              </span>
+            </div>
           </div>
           <button aria-label={m.workflow_canvas_close_history()} className={closeButtonClassName} onClick={closeHistoryPanel} type="button">
             <X aria-hidden="true" size={15} />
@@ -102,13 +103,13 @@ export function NodeHistoryRail() {
           type="button"
         >
           <span className="grid min-w-0 gap-0.5">
-            <span>{isFollowingLatest ? m.workflow_canvas_following_latest() : m.workflow_canvas_follow_latest()}</span>
-            <span className="text-xs font-bold text-foreground-quaternary group-aria-pressed:text-foreground-tertiary">
+            <span className="text-zinc-800 dark:text-zinc-200 group-hover:text-zinc-950 dark:group-hover:text-zinc-50">{isFollowingLatest ? m.workflow_canvas_following_latest() : m.workflow_canvas_follow_latest()}</span>
+            <span className="text-xs font-medium text-zinc-400 group-aria-pressed:text-zinc-500 dark:text-zinc-500 dark:group-aria-pressed:text-zinc-400">
               {m.workflow_canvas_history_follow_hint()}
             </span>
           </span>
-          <span className="grid size-6 flex-none place-items-center rounded-full bg-surface-container-lowest text-foreground-tertiary group-aria-pressed:bg-primary group-aria-pressed:text-primary-foreground">
-            {isFollowingLatest ? <Check aria-hidden="true" size={14} /> : <Loader2 aria-hidden="true" size={13} />}
+          <span className="grid size-6 flex-none place-items-center rounded-full bg-zinc-200/50 text-zinc-400 transition-all duration-200 group-aria-pressed:bg-zinc-900 group-aria-pressed:text-zinc-50 dark:bg-zinc-800 dark:text-zinc-600 dark:group-aria-pressed:bg-zinc-100 dark:group-aria-pressed:text-zinc-900">
+            {isFollowingLatest ? <Check aria-hidden="true" size={12} className="stroke-[3]" /> : <Loader2 aria-hidden="true" size={12} className="animate-spin" />}
           </span>
         </button>
 
@@ -126,18 +127,52 @@ export function NodeHistoryRail() {
             const previewResource = displayResource ? historyThumbnailResource(item.task.output, displayResource) : undefined
             const previewUrl = previewUrlForMedia(previewResource)
             const active = liveStatus === 'queued' || liveStatus === 'running'
+            const isSelected = Boolean(selectedResource)
+
             return (
-              <article className={taskCardClassName} key={`${item.workflowRunId}:${item.task.id}`}>
-                <div className="flex min-w-0 items-start justify-between gap-3">
+              <article
+                className={cn(
+                  taskCardClassName,
+                  isSelected && 'border-zinc-900 bg-zinc-50/90 shadow-md ring-1 ring-zinc-900/10 dark:border-zinc-100 dark:bg-zinc-900/40 dark:ring-zinc-100/10'
+                )}
+                key={`${item.workflowRunId}:${item.task.id}`}
+              >
+                <div className="flex min-w-0 items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className={cn(statusDotClassName, active && statusDotActiveClassName)} aria-hidden="true" />
-                    <strong className="truncate text-sm leading-5 text-foreground">{pendingLabel}</strong>
+                    {liveStatus === 'succeeded' ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-700 border border-zinc-200/50 dark:bg-zinc-800/80 dark:text-zinc-300 dark:border-zinc-700/50">
+                        <Check className="size-3 text-zinc-500 dark:text-zinc-400 stroke-[2.5]" />
+                        {pendingLabel}
+                      </span>
+                    ) : liveStatus === 'failed' || liveStatus === 'cancelled' ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-700 border border-zinc-200/50 dark:bg-zinc-800/80 dark:text-zinc-300 dark:border-zinc-700/50">
+                        <AlertCircle className="size-3 text-zinc-500 dark:text-zinc-400" />
+                        {pendingLabel}
+                      </span>
+                    ) : liveStatus === 'running' ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-700 border border-zinc-200/50 dark:bg-zinc-800/80 dark:text-zinc-300 dark:border-zinc-700/50">
+                        <Loader2 className="size-3 animate-spin text-zinc-500 dark:text-zinc-400" />
+                        {pendingLabel}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-zinc-50 px-2 py-0.5 text-xs font-semibold text-zinc-500 border border-zinc-200/30 dark:bg-zinc-900/60 dark:text-zinc-400 dark:border-zinc-800/40">
+                        <Clock className="size-3 text-zinc-400 dark:text-zinc-500" />
+                        {pendingLabel}
+                      </span>
+                    )}
                   </div>
-                  <time className="flex-none pt-0.5 text-xs font-bold text-foreground-quaternary" dateTime={item.task.createdAt}>
+                  <time className="flex-none text-xs font-medium text-zinc-400 dark:text-zinc-500" dateTime={item.task.createdAt}>
                     {formatDateTime(item.task.createdAt, locale)}
                   </time>
                 </div>
-                {item.task.error ? <p className="m-0 text-xs font-bold text-destructive">{item.task.error.message}</p> : null}
+
+                {item.task.error ? (
+                  <div className="flex items-start gap-2 rounded-xl border border-zinc-200/60 bg-zinc-50/50 p-2.5 text-xs text-zinc-600 dark:border-zinc-800/60 dark:bg-zinc-900/40 dark:text-zinc-400">
+                    <AlertCircle className="mt-0.5 size-3.5 flex-none text-zinc-400 dark:text-zinc-500" />
+                    <span className="break-all font-medium leading-relaxed">{item.task.error.message}</span>
+                  </div>
+                ) : null}
+
                 {resources.length > 0 ? (
                   <>
                     <button
@@ -160,9 +195,11 @@ export function NodeHistoryRail() {
                       type="button"
                     >
                       {previewResource?.kind === 'image' && previewUrl ? (
-                        <img alt="" className="absolute inset-0 size-full object-cover" loading="lazy" src={previewUrl} />
+                        <img alt="" className="absolute inset-0 size-full object-cover transition-transform duration-300 group-hover:scale-[1.015]" loading="lazy" src={previewUrl} />
                       ) : previewResource?.kind === 'video' ? (
-                        <Clapperboard aria-hidden="true" size={18} />
+                        <div className="absolute inset-0 grid place-items-center bg-zinc-100 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-500">
+                          <Clapperboard aria-hidden="true" size={20} />
+                        </div>
                       ) : (
                         <span className={historyPlaceholderClassName}>{m.workflow_canvas_history_no_output()}</span>
                       )}
@@ -191,17 +228,12 @@ export function NodeHistoryRail() {
                               type="button"
                             >
                               {thumbResource?.kind === 'image' && thumbUrl ? (
-                                <img alt="" className="size-full object-cover" loading="lazy" src={thumbUrl} />
+                                <img alt="" className="size-full object-cover transition-all duration-200" loading="lazy" src={thumbUrl} />
                               ) : thumbResource?.kind === 'video' ? (
-                                <Clapperboard aria-hidden="true" size={16} />
+                                <Clapperboard aria-hidden="true" size={14} />
                               ) : (
                                 <span>{resource.role === 'generated_video' ? 'V' : resource.index + 1}</span>
                               )}
-                              {selected ? (
-                                <span className={selectedBadgeClassName}>
-                                  <Check aria-hidden="true" size={11} />
-                                </span>
-                              ) : null}
                             </button>
                           )
                         })}
@@ -209,7 +241,7 @@ export function NodeHistoryRail() {
                     ) : null}
                   </>
                 ) : (
-                  <div className="rounded-xl bg-surface-container-lowest px-3 py-2 text-xs font-bold text-foreground-quaternary">
+                  <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50 px-3 py-2 text-center text-xs font-semibold text-zinc-400 dark:border-zinc-800 dark:bg-zinc-900/30 dark:text-zinc-500">
                     {active ? m.workflow_canvas_history_waiting_output() : m.workflow_canvas_history_no_output()}
                   </div>
                 )}

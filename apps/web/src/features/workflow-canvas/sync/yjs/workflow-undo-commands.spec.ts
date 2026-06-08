@@ -1,3 +1,4 @@
+import { expect, test } from 'bun:test'
 import * as Y from 'yjs'
 
 import { createCanvasPerformanceFixture } from '../../utils/performance-fixture'
@@ -26,7 +27,10 @@ const snapshotContext = (workflowId: string, y: ReturnType<typeof createWorkflow
 
 const withRegisteredRuntime = (
   workflowId: string,
-  fixture: { edges: ReturnType<typeof createCanvasPerformanceFixture>['edges']; nodes: ReturnType<typeof createCanvasPerformanceFixture>['nodes'] },
+  fixture: {
+    edges: ReturnType<typeof createCanvasPerformanceFixture>['edges']
+    nodes: ReturnType<typeof createCanvasPerformanceFixture>['nodes']
+  },
   run: (y: ReturnType<typeof createWorkflowYDoc>) => void,
 ): void => {
   const y = createWorkflowYDoc()
@@ -40,110 +44,114 @@ const withRegisteredRuntime = (
   }
 }
 
-const assert = (condition: unknown, message: string): void => {
-  if (!condition) {
-    throw new Error(message)
-  }
-}
-
 const fixture = createCanvasPerformanceFixture(3)
 
-withRegisteredRuntime('workflow_undo_origin_spec', fixture, (y) => {
-  y.ydoc.transact(() => {
-    y.meta.set('remote-only', true)
-  }, 'remote-test')
-  assert(!workflowUndoCommands.canUndo('workflow_undo_origin_spec'), 'Remote-origin transactions should not enter the local undo stack.')
+test('workflow undo stack captures only local command transactions', () => {
+  withRegisteredRuntime('workflow_undo_origin_spec', fixture, (y) => {
+    y.ydoc.transact(() => {
+      y.meta.set('remote-only', true)
+    }, 'remote-test')
+    expect(workflowUndoCommands.canUndo('workflow_undo_origin_spec')).toBe(false)
 
-  workflowYjsCommands.addNode(snapshotContext('workflow_undo_origin_spec', y), 'text')
-  assert(workflowUndoCommands.canUndo('workflow_undo_origin_spec'), 'Local command transactions should enter the undo stack.')
-})
-
-withRegisteredRuntime('workflow_undo_add_node_spec', { edges: [], nodes: [] }, (y) => {
-  const nodeId = workflowYjsCommands.addMediaGenerationNode(snapshotContext('workflow_undo_add_node_spec', y), {
-    nodeType: 'image_generation',
-    task,
+    workflowYjsCommands.addNode(snapshotContext('workflow_undo_origin_spec', y), 'text')
+    expect(workflowUndoCommands.canUndo('workflow_undo_origin_spec')).toBe(true)
   })
-  assert(exportWorkflowSnapshotFromYjs(y).nodes.some((node) => node.id === nodeId), 'Added node should exist before undo.')
-
-  workflowUndoCommands.undo('workflow_undo_add_node_spec')
-  assert(!exportWorkflowSnapshotFromYjs(y).nodes.some((node) => node.id === nodeId), 'Undo should remove the added node.')
-  assert(workflowUndoCommands.canRedo('workflow_undo_add_node_spec'), 'Undo should create a redo step.')
-
-  workflowUndoCommands.redo('workflow_undo_add_node_spec')
-  assert(exportWorkflowSnapshotFromYjs(y).nodes.some((node) => node.id === nodeId), 'Redo should restore the added node.')
 })
 
-withRegisteredRuntime('workflow_undo_delete_node_spec', fixture, (y) => {
-  const before = exportWorkflowSnapshotFromYjs(y)
-  const removedNodeId = 'perf_node_0'
-  assert(before.edges.some((edge) => edge.source === removedNodeId || edge.target === removedNodeId), 'Fixture should contain an edge for node deletion.')
+test('workflow undo and redo restore added media generation nodes', () => {
+  withRegisteredRuntime('workflow_undo_add_node_spec', { edges: [], nodes: [] }, (y) => {
+    const nodeId = workflowYjsCommands.addMediaGenerationNode(snapshotContext('workflow_undo_add_node_spec', y), {
+      nodeType: 'image_generation',
+      task,
+    })
+    expect(exportWorkflowSnapshotFromYjs(y).nodes.some((node) => node.id === nodeId)).toBe(true)
 
-  workflowYjsCommands.removeGraphNodes(snapshotContext('workflow_undo_delete_node_spec', y), [removedNodeId])
-  const afterDelete = exportWorkflowSnapshotFromYjs(y)
-  assert(!afterDelete.nodes.some((node) => node.id === removedNodeId), 'Node deletion should remove the target node.')
-  assert(!afterDelete.edges.some((edge) => edge.source === removedNodeId || edge.target === removedNodeId), 'Node deletion should remove incident edges.')
+    workflowUndoCommands.undo('workflow_undo_add_node_spec')
+    expect(exportWorkflowSnapshotFromYjs(y).nodes.some((node) => node.id === nodeId)).toBe(false)
+    expect(workflowUndoCommands.canRedo('workflow_undo_add_node_spec')).toBe(true)
 
-  workflowUndoCommands.undo('workflow_undo_delete_node_spec')
-  const afterUndo = exportWorkflowSnapshotFromYjs(y)
-  assert(afterUndo.nodes.some((node) => node.id === removedNodeId), 'Undo should restore deleted node.')
-  assert(afterUndo.edges.some((edge) => edge.source === removedNodeId || edge.target === removedNodeId), 'Undo should restore deleted incident edge.')
-
-  const restoredTarget = afterUndo.nodes.find((node) => node.id === 'perf_node_1')
-  assert(
-    restoredTarget?.data.nodeType === 'image_generation' &&
-      restoredTarget.data.mediaSlots?.inputImages?.some((item) => item.source.type === 'node_output' && item.source.nodeId === removedNodeId),
-    'Undo should restore media slot state associated with the incident edge.',
-  )
-})
-
-withRegisteredRuntime('workflow_undo_capture_boundary_spec', { edges: [], nodes: [] }, (y) => {
-  const firstNodeId = workflowYjsCommands.addNode(snapshotContext('workflow_undo_capture_boundary_spec', y), 'text')
-  const secondNodeId = workflowYjsCommands.addNode(snapshotContext('workflow_undo_capture_boundary_spec', y), 'text')
-
-  workflowUndoCommands.undo('workflow_undo_capture_boundary_spec')
-  const afterFirstUndo = exportWorkflowSnapshotFromYjs(y)
-  assert(afterFirstUndo.nodes.some((node) => node.id === firstNodeId), 'First structural command should remain after undoing the second command.')
-  assert(!afterFirstUndo.nodes.some((node) => node.id === secondNodeId), 'First undo should revert only the second structural command.')
-
-  workflowUndoCommands.undo('workflow_undo_capture_boundary_spec')
-  assert(!exportWorkflowSnapshotFromYjs(y).nodes.some((node) => node.id === firstNodeId), 'Second undo should revert the first structural command.')
-})
-
-withRegisteredRuntime('workflow_undo_text_merge_spec', { edges: [], nodes: [] }, (y) => {
-  const textNodeId = workflowYjsCommands.addNode(snapshotContext('workflow_undo_text_merge_spec', y), 'text')
-  workflowYjsCommands.setNodeText(snapshotContext('workflow_undo_text_merge_spec', y), textNodeId, 'a')
-  workflowYjsCommands.setNodeText(snapshotContext('workflow_undo_text_merge_spec', y), textNodeId, 'ab')
-  workflowYjsCommands.setNodeText(snapshotContext('workflow_undo_text_merge_spec', y), textNodeId, 'abc')
-
-  workflowUndoCommands.undo('workflow_undo_text_merge_spec')
-  const afterUndo = exportWorkflowSnapshotFromYjs(y).nodes.find((node) => node.id === textNodeId)
-  assert(afterUndo?.data.nodeType === 'text' && afterUndo.data.config.text === '', 'Consecutive text edits should merge into one undo step.')
-  assert(workflowUndoCommands.canUndo('workflow_undo_text_merge_spec'), 'Text undo should not consume the structural add-node stack item.')
-})
-
-withRegisteredRuntime('workflow_undo_prompt_merge_spec', { edges: [], nodes: [] }, (y) => {
-  const nodeId = workflowYjsCommands.addMediaGenerationNode(snapshotContext('workflow_undo_prompt_merge_spec', y), {
-    nodeType: 'image_generation',
-    task,
+    workflowUndoCommands.redo('workflow_undo_add_node_spec')
+    expect(exportWorkflowSnapshotFromYjs(y).nodes.some((node) => node.id === nodeId)).toBe(true)
   })
-  workflowYjsCommands.setNodeTaskPrompt(snapshotContext('workflow_undo_prompt_merge_spec', y), nodeId, 'first prompt')
-  workflowYjsCommands.setNodeTaskPrompt(snapshotContext('workflow_undo_prompt_merge_spec', y), nodeId, 'second prompt')
-  workflowYjsCommands.setNodeTaskPrompt(snapshotContext('workflow_undo_prompt_merge_spec', y), nodeId, 'third prompt')
-
-  workflowUndoCommands.undo('workflow_undo_prompt_merge_spec')
-  const afterUndo = exportWorkflowSnapshotFromYjs(y).nodes.find((node) => node.id === nodeId)
-  assert(
-    afterUndo?.data.nodeType === 'image_generation' &&
-      afterUndo.data.config.task?.prompt === task.prompt &&
-      afterUndo.data.config.task.model === task.model &&
-      afterUndo.data.config.task.provider === task.provider &&
-      JSON.stringify(afterUndo.data.config.task.params) === JSON.stringify(task.params),
-    'Consecutive prompt edits should merge into one text-only undo step without changing the rest of the task config.',
-  )
-  assert(workflowUndoCommands.canUndo('workflow_undo_prompt_merge_spec'), 'Prompt undo should not consume the structural add-node stack item.')
 })
 
-{
+test('workflow undo restores deleted nodes with incident edges and media slots', () => {
+  withRegisteredRuntime('workflow_undo_delete_node_spec', fixture, (y) => {
+    const before = exportWorkflowSnapshotFromYjs(y)
+    const removedNodeId = 'perf_node_0'
+    expect(before.edges.some((edge) => edge.source === removedNodeId || edge.target === removedNodeId)).toBe(true)
+
+    workflowYjsCommands.removeGraphNodes(snapshotContext('workflow_undo_delete_node_spec', y), [removedNodeId])
+    const afterDelete = exportWorkflowSnapshotFromYjs(y)
+    expect(afterDelete.nodes.some((node) => node.id === removedNodeId)).toBe(false)
+    expect(afterDelete.edges.some((edge) => edge.source === removedNodeId || edge.target === removedNodeId)).toBe(false)
+
+    workflowUndoCommands.undo('workflow_undo_delete_node_spec')
+    const afterUndo = exportWorkflowSnapshotFromYjs(y)
+    expect(afterUndo.nodes.some((node) => node.id === removedNodeId)).toBe(true)
+    expect(afterUndo.edges.some((edge) => edge.source === removedNodeId || edge.target === removedNodeId)).toBe(true)
+
+    const restoredTarget = afterUndo.nodes.find((node) => node.id === 'perf_node_1')
+    expect(
+      restoredTarget?.data.nodeType === 'image_generation' &&
+        restoredTarget.data.mediaSlots?.inputImages?.some((item) => item.source.type === 'node_output' && item.source.nodeId === removedNodeId),
+    ).toBe(true)
+  })
+})
+
+test('workflow undo respects structural command boundaries', () => {
+  withRegisteredRuntime('workflow_undo_capture_boundary_spec', { edges: [], nodes: [] }, (y) => {
+    const firstNodeId = workflowYjsCommands.addNode(snapshotContext('workflow_undo_capture_boundary_spec', y), 'text')
+    const secondNodeId = workflowYjsCommands.addNode(snapshotContext('workflow_undo_capture_boundary_spec', y), 'text')
+
+    workflowUndoCommands.undo('workflow_undo_capture_boundary_spec')
+    const afterFirstUndo = exportWorkflowSnapshotFromYjs(y)
+    expect(afterFirstUndo.nodes.some((node) => node.id === firstNodeId)).toBe(true)
+    expect(afterFirstUndo.nodes.some((node) => node.id === secondNodeId)).toBe(false)
+
+    workflowUndoCommands.undo('workflow_undo_capture_boundary_spec')
+    expect(exportWorkflowSnapshotFromYjs(y).nodes.some((node) => node.id === firstNodeId)).toBe(false)
+  })
+})
+
+test('workflow undo merges consecutive text edits into one undo step', () => {
+  withRegisteredRuntime('workflow_undo_text_merge_spec', { edges: [], nodes: [] }, (y) => {
+    const textNodeId = workflowYjsCommands.addNode(snapshotContext('workflow_undo_text_merge_spec', y), 'text')
+    workflowYjsCommands.setNodeText(snapshotContext('workflow_undo_text_merge_spec', y), textNodeId, 'a')
+    workflowYjsCommands.setNodeText(snapshotContext('workflow_undo_text_merge_spec', y), textNodeId, 'ab')
+    workflowYjsCommands.setNodeText(snapshotContext('workflow_undo_text_merge_spec', y), textNodeId, 'abc')
+
+    workflowUndoCommands.undo('workflow_undo_text_merge_spec')
+    const afterUndo = exportWorkflowSnapshotFromYjs(y).nodes.find((node) => node.id === textNodeId)
+    expect(afterUndo?.data.nodeType === 'text' && afterUndo.data.config.text === '').toBe(true)
+    expect(workflowUndoCommands.canUndo('workflow_undo_text_merge_spec')).toBe(true)
+  })
+})
+
+test('workflow undo merges consecutive prompt edits without changing other task config', () => {
+  withRegisteredRuntime('workflow_undo_prompt_merge_spec', { edges: [], nodes: [] }, (y) => {
+    const nodeId = workflowYjsCommands.addMediaGenerationNode(snapshotContext('workflow_undo_prompt_merge_spec', y), {
+      nodeType: 'image_generation',
+      task,
+    })
+    workflowYjsCommands.setNodeTaskPrompt(snapshotContext('workflow_undo_prompt_merge_spec', y), nodeId, 'first prompt')
+    workflowYjsCommands.setNodeTaskPrompt(snapshotContext('workflow_undo_prompt_merge_spec', y), nodeId, 'second prompt')
+    workflowYjsCommands.setNodeTaskPrompt(snapshotContext('workflow_undo_prompt_merge_spec', y), nodeId, 'third prompt')
+
+    workflowUndoCommands.undo('workflow_undo_prompt_merge_spec')
+    const afterUndo = exportWorkflowSnapshotFromYjs(y).nodes.find((node) => node.id === nodeId)
+    expect(
+      afterUndo?.data.nodeType === 'image_generation' &&
+        afterUndo.data.config.task?.prompt === task.prompt &&
+        afterUndo.data.config.task.model === task.model &&
+        afterUndo.data.config.task.provider === task.provider &&
+        JSON.stringify(afterUndo.data.config.task.params) === JSON.stringify(task.params),
+    ).toBe(true)
+    expect(workflowUndoCommands.canUndo('workflow_undo_prompt_merge_spec')).toBe(true)
+  })
+})
+
+test('workflow undo does not overwrite newer remote Y.Map values', () => {
   const workflowId = 'workflow_undo_remote_map_spec'
   const local = createWorkflowYDoc()
   const remote = createWorkflowYDoc()
@@ -165,15 +173,15 @@ withRegisteredRuntime('workflow_undo_prompt_merge_spec', { edges: [], nodes: [] 
 
     workflowUndoCommands.undo(workflowId)
     const node = exportWorkflowSnapshotFromYjs(local).nodes.find((candidate) => candidate.id === 'perf_node_0')
-    assert(node?.position.x === 200 && node.position.y === 200, 'Undo should not overwrite a newer remote Y.Map value.')
+    expect(node?.position).toEqual({ x: 200, y: 200 })
   } finally {
     unregisterWorkflowYjsRuntime(workflowId, local)
     local.ydoc.destroy()
     remote.ydoc.destroy()
   }
-}
+})
 
-{
+test('workflow Yjs runtime unregister cleans up runtime and notifies subscribers', () => {
   const workflowId = 'workflow_undo_runtime_cleanup_spec'
   const y = createWorkflowYDoc()
   const empty = { edges: [], nodes: [] }
@@ -183,12 +191,10 @@ withRegisteredRuntime('workflow_undo_prompt_merge_spec', { edges: [], nodes: [] 
   })
 
   registerWorkflowYjsRuntime(workflowId, y, empty)
-  assert(Boolean(getWorkflowYjsRuntimeForWorkflow(workflowId)), 'Runtime should be registered.')
+  expect(getWorkflowYjsRuntimeForWorkflow(workflowId)).toBeDefined()
   unregisterWorkflowYjsRuntime(workflowId, y)
-  assert(!getWorkflowYjsRuntimeForWorkflow(workflowId), 'Runtime should be removed after unregister.')
-  assert(changeCount === 2, 'Runtime subscribers should be notified on register and unregister.')
+  expect(getWorkflowYjsRuntimeForWorkflow(workflowId)).toBeUndefined()
+  expect(changeCount).toBe(2)
   unsubscribe()
   y.ydoc.destroy()
-}
-
-console.log('workflow undo command checks passed')
+})

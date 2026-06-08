@@ -1,79 +1,79 @@
+import { expect, test } from 'bun:test'
+
 import { formValuesEqual, formValueWithCompatibleModel, taskWithCompatibleModel } from './model-compatibility'
 import { mediaSlotsForNodeType, normalizeMediaSlotsForNodeType } from '../domain/media-slot-policy'
 import { resolveClientModel } from './registry/client-model-registry'
 
-const assert = (condition: unknown, message: string): void => {
-  if (!condition) {
-    throw new Error(message)
+test('legacy image tasks fall back to a compatible registered model', () => {
+  const legacyImageTask = {
+    kind: 'image_generation' as const,
+    model: 'dev-image',
+    params: { count: 1, size: '1024x1024' },
+    prompt: 'Keep this prompt',
+    provider: 'dev',
   }
-}
 
-const legacyImageTask = {
-  kind: 'image_generation' as const,
-  model: 'dev-image',
-  params: { count: 1, size: '1024x1024' },
-  prompt: 'Keep this prompt',
-  provider: 'dev',
-}
+  const nextImageTask = taskWithCompatibleModel(legacyImageTask, {
+    inputImages: [
+      {
+        id: 'slot-item',
+        order: 0,
+        required: true,
+        slot: 'inputImages',
+        source: { type: 'media_object' as const, mediaObjectId: 'media' },
+      },
+    ],
+  })
 
-const nextImageTask = taskWithCompatibleModel(legacyImageTask, {
-  inputImages: [
-    {
-      id: 'slot-item',
-      order: 0,
-      required: true,
-      slot: 'inputImages',
-      source: { type: 'media_object' as const, mediaObjectId: 'media' },
-    },
-  ],
+  expect(nextImageTask.provider).toBe('google')
+  expect(nextImageTask.model).toBe('gemini-3.1-flash-image-preview')
+  expect(nextImageTask.prompt).toBe(legacyImageTask.prompt)
+  expect(nextImageTask.params.count).toBe(1)
+  expect(Object.hasOwn(nextImageTask.params, 'size')).toBe(false)
 })
 
-assert(nextImageTask.provider === 'google', 'legacy image provider should fall back to first registered image provider')
-assert(nextImageTask.model === 'gemini-3.1-flash-image-preview', 'legacy image model should fall back to Gemini Flash')
-assert(nextImageTask.prompt === legacyImageTask.prompt, 'fallback should preserve prompt')
-assert(nextImageTask.params.count === 1, 'fallback should preserve compatible params')
-assert(!Object.hasOwn(nextImageTask.params, 'size'), 'fallback should drop unsupported params')
+test('legacy video tasks fall back to a compatible registered model', () => {
+  const legacyVideoTask = {
+    kind: 'video_generation' as const,
+    model: 'dev-video',
+    params: { durationSeconds: 5, outputLastFrame: false, resolution: '720p' },
+    prompt: 'Move the camera',
+    provider: 'dev',
+  }
 
-const legacyVideoTask = {
-  kind: 'video_generation' as const,
-  model: 'dev-video',
-  params: { durationSeconds: 5, outputLastFrame: false, resolution: '720p' },
-  prompt: 'Move the camera',
-  provider: 'dev',
-}
+  const nextVideoTask = taskWithCompatibleModel(legacyVideoTask, {
+    firstFrame: [
+      {
+        id: 'slot-item',
+        order: 0,
+        required: true,
+        slot: 'firstFrame',
+        source: { type: 'media_object' as const, mediaObjectId: 'media' },
+      },
+    ],
+  })
 
-const nextVideoTask = taskWithCompatibleModel(legacyVideoTask, {
-  firstFrame: [
-    {
-      id: 'slot-item',
-      order: 0,
-      required: true,
-      slot: 'firstFrame',
-      source: { type: 'media_object' as const, mediaObjectId: 'media' },
-    },
-  ],
+  expect(nextVideoTask.provider).toBe('google')
+  expect(nextVideoTask.model).toBe('veo-3.1-generate-preview')
+  expect(nextVideoTask.prompt).toBe(legacyVideoTask.prompt)
+  expect(nextVideoTask.params.durationSeconds).toBe(5)
+  expect(Object.hasOwn(nextVideoTask.params, 'outputLastFrame')).toBe(false)
 })
 
-assert(nextVideoTask.provider === 'google', 'legacy video provider should fall back to first registered video provider')
-assert(nextVideoTask.model === 'veo-3.1-generate-preview', 'legacy video model should fall back to Veo')
-assert(nextVideoTask.prompt === legacyVideoTask.prompt, 'video fallback should preserve prompt')
-assert(nextVideoTask.params.durationSeconds === 5, 'video fallback should preserve compatible params')
-assert(!Object.hasOwn(nextVideoTask.params, 'outputLastFrame'), 'video fallback should drop unsupported params')
+test('compatible form normalization preserves remote prompt changes', () => {
+  const remotePromptValue = formValueWithCompatibleModel(
+    {
+      kind: 'image_generation',
+      model: 'gemini-3.1-flash-image-preview',
+      params: { aspectRatio: '1:1', count: 1, imageSize: '1K' },
+      prompt: 'Remote prompt',
+      provider: 'google',
+    },
+    {},
+  )
 
-const remotePromptValue = formValueWithCompatibleModel(
-  {
-    kind: 'image_generation',
-    model: 'gemini-3.1-flash-image-preview',
-    params: { aspectRatio: '1:1', count: 1, imageSize: '1K' },
-    prompt: 'Remote prompt',
-    provider: 'google',
-  },
-  {},
-)
-
-assert(remotePromptValue.prompt === 'Remote prompt', 'compatible form normalization should preserve remote prompt')
-assert(
-  !formValuesEqual(
+  expect(remotePromptValue.prompt).toBe('Remote prompt')
+  expect(formValuesEqual(
     {
       kind: 'image_generation',
       model: 'gemini-3.1-flash-image-preview',
@@ -82,54 +82,56 @@ assert(
       provider: 'google',
     },
     remotePromptValue,
-  ),
-  'formValuesEqual should catch same-model remote prompt changes',
-)
-
-const incompatibleSlots = normalizeMediaSlotsForNodeType('video_generation', {
-  firstFrame: [
-    {
-      id: 'compatible-video-slot',
-      order: 0,
-      required: true,
-      slot: 'firstFrame',
-      source: { type: 'media_object' as const, mediaObjectId: 'media_1' },
-    },
-  ],
-  inputImages: [
-    {
-      id: 'image-only-slot',
-      order: 0,
-      required: true,
-      slot: 'inputImages',
-      source: { type: 'media_object' as const, mediaObjectId: 'media_2' },
-    },
-  ],
+  )).toBe(false)
 })
 
-assert(incompatibleSlots.firstFrame?.length === 1, 'cross-kind media slot normalization should preserve compatible slots')
-assert(!incompatibleSlots.inputImages?.length, 'cross-kind media slot normalization should remove incompatible slots')
+test('media slot normalization preserves compatible cross-kind slots only', () => {
+  const incompatibleSlots = normalizeMediaSlotsForNodeType('video_generation', {
+    firstFrame: [
+      {
+        id: 'compatible-video-slot',
+        order: 0,
+        required: true,
+        slot: 'firstFrame',
+        source: { type: 'media_object' as const, mediaObjectId: 'media_1' },
+      },
+    ],
+    inputImages: [
+      {
+        id: 'image-only-slot',
+        order: 0,
+        required: true,
+        slot: 'inputImages',
+        source: { type: 'media_object' as const, mediaObjectId: 'media_2' },
+      },
+    ],
+  })
 
-const seedanceProSpec = resolveClientModel({
-  kind: 'video_generation',
-  model: 'doubao-seedance-1-5-pro-251215',
-  provider: 'volcengine',
+  expect(incompatibleSlots.firstFrame).toHaveLength(1)
+  expect(incompatibleSlots.inputImages?.length ?? 0).toBe(0)
 })
-assert(Boolean(seedanceProSpec), 'Seedance Pro should resolve')
-const seedanceProSlots = mediaSlotsForNodeType('video_generation', seedanceProSpec?.mediaCapabilities)
-assert(seedanceProSlots.some((descriptor) => descriptor.slot === 'referenceImages'), 'capability slot policy should expose reference image slots')
-assert(!seedanceProSlots.some((descriptor) => descriptor.slot === 'referenceAudios'), 'capability slot policy should hide unsupported reference audio slots')
-assert(!seedanceProSlots.some((descriptor) => descriptor.slot === 'referenceVideos'), 'capability slot policy should hide unsupported reference video slots')
 
-const limitedReferenceSlots = normalizeMediaSlotsForNodeType('video_generation', {
-  referenceImages: Array.from({ length: 4 }, (_unused, index) => ({
-    id: `reference_${index}`,
-    order: index,
-    required: true,
-    slot: 'referenceImages' as const,
-    source: { type: 'media_object' as const, mediaObjectId: `media_${index}` },
-  })),
-}, seedanceProSpec?.mediaCapabilities)
-assert(limitedReferenceSlots.referenceImages?.length === 2, 'capability slot normalization should enforce max items')
+test('model media capabilities expose and constrain supported reference slots', () => {
+  const seedanceProSpec = resolveClientModel({
+    kind: 'video_generation',
+    model: 'doubao-seedance-1-5-pro-251215',
+    provider: 'volcengine',
+  })
+  expect(seedanceProSpec).toBeDefined()
 
-console.log('model compatibility checks passed')
+  const seedanceProSlots = mediaSlotsForNodeType('video_generation', seedanceProSpec?.mediaCapabilities)
+  expect(seedanceProSlots.some((descriptor) => descriptor.slot === 'referenceImages')).toBe(true)
+  expect(seedanceProSlots.some((descriptor) => descriptor.slot === 'referenceAudios')).toBe(false)
+  expect(seedanceProSlots.some((descriptor) => descriptor.slot === 'referenceVideos')).toBe(false)
+
+  const limitedReferenceSlots = normalizeMediaSlotsForNodeType('video_generation', {
+    referenceImages: Array.from({ length: 4 }, (_unused, index) => ({
+      id: `reference_${index}`,
+      order: index,
+      required: true,
+      slot: 'referenceImages' as const,
+      source: { type: 'media_object' as const, mediaObjectId: `media_${index}` },
+    })),
+  }, seedanceProSpec?.mediaCapabilities)
+  expect(limitedReferenceSlots.referenceImages).toHaveLength(2)
+})

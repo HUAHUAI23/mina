@@ -25,13 +25,13 @@ interface CanvasDockProps {
   runningNodeId?: string | undefined
 }
 
-const dockFrameBaseClassName = 'mina-wc-dock-shell mina-wc-config-card grid min-h-0 gap-4 overflow-visible bg-[linear-gradient(180deg,color-mix(in_oklch,var(--surface-container-lowest)_96%,transparent),color-mix(in_oklch,var(--surface-container-lowest)_91%,transparent))] text-foreground shadow-[0_30px_66px_-38px_color-mix(in_oklch,var(--foreground)_22%,transparent),inset_0_0_0_1px_color-mix(in_oklch,var(--foreground-quaternary)_7%,transparent)] pointer-events-auto max-h-[min(62dvh,720px)] max-[720px]:max-h-[min(56dvh,520px)]'
-const defaultDockFrameClassName = cn(dockFrameBaseClassName, 'w-full rounded-2xl px-[26px] pt-6 pb-[18px] max-[720px]:p-3.5')
-const nodeDockFrameClassName = cn(dockFrameBaseClassName, 'w-full rounded-2xl px-4 pt-3.5 pb-4 max-[720px]:p-3.5')
-const emptyExpandedDockFrameClassName = cn(dockFrameBaseClassName, 'w-[min(820px,calc(100vw_-_48px))] rounded-[26px] p-3 max-[720px]:p-[7px]')
-const emptyCollapsedDockFrameClassName = cn(dockFrameBaseClassName, 'w-[min(680px,calc(100vw_-_48px))] rounded-[26px] p-3 max-[720px]:p-[7px]')
-const passiveDockFrameClassName = 'opacity-30'
-const hiddenDockFrameClassName = 'opacity-30 pointer-events-none'
+const dockFrameBaseClassName = 'mina-wc-dock-shell mina-wc-floating-surface grid min-h-0 overflow-visible text-foreground pointer-events-auto max-h-[min(62dvh,720px)] max-[720px]:max-h-[min(58dvh,540px)] [--mina-wc-dock-expanded-width:min(760px,calc(100vw_-_48px))] [--mina-wc-dock-collapsed-width:min(620px,calc(100vw_-_48px))] max-[720px]:[--mina-wc-dock-expanded-width:calc(100vw_-_24px)] max-[720px]:[--mina-wc-dock-collapsed-width:calc(100vw_-_24px)]'
+const defaultDockFrameClassName = cn(dockFrameBaseClassName, 'w-(--mina-wc-dock-collapsed-width) gap-4 rounded-[22px] px-5 py-4 max-[720px]:p-3.5')
+const nodeDockFrameClassName = cn(dockFrameBaseClassName, 'w-(--mina-wc-dock-expanded-width) gap-2.5 overflow-hidden rounded-[22px] p-2 max-[720px]:p-1.5')
+const emptyExpandedDockFrameClassName = cn(dockFrameBaseClassName, 'w-(--mina-wc-dock-expanded-width) gap-2.5 overflow-hidden rounded-[26px] p-1 max-[720px]:p-1.5')
+const emptyCollapsedDockFrameClassName = cn(dockFrameBaseClassName, 'w-(--mina-wc-dock-collapsed-width) gap-2 rounded-[26px] p-2 max-[720px]:p-2')
+const passiveDockFrameClassName = 'opacity-40'
+const hiddenDockFrameClassName = 'translate-y-2 opacity-0 pointer-events-none'
 const dockBlockClassName = 'mina-wc-dock-block min-w-0'
 type AddMediaGenerationNode = CanvasStore['addMediaGenerationNode']
 type MediaNodeType = Parameters<AddMediaGenerationNode>[0]['nodeType']
@@ -52,9 +52,9 @@ export function CanvasDock({ onRunNode, runError, runningNodeId }: CanvasDockPro
   const reactFlow = useReactFlow<WorkflowFlowNode, WorkflowFlowEdge>()
   const dockPassive = useFlowRenderStore((state) => (
     state.interaction.draggingNodeIds.length > 0 ||
-    state.interaction.selectionDragActive ||
     state.interaction.viewportMoving
   ))
+  const dockInteractionHidden = useFlowRenderStore((state) => state.interaction.selectionDragActive)
   const activePanelNode = useCanvasNode(activePanel?.panel === 'config' ? activePanel.nodeId : '')
   const selectedNode = useCanvasNode(selectedNodeIds.length === 1 ? selectedNodeIds[0] ?? '' : '')
   const activeNode = activePanelNode ?? selectedNode
@@ -64,7 +64,7 @@ export function CanvasDock({ onRunNode, runError, runningNodeId }: CanvasDockPro
     [onRunNode, runError, runningNodeId],
   )
   const blocks = useMemo(() => composerRegistry.resolve(context), [context])
-  const hidden = blocks.length === 0
+  const hidden = blocks.length === 0 || dockInteractionHidden
   const getNewNodePosition = useCallback((nodeType: MediaNodeType) => {
     if (!reactFlow.viewportInitialized || typeof window === 'undefined') {
       return undefined

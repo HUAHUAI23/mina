@@ -15,8 +15,10 @@ export function AdvancedConfigGroup({ form, spec }: AdvancedConfigGroupProps) {
   }
 
   return (
-    <div className="grid gap-3 rounded-xl bg-surface-container-lowest/55 p-3.5">
-      <spec.AdvancedFields fields="params" form={form} />
+    <div className="grid max-h-[min(50dvh,360px)] min-h-0 gap-3 overflow-y-auto bg-transparent [scrollbar-gutter:stable]">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(12rem,1fr))] gap-3">
+        <spec.AdvancedFields fields="params" form={form} />
+      </div>
     </div>
   )
 }

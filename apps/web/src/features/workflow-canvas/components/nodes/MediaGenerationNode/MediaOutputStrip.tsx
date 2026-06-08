@@ -18,7 +18,7 @@ export const MediaOutputStrip = memo(function MediaOutputStrip({ mediaView, onSe
     return null
   }
   return (
-    <div className="nodrag nopan pointer-events-auto absolute left-1/2 -bottom-12 z-20 flex max-w-[calc(100%-2rem)] -translate-x-1/2 gap-2 overflow-x-auto">
+    <div className="nodrag nopan pointer-events-auto absolute left-1/2 -bottom-[68px] z-20 flex max-w-[calc(100%-2rem)] -translate-x-1/2 items-center gap-2 rounded-2xl border border-zinc-200/80 bg-zinc-50/95 p-2 shadow-sm dark:border-zinc-800/80 dark:bg-zinc-900/95">
       {resources.map((resource) => {
         const active = mediaView?.outputResourceId
           ? mediaView.outputResourceId === resource.id
@@ -27,7 +27,7 @@ export const MediaOutputStrip = memo(function MediaOutputStrip({ mediaView, onSe
         return (
           <button
             aria-label={m.workflow_canvas_select_output_number({ index: resource.index + 1 })}
-            className="flex size-9 flex-none items-center justify-center overflow-hidden rounded-md border-0 bg-surface-container-lowest/76 p-0 text-xs font-black text-foreground-tertiary opacity-72 shadow-[0_10px_24px_-22px_color-mix(in_oklch,var(--foreground)_24%,transparent),inset_0_0_0_1px_color-mix(in_oklch,var(--foreground-quaternary)_10%,transparent)] data-[active=true]:opacity-100 data-[active=true]:shadow-[0_12px_26px_-22px_color-mix(in_oklch,var(--foreground)_26%,transparent),inset_0_0_0_2px_color-mix(in_oklch,var(--primary)_58%,var(--foreground-secondary))]"
+            className="flex aspect-[16/10] h-12 flex-none items-center justify-center overflow-hidden rounded-[8px] border border-zinc-200 dark:border-zinc-800 bg-zinc-100/60 dark:bg-zinc-900/40 p-0 text-xs font-semibold text-zinc-500 shadow-sm transition-all duration-200 hover:scale-105 hover:border-zinc-400 dark:hover:border-zinc-600 hover:text-zinc-800 dark:hover:text-zinc-200 data-[active=true]:scale-105 data-[active=true]:border-primary dark:data-[active=true]:border-primary data-[active=true]:ring-2 data-[active=true]:ring-primary/20 dark:data-[active=true]:ring-primary/30"
             data-active={active ? 'true' : undefined}
             key={resource.id}
             onClick={(event) => {

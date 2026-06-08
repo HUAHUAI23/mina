@@ -1,4 +1,4 @@
-import { BaseEdge, EdgeLabelRenderer, type EdgeProps } from '@xyflow/react'
+import { BaseEdge, ViewportPortal, type EdgeProps } from '@xyflow/react'
 import { Scissors } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -10,11 +10,13 @@ import { WORKFLOW_EDGE_GEOMETRY } from '../../workflow-canvas-geometry'
 
 import { getWorkflowEdgeRoute } from './workflow-edge-routing'
 
-const edgeActionClassName = 'mina-wc-edge-action pointer-events-none absolute z-20'
-const edgeActionButtonClassName = 'flex size-[30px] items-center justify-center rounded-full border border-[color:color-mix(in_oklch,var(--destructive)_38%,var(--outline-ghost))] bg-[color-mix(in_oklch,var(--surface-container-lowest)_94%,transparent)] text-[color:color-mix(in_oklch,var(--destructive)_80%,var(--foreground-secondary))] shadow-[0_18px_30px_-20px_color-mix(in_oklch,var(--destructive)_38%,transparent)] pointer-events-auto hover:bg-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))] hover:text-destructive-foreground'
+const edgeActionClassName = 'mina-wc-edge-action nodrag nopan nowheel pointer-events-auto absolute z-20 flex items-center rounded-full bg-[color-mix(in_oklch,var(--surface-container-lowest)_94%,transparent)] p-1 shadow-md ring-1 ring-border'
+const edgeActionButtonClassName = 'flex size-[30px] items-center justify-center rounded-full border border-transparent bg-transparent text-foreground-tertiary pointer-events-auto hover:bg-surface-container-low hover:text-foreground'
+const edgeDeleteActionButtonClassName = 'hover:border-[color:color-mix(in_oklch,var(--destructive)_24%,var(--outline-ghost))] hover:bg-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))] hover:text-destructive-foreground'
 
 export const MediaEdge = memo(function MediaEdge({
   id,
+  source,
   sourceX,
   sourceY,
   sourcePosition,
@@ -28,9 +30,13 @@ export const MediaEdge = memo(function MediaEdge({
 }: EdgeProps<WorkflowFlowEdge>) {
   const m = useMessages()
   const removeGraphEdges = useCanvasStore((state) => state.removeGraphEdges)
+  const sourceNodeSelected = useCanvasUiStore((state) =>
+    state.selectedNodeIds.includes(source),
+  )
   const targetNodeSelected = useCanvasUiStore((state) =>
     state.selectedNodeIds.includes(target),
   )
+  const edgeHoveredByFlow = useCanvasUiStore((state) => state.hoveredEdgeId === id)
   const [isHovered, setIsHovered] = useState(false)
   const [isButtonHovered, setIsButtonHovered] = useState(false)
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -48,8 +54,8 @@ export const MediaEdge = memo(function MediaEdge({
   )
   const isMediaLink = Boolean(data?.connection)
   const hovered = Boolean(isHovered || isButtonHovered)
-  const active = Boolean(selected || targetNodeSelected || hovered)
-  const flowing = Boolean(targetNodeSelected || selected)
+  const active = Boolean(selected || sourceNodeSelected || targetNodeSelected || hovered || edgeHoveredByFlow)
+  const flowing = Boolean(sourceNodeSelected || targetNodeSelected || selected)
   const cutConnectionLabel = m.workflow_canvas_cut_connection()
 
   const clearLeaveTimer = useCallback(() => {
@@ -127,7 +133,7 @@ export const MediaEdge = memo(function MediaEdge({
       </g>
 
       {active ? (
-        <EdgeLabelRenderer>
+        <ViewportPortal>
           <div
             className={edgeActionClassName}
             style={{
@@ -136,7 +142,7 @@ export const MediaEdge = memo(function MediaEdge({
           >
             <button
               aria-label={cutConnectionLabel}
-              className={edgeActionButtonClassName}
+              className={`${edgeActionButtonClassName} ${edgeDeleteActionButtonClassName}`}
               onClick={handleDelete}
               onMouseEnter={handleButtonMouseEnter}
               onMouseLeave={handleButtonMouseLeave}
@@ -146,7 +152,7 @@ export const MediaEdge = memo(function MediaEdge({
               <Scissors aria-hidden="true" size={13} />
             </button>
           </div>
-        </EdgeLabelRenderer>
+        </ViewportPortal>
       ) : null}
     </>
   )

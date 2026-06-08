@@ -1,17 +1,16 @@
+import { expect, test } from 'bun:test'
+
 import { diffNodeFrames, type NodeFrameSnapshot } from './drag-session'
 
 const frame = (x: number, y: number): NodeFrameSnapshot => ({
   position: { x, y },
 })
 
-const unchanged = diffNodeFrames({ node_1: frame(10, 20) }, { node_1: frame(10, 20) })
-if (unchanged.length !== 0) {
-  throw new Error(`Expected no frame changes, received ${unchanged.length}.`)
-}
+test('diffNodeFrames reports only changed frames', () => {
+  const unchanged = diffNodeFrames({ node_1: frame(10, 20) }, { node_1: frame(10, 20) })
+  expect(unchanged).toHaveLength(0)
 
-const changed = diffNodeFrames({ node_1: frame(10, 20) }, { node_1: frame(15, 25) })
-if (changed.length !== 1 || changed[0]?.nodeId !== 'node_1') {
-  throw new Error('Expected one changed node frame.')
-}
-
-console.log('drag-session diffNodeFrames checks passed')
+  const changed = diffNodeFrames({ node_1: frame(10, 20) }, { node_1: frame(15, 25) })
+  expect(changed).toHaveLength(1)
+  expect(changed[0]?.nodeId).toBe('node_1')
+})

@@ -8,7 +8,7 @@ const stableNode = (node: WorkflowCanvasNode): WorkflowCanvasNode => ({
   type: node.type,
   position: node.position,
   ...(node.parentId ? { parentId: node.parentId } : {}),
-  ...(node.extent ? { extent: node.extent } : {}),
+  ...(node.parentId ? { extent: 'parent' as const } : {}),
   ...(node.width ? { width: node.width } : {}),
   ...(node.height ? { height: node.height } : {}),
   data:

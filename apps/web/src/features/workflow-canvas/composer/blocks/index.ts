@@ -2,14 +2,11 @@ import {
   isMediaGenerationNode,
   type MediaGenerationCanvasNode,
 } from '../../domain/canvas-node-types'
-import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import type { ComposerRuntime } from '../types'
 import { composerRegistry } from '../registry'
-import { GroupBlock } from './GroupBlock'
 import { MediaComposerBlock } from './MediaComposerBlock'
 import { MultiSelectionBlock } from './MultiSelectionBlock'
 import { EmptyMediaComposer } from './EmptyMediaComposer'
-import { TextBlock } from './TextBlock'
 
 composerRegistry.register<{ node: MediaGenerationCanvasNode; runtime: ComposerRuntime }>({
   id: 'media-composer',
@@ -36,20 +33,6 @@ composerRegistry.register<{ runtime: ComposerRuntime }>({
   Component: EmptyMediaComposer,
 })
 
-composerRegistry.register<{ node: WorkflowCanvasNode }>({
-  id: 'text',
-  priority: 20,
-  match: (ctx) => ctx.kind === 'node' && ctx.node.data.nodeType === 'text',
-  surface: () => 'expanded',
-  selectProps: (ctx) => {
-    if (ctx.kind !== 'node' || ctx.node.data.nodeType !== 'text') {
-      throw new Error('Text block requires a text node')
-    }
-    return { node: ctx.node }
-  },
-  Component: TextBlock,
-})
-
 composerRegistry.register<{ nodeIds: string[] }>({
   id: 'multi-selection',
   priority: 20,
@@ -62,18 +45,4 @@ composerRegistry.register<{ nodeIds: string[] }>({
     return { nodeIds: ctx.nodeIds }
   },
   Component: MultiSelectionBlock,
-})
-
-composerRegistry.register<{ node: WorkflowCanvasNode; runtime: ComposerRuntime }>({
-  id: 'group',
-  priority: 20,
-  match: (ctx) => ctx.kind === 'node' && (ctx.node.data.nodeType === 'flow_group' || ctx.node.data.nodeType === 'node_group'),
-  surface: () => 'expanded',
-  selectProps: (ctx, runtime) => {
-    if (ctx.kind !== 'node' || (ctx.node.data.nodeType !== 'flow_group' && ctx.node.data.nodeType !== 'node_group')) {
-      throw new Error('Group block requires a group node')
-    }
-    return { node: ctx.node, runtime }
-  },
-  Component: GroupBlock,
 })

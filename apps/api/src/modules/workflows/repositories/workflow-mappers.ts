@@ -29,7 +29,7 @@ export const normalizeWorkflowNode = (node: WorkflowCanvasNode): WorkflowCanvasN
       y: node.position.y,
     },
     ...(node.parentId ? { parentId: node.parentId } : {}),
-    ...(node.extent ? { extent: node.extent } : {}),
+    ...(node.parentId ? { extent: 'parent' as const } : {}),
     ...(node.width !== undefined ? { width: node.width } : {}),
     ...(node.height !== undefined ? { height: node.height } : {}),
     data: node.data,

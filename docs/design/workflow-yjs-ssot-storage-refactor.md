@@ -6,6 +6,18 @@ Date: 2026-05-21
 
 Status: implemented in the development branch.
 
+Update on 2026-06-07: the checkpoint/compaction path now uses
+`expectedVersion` conditional snapshot writes. Explicit compaction
+returns `409 WORKFLOW_VERSION_CONFLICT` when another API instance has
+advanced the persisted snapshot, while background threshold/idle
+compaction treats that conflict as a skipped maintenance pass and
+reloads the room from the latest snapshot plus remaining update log.
+Compaction replays persisted updates before export and deletes only the
+update ids covered by the saved snapshot, so cross-instance maintenance
+cannot drop concurrent append-log entries. Snapshot reads and compaction
+also isolate invalid persisted updates by rebuilding from the last valid
+snapshot, replaying only valid updates, and deleting invalid update ids.
+
 This is the storage and save-path design for the current development
 phase. Production data migration compatibility is not a constraint. The
 goal is to remove the non-converging autosave/checkpoint loop by
@@ -687,9 +699,19 @@ Important implementation details:
   Y.Doc, then broadcast after apply. If the threshold is reached, the
   same workflow lock compacts the already-applied document. This avoids
   both nested-lock deadlock and snapshots that miss the threshold update.
+- Snapshot saves use an `expectedVersion` conditional repository write.
+  Stale explicit compaction surfaces `WORKFLOW_VERSION_CONFLICT`; stale
+  background compaction reloads from persistence and leaves the append
+  log for a later successful checkpoint.
 - Cold-start room load applies the persisted snapshot and then all
   uncompacted updates. The loaded update count is retained so the next
   compaction advances the snapshot version and prunes the update log.
+- Compaction applies the current persisted update log before exporting
+  a snapshot and deletes only the update ids covered by that snapshot.
+- Snapshot reads and compaction recover from invalid append-log updates:
+  the room is rebuilt from the last valid snapshot, valid updates are
+  replayed, and invalid update ids are removed so bad operations cannot
+  poison future snapshots.
 - Snapshot saves notify workflow metadata through an injected callback.
   This keeps `WorkflowYjsRoomService` decoupled from the definition
   repository while keeping list summaries current.

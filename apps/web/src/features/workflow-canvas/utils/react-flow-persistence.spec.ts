@@ -1,3 +1,5 @@
+import { expect, test } from 'bun:test'
+
 import { stableCanvas } from './react-flow-persistence'
 import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 
@@ -45,27 +47,20 @@ const transientNode = {
   },
 } as unknown as WorkflowCanvasNode
 
-const canvas = stableCanvas([transientNode], [])
-const serialized = JSON.stringify(canvas)
+test('stableCanvas strips React Flow transient fields and preserves serializable node data', () => {
+  const canvas = stableCanvas([transientNode], [])
+  const serialized = JSON.stringify(canvas)
 
-for (const transientKey of ['selected', 'dragging', 'measured', 'positionAbsolute']) {
-  if (serialized.includes(transientKey)) {
-    throw new Error(`stableCanvas serialized React Flow transient key: ${transientKey}`)
+  for (const transientKey of ['selected', 'dragging', 'measured', 'positionAbsolute']) {
+    expect(serialized).not.toContain(transientKey)
   }
-}
 
-const node = canvas.nodes[0]
-if (!node || node.position.x !== 10 || node.position.y !== 20 || node.width !== 240) {
-  throw new Error('stableCanvas did not preserve stable node frame fields.')
-}
-
-if (node.data.nodeType !== 'image_generation') {
-  throw new Error('Expected image generation node.')
-}
-
-const slotNames = Object.keys(node.data.mediaSlots ?? {})
-if (slotNames.length !== 1 || slotNames[0] !== 'inputImages') {
-  throw new Error(`Expected only inputImages media slot in image save payload, received ${slotNames.join(', ')}`)
-}
-
-console.log('react-flow persistence serialization checks passed')
+  const node = canvas.nodes[0]!
+  expect(node.position).toEqual({ x: 10, y: 20 })
+  expect(node.width).toBe(240)
+  expect(node.data.nodeType).toBe('image_generation')
+  if (node.data.nodeType !== 'image_generation') {
+    throw new Error('Expected image generation node.')
+  }
+  expect(Object.keys(node.data.mediaSlots ?? {})).toEqual(['inputImages'])
+})

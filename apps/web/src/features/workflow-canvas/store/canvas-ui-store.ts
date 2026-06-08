@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
 import type { MediaSlotName, NodeMediaSlotItem, NodeMediaSlots } from '@mina/contracts/modules/media'
+import type { Position } from '@xyflow/react'
 
 import { isMediaGenerationNode, type MediaGenerationCanvasNode } from '../domain/canvas-node-types'
 import { normalizeMediaSlotsForNodeType } from '../domain/media-slot-policy'
@@ -10,12 +11,34 @@ import { listAllClientModels, modelKey, resolveClientModel } from '../forms/regi
 import { assignSlotOrder, normalizeSlotOrder } from '../utils/media-slots'
 import { useCanvasStore } from './canvas-store'
 import '../forms/registry'
+import type { CanvasDomScope } from '../utils/canvas-dom-scope'
 
 export type NodePanelType = 'config'
 
 export interface ActiveNodePanel {
   nodeId: string
   panel: NodePanelType
+}
+
+export type CanvasAddMenuTrigger = 'canvas' | 'connection'
+
+export interface CanvasAddMenuState {
+  containerSize: { height: number; width: number }
+  flowPosition: { x: number; y: number }
+  scope: CanvasDomScope
+  screenPosition: { x: number; y: number }
+  sourceHandle?: string | undefined
+  sourceId?: string | undefined
+  trigger: CanvasAddMenuTrigger
+}
+
+export interface CanvasAddMenuPreviewLineState {
+  sourcePosition: Position
+  sourceX: number
+  sourceY: number
+  targetPosition: Position
+  targetX: number
+  targetY: number
 }
 
 export interface DraftUploadEntry {
@@ -34,23 +57,29 @@ export interface ComposerDraftState {
 
 interface CanvasUiState {
   activeNodePanel: ActiveNodePanel | undefined
+  addMenu: CanvasAddMenuState | undefined
+  addMenuPreviewLine: CanvasAddMenuPreviewLineState | undefined
   advancedOpenByComposerId: Record<string, boolean>
   composerDraft: ComposerDraftState
   // The node whose task-history rail is currently open, if any. Local UI only — not collaborative.
   historyPanelNodeId: string | undefined
+  hoveredEdgeId: string | undefined
   selectedSlotByComposerId: Record<string, MediaSlotName | undefined>
   selectedNodeIds: string[]
 }
 
 interface CanvasUiActions {
   beginDraftUpload(uploadId: string, slot: MediaSlotName): void
+  closeAddMenu(): void
   closeHistoryPanel(): void
   closeNodePanel(): void
   completeDraftUpload(uploadId: string, item?: NodeMediaSlotItem | undefined): void
   failDraftUpload(uploadId: string, message: string): void
+  openAddMenu(state: CanvasAddMenuState, previewLine?: CanvasAddMenuPreviewLineState | undefined): void
   openNodePanel(nodeId: string, panel: NodePanelType): void
   resetComposerDraft(): void
   selectNodeIds(ids: readonly string[]): void
+  setHoveredEdgeId(edgeId: string | undefined): void
   setDraftError(error: string | undefined): void
   setDraftExpanded(expanded: boolean): void
   setDraftFromNode(node: MediaGenerationCanvasNode): void
@@ -154,9 +183,12 @@ const normalizeDraftMediaSlots = (
 
 export const useCanvasUiStore = create<CanvasUiStore>()(subscribeWithSelector((set) => ({
   activeNodePanel: undefined,
+  addMenu: undefined,
+  addMenuPreviewLine: undefined,
   advancedOpenByComposerId: {},
   composerDraft: createDefaultComposerDraft(),
   historyPanelNodeId: undefined,
+  hoveredEdgeId: undefined,
   selectedSlotByComposerId: {},
   beginDraftUpload: (uploadId, slot) =>
     set((state) => ({
@@ -169,6 +201,7 @@ export const useCanvasUiStore = create<CanvasUiStore>()(subscribeWithSelector((s
         },
       },
     })),
+  closeAddMenu: () => set({ addMenu: undefined, addMenuPreviewLine: undefined }),
   closeHistoryPanel: () => set({ historyPanelNodeId: undefined }),
   closeNodePanel: () => set({ activeNodePanel: undefined }),
   completeDraftUpload: (uploadId, item) =>
@@ -201,15 +234,31 @@ export const useCanvasUiStore = create<CanvasUiStore>()(subscribeWithSelector((s
         },
       }
     }),
-  openNodePanel: (nodeId, panel) => set({ activeNodePanel: { nodeId, panel } }),
+  openAddMenu: (state, previewLine) => set({
+    activeNodePanel: undefined,
+    addMenu: state,
+    addMenuPreviewLine: previewLine,
+  }),
+  openNodePanel: (nodeId, panel) => set({
+    activeNodePanel: { nodeId, panel },
+    addMenu: undefined,
+    addMenuPreviewLine: undefined,
+  }),
   resetComposerDraft: () => set({ composerDraft: createDefaultComposerDraft() }),
   selectedNodeIds: [],
   selectNodeIds: (ids) =>
-    set((state) =>
-      sameIds(state.selectedNodeIds, ids)
-        ? state
-        : { selectedNodeIds: [...ids] },
-    ),
+    set((state) => {
+      const selectedNodeIds = sameIds(state.selectedNodeIds, ids) ? state.selectedNodeIds : [...ids]
+      const activeNodePanel = ids.length === 1 && state.activeNodePanel?.nodeId === ids[0]
+        ? state.activeNodePanel
+        : undefined
+      if (selectedNodeIds === state.selectedNodeIds && activeNodePanel === state.activeNodePanel) {
+        return state
+      }
+      return { activeNodePanel, selectedNodeIds }
+    }),
+  setHoveredEdgeId: (edgeId) =>
+    set((state) => state.hoveredEdgeId === edgeId ? state : { hoveredEdgeId: edgeId }),
   setDraftError: (error) =>
     set((state) => ({
       composerDraft: {

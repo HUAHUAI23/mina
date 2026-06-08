@@ -95,7 +95,7 @@ const yTextValue = (value: unknown): string | undefined => {
 const nodeFrameFromNode = (node: WorkflowCanvasNode): WorkflowYNodeFrame => ({
   position: node.position,
   ...(node.parentId ? { parentId: node.parentId } : {}),
-  ...(node.extent ? { extent: node.extent } : {}),
+  ...(node.parentId ? { extent: 'parent' as const } : {}),
   ...(node.width !== undefined ? { width: node.width } : {}),
   ...(node.height !== undefined ? { height: node.height } : {}),
 })
@@ -105,11 +105,12 @@ const applyNodeFrame = (node: WorkflowCanvasNode, frame: unknown): WorkflowCanva
     return node
   }
   const typedFrame = frame as WorkflowYNodeFrame
+  const { extent: _extent, parentId: _parentId, ...nodeWithoutParentFrame } = node
   return {
-    ...node,
+    ...nodeWithoutParentFrame,
     position: typedFrame.position,
     ...(typedFrame.parentId ? { parentId: typedFrame.parentId } : {}),
-    ...(typedFrame.extent ? { extent: typedFrame.extent } : {}),
+    ...(typedFrame.parentId ? { extent: 'parent' as const } : {}),
     ...(typedFrame.width !== undefined ? { width: typedFrame.width } : {}),
     ...(typedFrame.height !== undefined ? { height: typedFrame.height } : {}),
   }

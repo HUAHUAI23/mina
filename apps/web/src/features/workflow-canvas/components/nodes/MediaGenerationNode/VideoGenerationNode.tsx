@@ -12,18 +12,22 @@ const videoGenerationNodePropsEqual = (
   next: VideoGenerationNodeProps,
 ): boolean =>
   previous.id === next.id &&
+  previous.parentId === next.parentId &&
+  previous.selected === next.selected &&
   previous.data.nodeId === next.data.nodeId &&
   previous.data.title === next.data.title &&
   previous.data.mediaView?.taskId === next.data.mediaView?.taskId &&
   previous.data.mediaView?.outputResourceId === next.data.mediaView?.outputResourceId &&
   previous.data.mediaView?.outputIndex === next.data.mediaView?.outputIndex
 
-export const VideoGenerationNode = memo(function VideoGenerationNode({ data, id }: VideoGenerationNodeProps) {
+export const VideoGenerationNode = memo(function VideoGenerationNode({ data, id, parentId, selected }: VideoGenerationNodeProps) {
   return (
     <MediaNodeShell
       id={id}
       mediaView={data.mediaView}
       nodeType="video_generation"
+      parentId={parentId}
+      selected={selected}
       title={data.title}
       renderPreview={({ nodeVisible, preview }) => (
         <VideoPosterPreview nodeVisible={nodeVisible} resource={preview.resource} poster={preview.poster} />

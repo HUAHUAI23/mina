@@ -1,3 +1,4 @@
+import { expect, test } from 'bun:test'
 import type { NodeExecutionOutput, NodeOutputResource } from '@mina/contracts/modules/tasks'
 
 import { videoPosterResource } from './media-view'
@@ -28,7 +29,7 @@ const output = (resources: NodeOutputResource[]): NodeExecutionOutput => ({
   variables: {},
 })
 
-const assertMetadataLinkedCoverWins = (): void => {
+test('video poster selection prefers metadata-linked covers', () => {
   const selectedVideo = video()
   const poster = videoPosterResource(output([
     selectedVideo,
@@ -37,24 +38,20 @@ const assertMetadataLinkedCoverWins = (): void => {
     frame('video_cover', 3, { sourceVideoResourceId: selectedVideo.id }),
   ]), selectedVideo)
 
-  if (poster?.role !== 'video_cover') {
-    throw new Error('Video poster selection should choose metadata-linked cover before first or last frames.')
-  }
-}
+  expect(poster?.role).toBe('video_cover')
+})
 
-const assertSingleVideoFallback = (): void => {
+test('video poster selection accepts unlinked provider frames for single-video outputs', () => {
   const selectedVideo = video()
   const poster = videoPosterResource(output([
     selectedVideo,
     frame('last_frame', 1),
   ]), selectedVideo)
 
-  if (poster?.role !== 'last_frame') {
-    throw new Error('Single-video outputs should accept unlinked provider frames as poster fallback.')
-  }
-}
+  expect(poster?.role).toBe('last_frame')
+})
 
-const assertMultiVideoDoesNotUseUnlinkedFrame = (): void => {
+test('video poster selection does not assign unlinked frames in multi-video outputs', () => {
   const selectedVideo = video(0)
   const poster = videoPosterResource(output([
     selectedVideo,
@@ -62,13 +59,5 @@ const assertMultiVideoDoesNotUseUnlinkedFrame = (): void => {
     frame('last_frame', 2),
   ]), selectedVideo)
 
-  if (poster !== undefined) {
-    throw new Error('Multi-video outputs should not assign unlinked frames to a selected video.')
-  }
-}
-
-assertMetadataLinkedCoverWins()
-assertSingleVideoFallback()
-assertMultiVideoDoesNotUseUnlinkedFrame()
-
-console.log('media-view checks passed')
+  expect(poster).toBeUndefined()
+})

@@ -2,7 +2,7 @@ import type { QueryKey } from '@tanstack/react-query'
 import type { TaskStatus } from '@mina/contracts/modules/tasks'
 import type { WorkflowEvent } from '@mina/contracts/modules/workflows/events'
 
-import { mediaKeys, taskKeys, workflowKeys } from '../api/workflow-keys'
+import { taskKeys, workflowKeys } from '../api/workflow-keys'
 
 /**
  * Side effects the projection needs. Kept as an interface so the reducer stays pure and unit
@@ -47,15 +47,5 @@ export const applyWorkflowEvent = (
       effects.invalidate(workflowKeys.runs(workflowId))
       return
     }
-    case 'workflow.mediaObject.ready': {
-      effects.invalidate(mediaKeys.detail(event.payload.mediaObjectId))
-      return
-    }
-    // Definition changes flow through the Yjs document, which is the source of truth for the graph;
-    // re-fetching the workflow detail here would fight that. Conflicts are surfaced elsewhere.
-    case 'workflow.definition.updated':
-    case 'workflow.node.mediaView.updated':
-    case 'workflow.remote.conflict':
-      return
   }
 }

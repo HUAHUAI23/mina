@@ -1,4 +1,5 @@
 export interface WorkflowYjsSnapshotRecord {
+  expectedVersion?: number
   snapshotBin: Uint8Array
   stateVector: Uint8Array
   version: number
@@ -14,8 +15,8 @@ export interface WorkflowYjsUpdateRecord {
 
 export interface WorkflowYjsRepository {
   appendUpdate(input: { id: string; updateBin: Uint8Array; workflowId: string }): Promise<void>
-  deleteUpdates(workflowId: string, through?: Date): Promise<void>
+  deleteUpdates(workflowId: string, updateIds?: readonly string[]): Promise<void>
   getSnapshot(workflowId: string): Promise<WorkflowYjsSnapshotRecord | undefined>
   listUpdates(workflowId: string, after?: Date): Promise<WorkflowYjsUpdateRecord[]>
-  saveSnapshot(input: WorkflowYjsSnapshotRecord): Promise<void>
+  saveSnapshot(input: WorkflowYjsSnapshotRecord): Promise<boolean>
 }

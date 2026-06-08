@@ -1,22 +1,23 @@
-import { Profiler, memo, useCallback, useEffect, useMemo, useRef, type CSSProperties } from 'react'
+import { Profiler, memo, useEffect, useMemo, useRef } from 'react'
 import {
   Background,
   BackgroundVariant,
   ConnectionMode,
-  ControlButton,
-  Controls,
-  MiniMap,
+  PanOnScrollMode,
   ReactFlow,
   ReactFlowProvider,
+  SelectionMode,
 } from '@xyflow/react'
-import type { NodeMouseHandler } from '@xyflow/react'
-import { formatNumber } from '@mina/i18n'
-import { Redo2, Undo2 } from 'lucide-react'
+import type { ReactFlowInstance } from '@xyflow/react'
 
-import { useI18n, useMessages } from '../../../app/i18n-provider'
+import { useI18n } from '../../../app/i18n-provider'
 import { usePointerBackground } from '../../../app/use-pointer-background'
 import { MediaEdge } from './edges/MediaEdge'
 import { WorkflowConnectionLine } from './edges/WorkflowConnectionLine'
+import { WorkflowFloatingConnectionLine } from './edges/WorkflowFloatingConnectionLine'
+import { CanvasAddMenu } from './CanvasAddMenu'
+import { CanvasSelectionOverlay } from './CanvasSelectionOverlay'
+import { CanvasViewportControls } from './CanvasViewportControls'
 import { FlowGroupNode } from './nodes/FlowGroupNode'
 import { ImageGenerationNode } from './nodes/MediaGenerationNode/ImageGenerationNode'
 import { VideoGenerationNode } from './nodes/MediaGenerationNode/VideoGenerationNode'
@@ -25,12 +26,13 @@ import { TextNode } from './nodes/TextNode'
 import { CanvasDock } from './dock/CanvasDock'
 import { NodeHistoryRail } from './panels/NodeHistoryRail'
 import { useCanvasUiStore } from '../store/canvas-ui-store'
-import { selectWorkflowCanvasNodes } from '../store/canvas-selection-actions'
-import { isIgnoredCanvasTarget, isReactFlowPaneTarget } from '../utils/canvas-dom-scope'
+import { useCanvasAddMenuController } from '../react-flow/use-canvas-add-menu-controller'
+import { useCanvasDevGlobals } from '../react-flow/use-canvas-dev-globals'
+import { useCanvasInteractionHandlers } from '../react-flow/use-canvas-interaction-handlers'
+import { useCanvasSelectionController } from '../react-flow/use-canvas-selection-controller'
+import { useCanvasViewportChrome } from '../react-flow/use-canvas-viewport-chrome'
 import { useWorkflowFlowHandlers } from '../react-flow/use-workflow-flow-handlers'
 import { useWorkflowUndoShortcuts } from '../react-flow/use-workflow-undo-shortcuts'
-import { publishLocalSelection } from '../sync/workflow-presence'
-import { useWorkflowUndoState } from '../sync/yjs/use-workflow-undo-state'
 import { recordCanvasProfilerCommit } from '../diagnostics/canvas-profiler-marks'
 import { useFlowRenderStore } from '../render/flow-render-store'
 import { getFlowPerformancePolicy } from '../render/flow-performance-policy'
@@ -70,47 +72,22 @@ const nodeTypes = {
 
 const MINIMAP_INTERACTION_DISABLED_NODE_THRESHOLD = 3_000
 const MINIMAP_FALLBACK_NODE_THRESHOLD = 5_000
-const MINIMAP_WIDTH = 220
-const MINIMAP_HEIGHT = 140
-const MINIMAP_STYLE = {
-  width: MINIMAP_WIDTH,
-  height: MINIMAP_HEIGHT,
-} satisfies CSSProperties
-
-const getMiniMapNodeColor = (node: WorkflowFlowNode): string => {
-  switch (node.type) {
-    case 'image_generation':
-      return 'oklch(0.62 0.055 210)'
-    case 'video_generation':
-      return 'oklch(0.58 0.05 286)'
-    case 'text':
-      return 'oklch(0.72 0.018 247)'
-    case 'flow_group':
-      return 'oklch(0.64 0.035 155)'
-    case 'node_group':
-      return 'oklch(0.68 0.026 80)'
-    default:
-      return 'var(--foreground-quaternary)'
-  }
-}
+const WORKFLOW_CANVAS_PAN_ON_DRAG_BUTTONS = [1, 2]
+const WORKFLOW_CANVAS_PAN_ON_SCROLL_SPEED = 0.8
 
 export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNodeId }: WorkflowCanvasProps) {
   const { locale } = useI18n()
-  const m = useMessages()
   useHydrateFlowRender()
+  useCanvasDevGlobals()
   const flowNodes = useFlowRenderStore((state) => state.flowNodes)
   const flowEdges = useFlowRenderStore((state) => state.flowEdges)
-  const workflowId = useCanvasStore((state) => state.workflowId)
-  const redo = useCanvasStore((state) => state.redo)
-  const undo = useCanvasStore((state) => state.undo)
-  const undoState = useWorkflowUndoState(workflowId)
   useWorkflowUndoShortcuts()
   const nodeCount = useCanvasNodeCount()
   const edgeCount = useCanvasEdgeCount()
   const mediaNodeCount = useCanvasMediaNodeCount()
   const setRuntime = useWorkflowRuntimeStore((state) => state.setRuntime)
-  const openNodePanel = useCanvasUiStore((state) => state.openNodePanel)
-  const closeNodePanel = useCanvasUiStore((state) => state.closeNodePanel)
+  const addMenu = useCanvasUiStore((state) => state.addMenu)
+  const addMenuPreviewLine = useCanvasUiStore((state) => state.addMenuPreviewLine)
   const {
     onConnect,
     onEdgesChange,
@@ -124,8 +101,39 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
     onSelectionDragStart,
     onSelectionDragStop,
   } = useWorkflowFlowHandlers()
+  const reactFlowRef = useRef<ReactFlowInstance<WorkflowFlowNode, WorkflowFlowEdge> | null>(null)
   const stageRef = useRef<HTMLDivElement | null>(null)
   const pointerBackgroundHandlers = usePointerBackground()
+  const {
+    handleConnectEnd,
+    handleConnectStart,
+    openCanvasAddMenu,
+  } = useCanvasAddMenuController({
+    reactFlowInstanceRef: reactFlowRef,
+    stageRef,
+  })
+  const {
+    handleCanvasDoubleClick,
+    handleEdgeMouseEnter,
+    handleEdgeMouseLeave,
+    handleNodeClick,
+    handlePaneClick,
+    handleSelectionChange,
+    handleSelectionEnd,
+    handleSelectionStart,
+  } = useCanvasInteractionHandlers({ openCanvasAddMenu })
+  const {
+    handleMove,
+    handleMoveEnd,
+    handleMoveStart,
+    handleReactFlowInit,
+  } = useCanvasViewportChrome({
+    onMove,
+    onMoveEnd,
+    onMoveStart,
+    reactFlowInstanceRef: reactFlowRef,
+    stageRef,
+  })
   const runtimeActions = useMemo(
     () => ({ onRunNode, onSelectOutput }),
     [onRunNode, onSelectOutput],
@@ -141,63 +149,23 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
     setRuntime({ actions: runtimeActions, runError, runningNodeId })
   }, [runError, runningNodeId, runtimeActions, setRuntime])
 
-  useEffect(() => {
-    if (!import.meta.env.DEV) {
-      return
-    }
-    window.__minaWorkflowCanvasUi = {
-      get activeNodePanel() {
-        return useCanvasUiStore.getState().activeNodePanel
-      },
-      get selectedNodeIds() {
-        return useCanvasUiStore.getState().selectedNodeIds
-      },
-    }
-    return () => {
-      delete window.__minaWorkflowCanvasUi
-    }
-  }, [])
-
-  const handleNodeClick = useCallback<NodeMouseHandler<WorkflowFlowNode>>((event, node) => {
-    if (isIgnoredCanvasTarget(event.target)) {
-      return
-    }
-    if (event.ctrlKey || event.metaKey || event.shiftKey) {
-      return
-    }
-    openNodePanel(node.id, 'config')
-  }, [openNodePanel])
-  const handlePaneClick = useCallback(
-    (event: React.MouseEvent) => {
-      if (isReactFlowPaneTarget(event.target)) {
-        closeNodePanel()
-        selectWorkflowCanvasNodes([])
-      }
-    },
-    [closeNodePanel],
-  )
-  const handleSelectionChange = useCallback(
-    ({ nodes: selectedNodes, edges: selectedEdges }: { nodes: WorkflowFlowNode[]; edges: WorkflowFlowEdge[] }) => {
-      const nodeIds = selectedNodes.map((node) => node.id)
-      selectWorkflowCanvasNodes(nodeIds)
-      publishLocalSelection({
-        edgeIds: selectedEdges.map((edge) => edge.id),
-        nodeIds,
-      })
-    },
-    [],
-  )
-  const handleConnectStart = useCallback(() => {
-    stageRef.current?.setAttribute('data-connecting', '')
-  }, [])
-  const handleConnectEnd = useCallback(() => {
-    stageRef.current?.removeAttribute('data-connecting')
-  }, [])
+  const {
+    onPointerDownCapture,
+    selectionRect,
+  } = useCanvasSelectionController({
+    nodes: flowNodes,
+    onSelectionBoxEnd: handleSelectionEnd,
+    onSelectionBoxStart: handleSelectionStart,
+    reactFlowInstanceRef: reactFlowRef,
+    stageRef,
+  })
   return (
     <ReactFlowProvider>
       <Profiler id="WorkflowCanvas" onRender={recordCanvasProfilerCommit}>
         <div
           className="mina-wc-flow-shell h-full w-full"
+          onDoubleClick={handleCanvasDoubleClick}
+          onPointerDownCapture={onPointerDownCapture}
           onPointerLeave={pointerBackgroundHandlers.onPointerLeave}
           onPointerMove={pointerBackgroundHandlers.onPointerMove}
           ref={stageRef}
@@ -219,9 +187,12 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
             onConnectEnd={handleConnectEnd}
             onConnectStart={handleConnectStart}
             onEdgesChange={onEdgesChange}
-            onMove={onMove}
-            onMoveEnd={onMoveEnd}
-            onMoveStart={onMoveStart}
+            onEdgeMouseEnter={handleEdgeMouseEnter}
+            onEdgeMouseLeave={handleEdgeMouseLeave}
+            onMove={handleMove}
+            onMoveEnd={handleMoveEnd}
+            onMoveStart={handleMoveStart}
+            onInit={handleReactFlowInit}
             onNodeClick={handleNodeClick}
             onNodeDragStart={onNodeDragStart}
             onNodeDragStop={onNodeDragStop}
@@ -230,8 +201,21 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
             onSelectionChange={handleSelectionChange}
             onSelectionDragStart={onSelectionDragStart}
             onSelectionDragStop={onSelectionDragStop}
+            onSelectionEnd={handleSelectionEnd}
+            onSelectionStart={handleSelectionStart}
             onlyRenderVisibleElements={performancePolicy.onlyRenderVisibleElements}
+            panActivationKeyCode="Space"
+            panOnDrag={WORKFLOW_CANVAS_PAN_ON_DRAG_BUTTONS}
+            panOnScroll
+            panOnScrollMode={PanOnScrollMode.Free}
+            panOnScrollSpeed={WORKFLOW_CANVAS_PAN_ON_SCROLL_SPEED}
             selectNodesOnDrag={false}
+            selectionOnDrag={false}
+            selectionMode={SelectionMode.Partial}
+            zoomActivationKeyCode={['Meta', 'Control']}
+            zoomOnDoubleClick={false}
+            zoomOnPinch
+            zoomOnScroll
           >
             <Background
               id="base"
@@ -249,45 +233,25 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
               size={WORKFLOW_BACKGROUND_GEOMETRY.dotSize}
               variant={BackgroundVariant.Dots}
             />
-            <Controls className="mina-wc-controls" position="bottom-right" showInteractive={false}>
-              <ControlButton
-                aria-label={m.workflow_canvas_undo()}
-                disabled={!undoState.canUndo}
-                onClick={undo}
-                title={m.workflow_canvas_undo()}
-              >
-                <Undo2 aria-hidden="true" size={14} />
-              </ControlButton>
-              <ControlButton
-                aria-label={m.workflow_canvas_redo()}
-                disabled={!undoState.canRedo}
-                onClick={redo}
-                title={m.workflow_canvas_redo()}
-              >
-                <Redo2 aria-hidden="true" size={14} />
-              </ControlButton>
-            </Controls>
-            <div className="mina-wc-minimap-panel">
-              <div className="mina-wc-minimap-frame">
-                {shouldRenderMiniMapFallback ? (
-                  <div className="mina-wc-minimap-fallback" role="status">
-                    <span className="mina-wc-minimap-fallback-label">{m.workflow_canvas_minimap_suspended()}</span>
-                    <strong>{formatNumber(nodeCount, locale)}</strong>
-                    <span>{m.workflow_canvas_nodes()}</span>
-                  </div>
-                ) : (
-                  <MiniMap
-                    className="mina-wc-minimap"
-                    maskColor="color-mix(in oklch, var(--surface-container-lowest) 72%, transparent)"
-                    nodeColor={getMiniMapNodeColor}
-                    pannable={isMiniMapInteractive}
-                    position="top-left"
-                    style={MINIMAP_STYLE}
-                    zoomable={isMiniMapInteractive}
-                  />
-                )}
-              </div>
-            </div>
+            <CanvasViewportControls
+              isMiniMapInteractive={isMiniMapInteractive}
+              locale={locale}
+              nodeCount={nodeCount}
+              reactFlowInstanceRef={reactFlowRef}
+              shouldRenderMiniMapFallback={shouldRenderMiniMapFallback}
+            />
+            <CanvasSelectionOverlay selectionRect={selectionRect} />
+            {addMenuPreviewLine ? (
+              <WorkflowFloatingConnectionLine
+                sourcePosition={addMenuPreviewLine.sourcePosition}
+                sourceX={addMenuPreviewLine.sourceX}
+                sourceY={addMenuPreviewLine.sourceY}
+                targetPosition={addMenuPreviewLine.targetPosition}
+                targetX={addMenuPreviewLine.targetX}
+                targetY={addMenuPreviewLine.targetY}
+              />
+            ) : null}
+            {addMenu ? <CanvasAddMenu state={addMenu} /> : null}
             <NodeHistoryRail />
             <CanvasDock onRunNode={onRunNode} runError={runError} runningNodeId={runningNodeId} />
           </ReactFlow>
@@ -334,13 +298,4 @@ function useHydrateFlowRender(): void {
       unsubscribeSelection()
     }
   }, [hydrateRenderFromDocument])
-}
-
-declare global {
-  interface Window {
-    __minaWorkflowCanvasUi?: {
-      activeNodePanel: { nodeId: string; panel: string } | undefined
-      selectedNodeIds: string[]
-    }
-  }
 }

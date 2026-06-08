@@ -1,4 +1,3 @@
-import { Clock, Image as ImageIcon, MonitorPlay } from 'lucide-react'
 import {
   GOOGLE_VIDEO_ASPECT_RATIOS,
   GOOGLE_VIDEO_DURATIONS,
@@ -34,13 +33,13 @@ const GoogleVeoBasicFields = withNodeTaskFieldGroup<Partial<GoogleVeoParams>, un
     return (
       <>
         <group.AppField name="aspectRatio">
-          {(field) => <field.SelectField ariaLabel={m.workflow_canvas_aspect_ratio()} icon={ImageIcon} options={googleAspectRatioOptions} />}
+          {(field) => <field.SelectField ariaLabel={m.workflow_canvas_aspect_ratio()} options={googleAspectRatioOptions} />}
         </group.AppField>
         <group.AppField name="durationSeconds">
-          {(field) => <field.SelectField ariaLabel={m.workflow_canvas_duration()} icon={Clock} options={googleDurationOptions} valueKind="number" />}
+          {(field) => <field.SelectField ariaLabel={m.workflow_canvas_duration()} options={googleDurationOptions} valueKind="number" />}
         </group.AppField>
         <group.AppField name="resolution">
-          {(field) => <field.SelectField ariaLabel={m.workflow_canvas_resolution()} icon={MonitorPlay} options={googleResolutionOptions} />}
+          {(field) => <field.SelectField ariaLabel={m.workflow_canvas_resolution()} options={googleResolutionOptions} />}
         </group.AppField>
       </>
     )
@@ -72,16 +71,15 @@ const SeedanceBasicFields = withNodeTaskFieldGroup<Partial<VolcengineSeedancePar
     return (
       <>
         <group.AppField name="ratio">
-          {(field) => <field.SelectField ariaLabel={m.workflow_canvas_ratio()} icon={ImageIcon} options={volcengineRatioOptions} />}
+          {(field) => <field.SelectField ariaLabel={m.workflow_canvas_ratio()} options={volcengineRatioOptions} />}
         </group.AppField>
         <group.AppField name="durationSeconds">
-          {(field) => <field.NumberField ariaLabel={m.workflow_canvas_duration()} icon={Clock} max={maxDuration} min={minDuration} step={1} />}
+          {(field) => <field.NumberField ariaLabel={m.workflow_canvas_duration()} max={maxDuration} min={minDuration} step={1} />}
         </group.AppField>
         <group.AppField name="resolution">
           {(field) => (
             <field.SelectField
               ariaLabel={m.workflow_canvas_resolution()}
-              icon={MonitorPlay}
               options={volcengineResolutionOptions.filter((item) => supports1080p || item.value !== '1080p')}
             />
           )}

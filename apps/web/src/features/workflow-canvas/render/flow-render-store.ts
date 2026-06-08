@@ -9,6 +9,8 @@ import {
 import { FlowProjectionCache } from './flow-projection-cache'
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import type { WorkflowFlowEdge, WorkflowFlowNode } from '../domain/flow-types'
+import { getSelectedFlowNodesBounds } from '../utils/canvas-selection-policy'
+import type { CanvasNodeBounds } from '../domain/canvas-node-geometry'
 
 interface FlowRenderInteraction {
   draggingNodeIds: string[]
@@ -25,6 +27,8 @@ interface FlowRenderState {
   interaction: FlowRenderInteraction
   lastViewport: Viewport | undefined
   projectionCache: FlowProjectionCache
+  selectedNodeBounds: CanvasNodeBounds | undefined
+  selectedNodeIdSet: ReadonlySet<string>
 }
 
 interface FlowRenderActions {
@@ -61,24 +65,33 @@ const preserveNodeInteraction = (
   const nextNodes = nodes.map((node) => {
     const previous = previousNodes[node.id]
     const selected = selectedNodeIds ? selectedNodeIds.has(node.id) : previous?.selected
+    const measured = previous?.measured ?? node.measured
     if (previous && localFrameNodeIds.has(node.id)) {
       const nextSelected = selected ?? previous.selected
       changed = true
       return {
         ...node,
         height: previous.height,
-        measured: previous.measured,
+        measured,
         parentId: previous.parentId,
         position: previous.position,
         selected: nextSelected,
+        ...(previous.parentId ? { extent: 'parent' as const, expandParent: true } : {}),
         width: previous.width,
       } as WorkflowFlowNode
     }
-    if (selected === undefined || selected === node.selected) {
+    if (
+      (selected === undefined || selected === node.selected) &&
+      measured === node.measured
+    ) {
       return node
     }
     changed = true
-    return { ...node, selected } as WorkflowFlowNode
+    return {
+      ...node,
+      measured,
+      ...(selected === undefined ? {} : { selected }),
+    } as WorkflowFlowNode
   })
   return changed ? nextNodes : (nodes as WorkflowFlowNode[])
 }
@@ -109,6 +122,21 @@ const emptyInteraction = (): FlowRenderInteraction => ({
 const hasRenderableNodeChange = (changes: readonly NodeChange<WorkflowFlowNode>[]): boolean =>
   changes.some((change) => change.type !== 'select')
 
+const selectedNodeIdsFromFlowNodes = (nodes: readonly WorkflowFlowNode[]): string[] =>
+  nodes.filter((node) => node.selected).map((node) => node.id)
+
+const deriveSelectionState = (
+  nodes: readonly WorkflowFlowNode[],
+  selectedNodeIds?: readonly string[] | undefined,
+): Pick<FlowRenderState, 'selectedNodeBounds' | 'selectedNodeIdSet'> => {
+  const ids = selectedNodeIds ?? selectedNodeIdsFromFlowNodes(nodes)
+  const selectedNodeIdSet = new Set(ids)
+  return {
+    selectedNodeBounds: getSelectedFlowNodesBounds(nodes, ids),
+    selectedNodeIdSet,
+  }
+}
+
 export const useFlowRenderStore = create<FlowRenderStore>((set, get) => ({
   flowEdges: [],
   flowEdgesById: {},
@@ -117,6 +145,8 @@ export const useFlowRenderStore = create<FlowRenderStore>((set, get) => ({
   interaction: emptyInteraction(),
   lastViewport: undefined,
   projectionCache: new FlowProjectionCache(),
+  selectedNodeBounds: undefined,
+  selectedNodeIdSet: new Set(),
   applyEdgeChanges: (changes) => {
     if (changes.length === 0) {
       return
@@ -138,7 +168,11 @@ export const useFlowRenderStore = create<FlowRenderStore>((set, get) => ({
     incrementCanvasPerfCounter('renderStateWrites')
     set((state) => {
       const flowNodes = applyNodeChanges(changes, state.flowNodes)
-      return { flowNodes, flowNodesById: indexFlowNodes(flowNodes) }
+      return {
+        flowNodes,
+        flowNodesById: indexFlowNodes(flowNodes),
+        ...deriveSelectionState(flowNodes),
+      }
     })
   },
   hydrateFromDocument: (input) => {
@@ -160,6 +194,7 @@ export const useFlowRenderStore = create<FlowRenderStore>((set, get) => ({
       flowEdgesById: indexFlowEdges(flowEdges),
       flowNodes,
       flowNodesById: indexFlowNodes(flowNodes),
+      ...deriveSelectionState(flowNodes, input.selectedNodeIds),
     })
   },
   releaseLocalFrameNodeIds: (nodeIds) =>

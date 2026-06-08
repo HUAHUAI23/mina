@@ -1,3 +1,4 @@
+import { expect, test } from 'bun:test'
 import type { QueryKey } from '@tanstack/react-query'
 
 import { applyWorkflowEvent, type WorkflowEventEffects } from './apply-workflow-event'
@@ -31,53 +32,35 @@ const createEffects = (): RecordingEffects => {
   }
 }
 
-const taskEffects = createEffects()
-applyWorkflowEvent(
-  {
-    ...baseEvent,
-    type: 'workflow.node.task.updated',
-    payload: {
-      nodeId: 'n1',
-      taskId: 'task_9',
-      status: 'succeeded',
-      taskCreatedAt: '2026-05-30T00:00:00.000Z',
-      taskUpdatedAt: '2026-05-30T00:00:01.000Z',
+test('node task events project to runtime facts and invalidate task queries', () => {
+  const taskEffects = createEffects()
+  applyWorkflowEvent(
+    {
+      ...baseEvent,
+      type: 'workflow.node.task.updated',
+      payload: {
+        nodeId: 'n1',
+        taskId: 'task_9',
+        status: 'succeeded',
+        taskCreatedAt: '2026-05-30T00:00:00.000Z',
+        taskUpdatedAt: '2026-05-30T00:00:01.000Z',
+      },
     },
-  },
-  { effects: taskEffects, workflowId: 'wf_1' },
-)
-if (taskEffects.nodeTaskStatuses.length !== 1 || taskEffects.nodeTaskStatuses[0]?.taskId !== 'task_9') {
-  throw new Error('A node task update should project onto the facts layer.')
-}
-if (taskEffects.nodeTaskStatuses[0]?.taskUpdatedAt !== '2026-05-30T00:00:01.000Z') {
-  throw new Error('A node task update should preserve task timestamps for runtime ordering.')
-}
-if (!taskEffects.invalidations.includes(JSON.stringify(['tasks', 'detail', 'task_9']))) {
-  throw new Error('A node task update should invalidate the task detail query.')
-}
-if (!taskEffects.invalidations.includes(JSON.stringify(['workflows', 'detail', 'wf_1', 'nodeTasks', 'n1']))) {
-  throw new Error('A node task update should invalidate the node history query.')
-}
+    { effects: taskEffects, workflowId: 'wf_1' },
+  )
+  expect(taskEffects.nodeTaskStatuses).toHaveLength(1)
+  expect(taskEffects.nodeTaskStatuses[0]?.taskId).toBe('task_9')
+  expect(taskEffects.nodeTaskStatuses[0]?.taskUpdatedAt).toBe('2026-05-30T00:00:01.000Z')
+  expect(taskEffects.invalidations).toContain(JSON.stringify(['tasks', 'detail', 'task_9']))
+  expect(taskEffects.invalidations).toContain(JSON.stringify(['workflows', 'detail', 'wf_1', 'nodeTasks', 'n1']))
+})
 
-const runEffects = createEffects()
-applyWorkflowEvent(
-  { ...baseEvent, type: 'workflow.run.updated', payload: { runId: 'run_1', status: 'succeeded' } },
-  { effects: runEffects, workflowId: 'wf_1' },
-)
-if (runEffects.nodeTaskStatuses.length !== 0) {
-  throw new Error('A run update should not touch the facts layer.')
-}
-if (!runEffects.invalidations.includes(JSON.stringify(['workflows', 'detail', 'wf_1', 'runs']))) {
-  throw new Error('A run update should invalidate the run list query.')
-}
-
-const definitionEffects = createEffects()
-applyWorkflowEvent(
-  { ...baseEvent, type: 'workflow.definition.updated', payload: { changedEdgeIds: [], changedNodeIds: ['n1'] } },
-  { effects: definitionEffects, workflowId: 'wf_1' },
-)
-if (definitionEffects.nodeTaskStatuses.length !== 0 || definitionEffects.invalidations.length !== 0) {
-  throw new Error('Definition updates flow through Yjs and should be ignored here.')
-}
-
-console.log('apply-workflow-event checks passed')
+test('run events invalidate run queries without touching node facts', () => {
+  const runEffects = createEffects()
+  applyWorkflowEvent(
+    { ...baseEvent, type: 'workflow.run.updated', payload: { runId: 'run_1', status: 'succeeded' } },
+    { effects: runEffects, workflowId: 'wf_1' },
+  )
+  expect(runEffects.nodeTaskStatuses).toHaveLength(0)
+  expect(runEffects.invalidations).toContain(JSON.stringify(['workflows', 'detail', 'wf_1', 'runs']))
+})

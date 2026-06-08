@@ -1,3 +1,4 @@
+import { expect, test } from 'bun:test'
 import type { NodeExecutionOutput, NodeOutputResource } from '@mina/contracts/modules/tasks'
 
 import { historyThumbnailResource } from './history-thumbnail'
@@ -32,12 +33,10 @@ const output: NodeExecutionOutput = {
   variables: {},
 }
 
-if (historyThumbnailResource(output, video) !== cover) {
-  throw new Error('History rail video thumbnails should use the selected video poster when available.')
-}
+test('history thumbnails use selected video posters when available', () => {
+  expect(historyThumbnailResource(output, video)).toBe(cover)
+})
 
-if (historyThumbnailResource(output, image) !== image) {
-  throw new Error('History rail image thumbnails should use the image output itself.')
-}
-
-console.log('history-thumbnail checks passed')
+test('history thumbnails use image outputs directly', () => {
+  expect(historyThumbnailResource(output, image)).toBe(image)
+})

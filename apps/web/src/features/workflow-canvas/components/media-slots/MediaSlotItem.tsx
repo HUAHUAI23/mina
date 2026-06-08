@@ -33,8 +33,8 @@ const mediaFallback = (kind: 'audio' | 'image' | 'video' | undefined) => {
 }
 
 const slotItemClassName = 'mina-wc-slot-item group relative block w-(--composer-media-width) select-none rounded-[12px] bg-transparent touch-none hover:z-30 active:cursor-grabbing cursor-grab nodrag nowheel nopan'
-const slotThumbClassName = 'mina-wc-slot-thumb relative flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-[12px] bg-surface-container-high text-foreground-quaternary shadow-[0_0_0_1.5px_#ffffff,0_8px_16px_-8px_rgba(0,0,0,0.25),0_3px_6px_-3px_rgba(0,0,0,0.15)]'
-const missingSlotThumbClassName = 'shadow-[inset_0_0_0_1.5px_color-mix(in_oklch,var(--destructive)_42%,transparent)]'
+const slotThumbClassName = 'mina-wc-slot-thumb relative flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-[12px] bg-surface-container-high text-foreground-quaternary shadow-sm ring-1 ring-background'
+const missingSlotThumbClassName = 'ring-destructive/45'
 const slotIndexClassName = 'mina-wc-slot-index absolute top-1 left-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--foreground)_72%,transparent)] px-[3px] text-[0.52rem] font-[850] text-primary-foreground'
 const slotCloseClassName = 'mina-wc-slot-close pointer-events-none absolute -top-1.5 -right-1.5 z-40 flex size-4.5 cursor-pointer items-center justify-center rounded-full bg-zinc-900 p-0 text-white opacity-0 hover:bg-black group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 [&_svg]:size-2.5 [&_svg]:stroke-[2.5px]'
 const slotImageClassName = 'size-full object-cover'

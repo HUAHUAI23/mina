@@ -1,23 +1,31 @@
+import { expect, test } from 'bun:test'
+
 import { resolveNodeTaskView } from './resolve-node-task-view'
 
-const followLatest = resolveNodeTaskView(undefined, { latestTaskId: 'task_2', taskStatuses: {} })
-if (followLatest.isPinned || followLatest.taskId !== 'task_2') {
-  throw new Error('An unpinned node should follow the latest runtime task.')
-}
+test('unpinned task view follows the latest runtime task', () => {
+  expect(resolveNodeTaskView(undefined, { latestTaskId: 'task_2', taskStatuses: {} })).toEqual({
+    isPinned: false,
+    taskId: 'task_2',
+  })
+})
 
-const empty = resolveNodeTaskView(undefined, undefined)
-if (empty.isPinned || empty.taskId !== undefined) {
-  throw new Error('With no pin and no runtime, there is no task to show.')
-}
+test('task view is empty without a pin or runtime task', () => {
+  expect(resolveNodeTaskView(undefined, undefined)).toEqual({
+    isPinned: false,
+    taskId: undefined,
+  })
+})
 
-const pinned = resolveNodeTaskView({ taskId: 'task_1', outputIndex: 0 }, { latestTaskId: 'task_2', taskStatuses: {} })
-if (!pinned.isPinned || pinned.taskId !== 'task_1') {
-  throw new Error('An explicit pin should win over the latest task.')
-}
+test('explicit task pins win over latest runtime task', () => {
+  expect(resolveNodeTaskView({ taskId: 'task_1', outputIndex: 0 }, { latestTaskId: 'task_2', taskStatuses: {} })).toEqual({
+    isPinned: true,
+    taskId: 'task_1',
+  })
+})
 
-const pinWithoutTask = resolveNodeTaskView({ outputIndex: 1 }, { latestTaskId: 'task_3', taskStatuses: {} })
-if (pinWithoutTask.isPinned || pinWithoutTask.taskId !== 'task_3') {
-  throw new Error('A pin without a taskId should fall back to following latest.')
-}
-
-console.log('resolve-node-task-view checks passed')
+test('pins without task ids fall back to latest runtime task', () => {
+  expect(resolveNodeTaskView({ outputIndex: 1 }, { latestTaskId: 'task_3', taskStatuses: {} })).toEqual({
+    isPinned: false,
+    taskId: 'task_3',
+  })
+})

@@ -1,6 +1,6 @@
-export const VALID_STROKE = 'color-mix(in oklch, var(--primary) 72%, var(--foreground-secondary))'
+export const VALID_STROKE = 'var(--mina-wc-primary)'
 export const INVALID_STROKE = 'color-mix(in oklch, var(--destructive) 86%, var(--foreground))'
-export const MEDIA_STROKE = 'color-mix(in oklch, var(--primary) 70%, var(--foreground-secondary))'
+export const MEDIA_STROKE = 'var(--mina-wc-primary)'
 
 export function getWorkflowConnectionPreviewStyle({
   connectionStatus,

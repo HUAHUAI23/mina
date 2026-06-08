@@ -93,13 +93,10 @@ Important event types include:
 - `workflow.run.updated`
   - Payload: `runId`, `status`.
   - Meaning: the workflow run list or active run status may have changed.
-- `workflow.mediaObject.ready`
-  - Payload: `mediaObjectId`.
-  - Meaning: cached media object details may now resolve to usable media.
-- `workflow.definition.updated`, `workflow.node.mediaView.updated`,
-  `workflow.remote.conflict`
-  - These exist in the shared event contract, but canvas document changes
-    are still resolved through Yjs.
+Media object readiness is not part of the active workflow event
+contract; it is observed through normal query refresh flows. Graph
+definition and MediaView changes are Yjs document updates, not workflow
+event stream messages.
 
 Task events include task timestamps so clients can merge late messages
 and server snapshots deterministically. A late event for an older task
@@ -158,9 +155,6 @@ into frontend side effects:
     history rail can refresh.
 - `workflow.run.updated`
   - Invalidates `workflowKeys.runs(workflowId)`.
-- `workflow.mediaObject.ready`
-  - Invalidates `mediaKeys.detail(mediaObjectId)`.
-- Yjs-owned definition and media view events are ignored by this reducer.
 
 This keeps transport code, event semantics, and cache side effects
 separate enough to test independently.

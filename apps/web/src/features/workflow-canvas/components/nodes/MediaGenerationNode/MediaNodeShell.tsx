@@ -16,6 +16,7 @@ import type { NodeMediaPreview } from '../../../media/media-preview-store'
 import { MediaOutputStrip } from './MediaOutputStrip'
 import { WorkflowNodeHandles } from '../WorkflowNodeHandles'
 import { useCurrentNodeVisible } from '../use-node-visibility'
+import { DetachFromGroupToolbar } from '../DetachFromGroupToolbar'
 
 export interface MediaNodeShellRenderInput {
   nodeVisible: boolean
@@ -26,17 +27,18 @@ interface MediaNodeShellProps {
   id: string
   mediaView?: NodeMediaViewState | undefined
   nodeType: 'image_generation' | 'video_generation'
+  parentId?: string | undefined
   renderPreview(input: MediaNodeShellRenderInput): ReactNode
+  selected?: boolean | undefined
   title: string
 }
 
-const mediaNodeClassName = 'mina-wc-node mina-wc-media-node relative w-[390px] origin-center overflow-visible bg-transparent p-0'
-const nodeHeaderClassName = 'mina-wc-node-header pointer-events-none absolute inset-x-0 -top-9 z-20 flex min-w-0 items-center justify-between gap-3'
-const nodeKindClassName = 'text-sm font-bold text-foreground-secondary'
+const mediaNodeClassName = 'mina-wc-node mina-wc-media-node relative flex h-[292px] w-[390px] origin-center flex-col overflow-visible bg-transparent p-0'
+const nodeHeaderClassName = 'mina-wc-node-header pointer-events-auto mb-1 flex h-8 min-w-0 flex-none cursor-grab items-center justify-between gap-3 rounded-full px-1'
+const nodeKindClassName = 'mina-wc-node-chrome mina-wc-node-kind rounded-full bg-zinc-150/80 dark:bg-zinc-800/80 px-2.5 py-0.5 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 border border-zinc-200/50 dark:border-zinc-700/50 uppercase tracking-wider'
 const nodeHeaderActionsClassName = 'flex flex-none items-center gap-2'
-const historyButtonClassName = 'nodrag nopan pointer-events-auto flex size-7 flex-none items-center justify-center rounded-full border-0 bg-transparent p-0 text-foreground-tertiary hover:text-foreground aria-pressed:text-foreground'
-const nodePreviewClassName = 'mina-wc-media-preview relative grid aspect-[16/10] w-full place-items-center overflow-hidden rounded-2xl bg-transparent shadow-[0_28px_58px_-34px_color-mix(in_oklch,var(--foreground)_30%,transparent),inset_0_0_0_1px_color-mix(in_oklch,var(--foreground-quaternary)_12%,transparent)]'
-const runningOverlayClassName = 'absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 bg-[color-mix(in_oklch,var(--surface-container-lowest)_72%,transparent)] text-xs font-bold text-foreground-tertiary'
+const historyButtonClassName = 'mina-wc-node-chrome mina-wc-node-chrome-button mina-wc-history-button nodrag nopan pointer-events-auto flex size-8 flex-none items-center justify-center rounded-full border border-zinc-200/80 bg-zinc-50/90 p-0 text-zinc-500 shadow-sm transition-all duration-150 hover:bg-accent hover:text-accent-foreground aria-pressed:border-primary aria-pressed:bg-accent aria-pressed:text-accent-foreground dark:border-zinc-800/80 dark:bg-zinc-900/90 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-50 dark:aria-pressed:border-primary dark:aria-pressed:bg-zinc-800 dark:aria-pressed:text-zinc-50'
+const runningOverlayClassName = 'absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 bg-zinc-100/95 dark:bg-zinc-900/95 text-xs font-bold text-zinc-650 dark:text-zinc-400'
 
 const mediaNodeRenderSignature = (input: {
   id: string
@@ -57,7 +59,9 @@ export const MediaNodeShell = memo(function MediaNodeShell({
   id,
   mediaView,
   nodeType,
+  parentId,
   renderPreview,
+  selected,
   title,
 }: MediaNodeShellProps) {
   const m = useMessages()
@@ -96,8 +100,16 @@ export const MediaNodeShell = memo(function MediaNodeShell({
   }, [id, preview, setNodePreview, task?.output])
   const visiblePreview = task?.output ? preview : cachedPreview ?? preview
 
+  const dynamicPreviewClassName = [
+    'mina-wc-media-preview relative grid aspect-[16/10] w-full flex-none place-items-center overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100/95 dark:bg-zinc-900/95 transition-all duration-300',
+    selected
+      ? 'border-primary ring-2 ring-primary/20 shadow-none'
+      : 'shadow-sm hover:border-zinc-300 dark:hover:border-zinc-700'
+  ].join(' ')
+
   return (
     <article className={mediaNodeClassName}>
+      {parentId ? <DetachFromGroupToolbar nodeId={id} visible={selected} /> : null}
       <WorkflowNodeHandles />
       <div className={nodeHeaderClassName}>
         <span className={nodeKindClassName}>{nodeType === 'video_generation' ? m.workflow_canvas_video() : m.workflow_canvas_image()}</span>
@@ -117,7 +129,7 @@ export const MediaNodeShell = memo(function MediaNodeShell({
           </button>
         </div>
       </div>
-      <div className={nodePreviewClassName}>
+      <div className={dynamicPreviewClassName} data-selected={selected ? 'true' : undefined}>
         {renderPreview({ nodeVisible, preview: visiblePreview })}
         {isRunning ? (
           <div className={runningOverlayClassName}>

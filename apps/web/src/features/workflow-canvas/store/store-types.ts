@@ -5,6 +5,7 @@ import type {
   WorkflowCanvasNode,
   WorkflowNodeType,
 } from '@mina/contracts/modules/canvas'
+import type { WorkflowGroupNodeType } from '@mina/contracts/modules/canvas/group-conversion'
 import type { MediaSlotName, NodeMediaSlotItem, NodeMediaSlots } from '@mina/contracts/modules/media'
 import type { TaskDraftConfig } from '@mina/contracts/modules/tasks'
 import type { XYPosition } from '@xyflow/react'
@@ -15,6 +16,23 @@ export interface CanvasNodeFramePatch {
   parentId?: string | undefined
   position?: XYPosition | undefined
   width?: number | undefined
+}
+
+export interface AddNodeOptions {
+  parentId?: string | undefined
+  position?: XYPosition | undefined
+}
+
+export interface AddNodesToGroupOptions {
+  absolutePositionsByNodeId?: Record<string, XYPosition> | undefined
+}
+
+export interface AddConnectedMediaGenerationNodeInput {
+  nodeType: Extract<WorkflowNodeType, 'image_generation' | 'video_generation'>
+  position: XYPosition
+  sourceHandle?: string | undefined
+  sourceId: string
+  task: TaskDraftConfig
 }
 
 export interface MediaConnectionInput {
@@ -33,18 +51,26 @@ export interface CanvasGraphState {
 }
 
 export interface CanvasGraphActions {
+  addConnectedMediaGenerationNode(input: AddConnectedMediaGenerationNodeInput): string | undefined
   addMediaConnection(input: MediaConnectionInput): void
   addMediaGenerationNode(input: {
     mediaSlots?: NodeMediaSlots | undefined
     nodeType: Extract<WorkflowNodeType, 'image_generation' | 'video_generation'>
+    parentId?: string | undefined
     position?: XYPosition | undefined
     task: TaskDraftConfig
   }): string
-  addNode(type: WorkflowNodeType, task?: TaskDraftConfig | undefined): string
+  addNode(type: WorkflowNodeType, task?: TaskDraftConfig | undefined, options?: AddNodeOptions | undefined): string
+  addNodesToGroup(groupNodeId: string, nodeIds: readonly string[], options?: AddNodesToGroupOptions | undefined): string[]
   commitNodeFrames(input: readonly CanvasNodeFramePatch[]): void
+  convertGroupNodeType(nodeId: string, targetType: WorkflowGroupNodeType): void
+  detachGraphNodes(nodeIds: readonly string[]): void
+  fitGroupNodeToChildren(nodeId: string): void
+  groupGraphNodes(nodeIds: readonly string[], groupType: WorkflowGroupNodeType): string | undefined
   redo(): void
   removeGraphEdges(edgeIds: readonly string[]): void
   removeGraphNodes(nodeIds: readonly string[]): void
+  ungroupGraphNode(nodeId: string): void
   setNodeFrame(input: CanvasNodeFramePatch): void
   undo(): void
 }
