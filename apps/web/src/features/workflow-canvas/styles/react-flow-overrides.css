@@ -59,12 +59,26 @@
 }
 
 .mina-wc-react-flow-background-highlight {
+  -webkit-mask-image:
+    radial-gradient(
+      circle at var(--mina-canvas-pointer-x) var(--mina-canvas-pointer-y),
+      black 0,
+      black var(--mina-canvas-highlight-radius, 190px),
+      transparent var(--mina-canvas-highlight-soft-edge, 300px)
+    );
+  mask-image:
+    radial-gradient(
+      circle at var(--mina-canvas-pointer-x) var(--mina-canvas-pointer-y),
+      black 0,
+      black var(--mina-canvas-highlight-radius, 190px),
+      transparent var(--mina-canvas-highlight-soft-edge, 300px)
+    );
   opacity: 0;
   transition: opacity 180ms ease-out;
 }
 
 .mina-wc-flow-shell[data-pointer-active="true"] .mina-wc-react-flow-background-highlight {
-  opacity: 0.12;
+  opacity: 0.82;
 }
 
 .mina-wc-flow-shell .react-flow {

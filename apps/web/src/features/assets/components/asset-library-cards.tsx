@@ -7,7 +7,6 @@ import {
   FileAudio,
   FileImage,
   FileVideo,
-  Folder,
   Heart,
   MoreVertical,
   MoveRight,
@@ -140,7 +139,6 @@ export function FolderCard({ folder, isOver = false, m, mutationPending, onDelet
           <div className="absolute inset-0 bg-linear-to-br from-surface-container-lowest via-surface-container-low to-surface-container-high" />
           <div className="absolute left-6 top-8 h-20 w-32 rounded-md bg-surface-container-lowest ring-1 ring-outline-ghost ring-inset" />
           <div className="absolute left-6 top-5 h-10 w-20 rounded-t-md bg-brand-accent/18 ring-1 ring-brand-accent/10 ring-inset" />
-          <Folder aria-hidden="true" className="absolute right-7 top-7 text-brand-accent" size={28} />
           <span className="absolute bottom-5 left-5 rounded-full bg-surface-container-lowest px-3 py-1 text-xs font-bold text-foreground-secondary ring-1 ring-outline-ghost ring-inset">
             {m.assets_folder_count({ count: folder.assetCount })}
           </span>
