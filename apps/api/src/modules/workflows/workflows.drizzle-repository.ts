@@ -3,3 +3,4 @@ export { DrizzleWorkflowRunRepository } from './repositories/drizzle-workflow-ru
 export { DrizzleWorkflowRunNodeStateRepository } from './repositories/drizzle-workflow-run-node-state.repository'
 export { DrizzleWorkflowRunDependencyRepository } from './repositories/drizzle-workflow-run-dependency.repository'
 export { DrizzleWorkflowNodeTaskRepository } from './repositories/drizzle-workflow-node-task.repository'
+export { DrizzleWorkflowPreviewRepository } from './repositories/drizzle-workflow-preview.repository'

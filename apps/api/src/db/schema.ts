@@ -355,6 +355,7 @@ export const taskResources = pgTable(
     index('task_resources_account_created_idx').on(table.accountId, table.createdAt),
     index('task_resources_media_object_idx').on(table.mediaObjectId),
     index('task_resources_task_idx').on(table.taskId),
+    index('task_resources_task_preview_idx').on(table.taskId, table.direction, table.kind, table.role),
   ],
 )
 

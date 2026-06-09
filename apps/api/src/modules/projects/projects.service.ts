@@ -8,6 +8,7 @@ import type { WorkflowSummary } from '@mina/contracts/modules/workflows'
 
 import { HttpError } from '../../lib/http/http-error'
 import type { WorkflowDefinitionRepository } from '../workflows/repositories/workflow-definition.repository'
+import type { WorkflowPreviewHydrator } from '../workflows/workflow-preview-hydrator'
 import type { ProjectRepository } from './projects.repository'
 
 const nowIso = (): string => new Date().toISOString()
@@ -17,6 +18,7 @@ export class ProjectsService {
   constructor(
     private readonly projects: ProjectRepository,
     private readonly workflows: WorkflowDefinitionRepository,
+    private readonly workflowPreviewHydrator: WorkflowPreviewHydrator,
   ) {}
 
   async addWorkflow(accountId: string, projectId: string, workflowId: string): Promise<ProjectWithWorkflows> {
@@ -34,7 +36,7 @@ export class ProjectsService {
       if (!project) {
         throw this.projectNotFound()
       }
-      return project
+      return this.hydrateProject(project)
     } catch (error) {
       if (error instanceof HttpError) {
         throw error
@@ -52,13 +54,13 @@ export class ProjectsService {
     }
 
     try {
-      return await this.projects.create({
+      return this.hydrateProject(await this.projects.create({
         accountId,
         id: createId('project'),
         name: input.name,
         timestamp: nowIso(),
         workflowIds,
-      })
+      }))
     } catch (error) {
       if (error instanceof HttpError) {
         throw error
@@ -100,11 +102,25 @@ export class ProjectsService {
   }
 
   async getProject(accountId: string, projectId: string): Promise<ProjectWithWorkflows> {
-    return this.requireProject(accountId, projectId)
+    return this.hydrateProject(await this.requireProject(accountId, projectId))
   }
 
   async listOverview(accountId: string) {
-    return this.projects.listOverview(accountId)
+    const overview = await this.projects.listOverview(accountId)
+    const workflows = [
+      ...overview.ungroupedWorkflows,
+      ...overview.projects.flatMap((project) => project.workflows),
+    ]
+    const hydratedWorkflows = await this.workflowPreviewHydrator.hydrate(workflows)
+    const workflowsById = new Map(hydratedWorkflows.map((workflow) => [workflow.id, workflow]))
+
+    return {
+      projects: overview.projects.map((project) => ({
+        ...project,
+        workflows: project.workflows.map((workflow) => workflowsById.get(workflow.id) ?? workflow),
+      })),
+      ungroupedWorkflows: overview.ungroupedWorkflows.map((workflow) => workflowsById.get(workflow.id) ?? workflow),
+    }
   }
 
   async removeWorkflow(accountId: string, projectId: string, workflowId: string): Promise<void> {
@@ -128,7 +144,14 @@ export class ProjectsService {
     if (!project) {
       throw this.projectNotFound()
     }
-    return project
+    return this.hydrateProject(project)
+  }
+
+  private async hydrateProject(project: ProjectWithWorkflows): Promise<ProjectWithWorkflows> {
+    return {
+      ...project,
+      workflows: await this.workflowPreviewHydrator.hydrate(project.workflows),
+    }
   }
 
   private async assertWorkflowAvailable(accountId: string, workflowId: string): Promise<void> {

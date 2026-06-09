@@ -29,6 +29,7 @@ import {
   FakeTaskRepository,
   FakeWorkflowDefinitionRepository,
   FakeWorkflowNodeTaskRepository,
+  FakeWorkflowPreviewRepository,
   FakeWorkflowRunEventLog,
   FakeWorkflowRunRepository,
   FakeWorkflowYjsRepository,
@@ -36,6 +37,7 @@ import {
 import { WorkflowYjsRoomService } from '../modules/workflows/collaboration/workflow-yjs-room.service'
 import { ProjectsService } from '../modules/projects/projects.service'
 import { AssetLibraryService } from '../modules/assets/asset-library.service'
+import { WorkflowPreviewHydrator } from '../modules/workflows/workflow-preview-hydrator'
 
 export const createTestApp = () => {
   const accountsRepository = new FakeAccountsRepository()
@@ -99,13 +101,17 @@ export const createTestApp = () => {
     mediaObjectService,
     projectRepository,
   )
-  const projectServiceWithSharedRepo = new ProjectsService(projectRepository, workflowDefinitions)
+  const projectServiceWithSharedRepo = new ProjectsService(
+    projectRepository,
+    workflowDefinitions,
+    new WorkflowPreviewHydrator(new FakeWorkflowPreviewRepository(runs, nodeTasks, taskRepository, mediaObjectService)),
+  )
 
   const accountsService = new AccountsService(accountsRepository, {
     onAccountCreated: (accountId) => assetLibraryService.seedAccount(accountId),
   })
 
-  return createApp({
+  const app = createApp({
     accountManagementService: new AccountManagementService(accountsRepository, storage, mediaObjectService),
     accountsService,
     assetLibraryService,
@@ -117,5 +123,12 @@ export const createTestApp = () => {
     workflowEventBus,
     workflowYjsRoomService,
     workflowsService,
+  })
+  return Object.assign(app, {
+    async runBackgroundCycleForTest() {
+      await tasksService.startQueuedTasks()
+      await tasksService.pollAsyncTasks()
+      await workflowsService.reconcileRunningRuns()
+    },
   })
 }

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import type { WorkflowCanvasNode } from '@mina/contracts/modules/canvas'
 import { ProjectResponseSchema, ProjectsOverviewResponseSchema } from '@mina/contracts/modules/projects'
 
 import { createTestApp } from '../../test/app'
@@ -47,9 +48,14 @@ const register = async (app: ReturnType<typeof createTestApp>) => {
   return readAuthToken(await response.json())
 }
 
-const createWorkflow = async (app: ReturnType<typeof createTestApp>, token: string, name: string) => {
+const createWorkflow = async (
+  app: ReturnType<typeof createTestApp>,
+  token: string,
+  name: string,
+  nodes: WorkflowCanvasNode[] = [],
+) => {
   const response = await app.request('/api/workflows', {
-    body: JSON.stringify({ edges: [], name, nodes: [] }),
+    body: JSON.stringify({ edges: [], name, nodes }),
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
@@ -58,6 +64,49 @@ const createWorkflow = async (app: ReturnType<typeof createTestApp>, token: stri
   })
   expect(response.status).toBe(201)
   return readItemId(await response.json())
+}
+
+const imageNode = (id: string): WorkflowCanvasNode => ({
+  id,
+  type: 'image_generation',
+  position: { x: 0, y: 0 },
+  data: {
+    nodeType: 'image_generation',
+    title: id,
+    config: {
+      task: {
+        kind: 'image_generation',
+        provider: 'dev',
+        model: 'dev-image',
+        prompt: id,
+        params: {
+          count: 1,
+          size: '1024x1024',
+        },
+      },
+    },
+  },
+})
+
+const runWorkflow = async (app: ReturnType<typeof createTestApp>, token: string, workflowId: string, selectedNodeId: string) => {
+  const runResponse = await app.request(`/api/workflows/${workflowId}/runs`, {
+    body: JSON.stringify({ selectedNodeId }),
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    method: 'POST',
+  })
+  expect(runResponse.status).toBe(201)
+
+  for (let index = 0; index < 3; index += 1) {
+    await app.runBackgroundCycleForTest()
+  }
+
+  const runsResponse = await app.request(`/api/workflows/${workflowId}/runs`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(runsResponse.status).toBe(200)
 }
 
 describe('project routes', () => {
@@ -94,6 +143,34 @@ describe('project routes', () => {
     expect(overview.projects).toHaveLength(1)
     expect(overview.projects.at(0)?.workflows).toHaveLength(2)
     expect(overview.ungroupedWorkflows).toEqual([])
+  })
+
+  test('returns the latest generated image as workflow card preview', async () => {
+    const app = createTestApp()
+    const token = await register(app)
+    const workflowId = await createWorkflow(app, token, 'Preview canvas', [imageNode('image')])
+    await runWorkflow(app, token, workflowId, 'image')
+    const firstOverviewResponse = await app.request('/api/projects/overview', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    expect(firstOverviewResponse.status).toBe(200)
+    const firstOverview = ProjectsOverviewResponseSchema.parse(await firstOverviewResponse.json())
+    const firstPreview = firstOverview.ungroupedWorkflows.find((workflow) => workflow.id === workflowId)?.previewImage
+    expect(firstPreview?.kind).toBe('image')
+    expect(firstPreview?.mediaObjectId).toMatch(/^media_/)
+
+    await runWorkflow(app, token, workflowId, 'image')
+
+    const overviewResponse = await app.request('/api/projects/overview', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    expect(overviewResponse.status).toBe(200)
+    const overview = ProjectsOverviewResponseSchema.parse(await overviewResponse.json())
+    const latestPreview = overview.ungroupedWorkflows.find((workflow) => workflow.id === workflowId)?.previewImage
+    expect(latestPreview?.kind).toBe('image')
+    expect(latestPreview?.mediaObjectId).toMatch(/^media_/)
+    expect(latestPreview?.mediaObjectId).not.toBe(firstPreview?.mediaObjectId)
   })
 
   test('adds an ungrouped canvas to an existing project', async () => {

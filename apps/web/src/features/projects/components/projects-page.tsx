@@ -60,6 +60,7 @@ import { cn } from '@mina/ui/lib/utils'
 import { useI18n, useMessages } from '../../../app/i18n-provider'
 import type { WebMessages } from '../../../lib/i18n-messages'
 import { getErrorMessage } from '../../../lib/http'
+import { previewUrlForMedia } from '../../../lib/media-url'
 import {
   dragDataFromUnknown,
   draggableId,
@@ -156,9 +157,19 @@ const previewToneForId = (id: string): (typeof previewTones)[number] => {
 interface CanvasPreviewProps {
   id: string
   label: string
+  previewImage?: WorkflowSummary['previewImage']
 }
 
-function CanvasPreview({ id, label }: CanvasPreviewProps) {
+function CanvasPreview({ id, label, previewImage }: CanvasPreviewProps) {
+  const previewUrl = previewUrlForMedia(previewImage)
+  if (previewUrl) {
+    return (
+      <div className={thumbnailClassName} aria-label={label}>
+        <img alt="" className="size-full object-cover" decoding="async" draggable={false} loading="lazy" src={previewUrl} />
+      </div>
+    )
+  }
+
   const tone = previewToneForId(id)
   const isDashboard = tone === 'dashboard'
   const isIcons = tone === 'icons'
@@ -539,7 +550,7 @@ function WorkflowCard({
         params={{ workflowId: workflow.id }}
         to="/canvas/$workflowId"
       >
-        <CanvasPreview id={workflow.id} label={m.projects_canvas_preview_label()} />
+        <CanvasPreview id={workflow.id} label={m.projects_canvas_preview_label()} previewImage={workflow.previewImage} />
       </Link>
       <div className="mt-3 flex min-w-0 items-start justify-between gap-2 px-1">
         <Link

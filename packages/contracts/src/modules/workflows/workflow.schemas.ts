@@ -11,6 +11,12 @@ export const WorkflowRunModeSchema = z.enum(['isolated_node', 'flow_group'])
 export const WorkflowRunStatusSchema = z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled'])
 export const WorkflowNodeRunStatusSchema = z.enum(['pending', 'running', 'succeeded', 'failed', 'skipped'])
 
+export const WorkflowPreviewImageSchema = z.object({
+  kind: z.literal('image'),
+  url: z.string().min(1),
+  mediaObjectId: z.string().min(1).optional(),
+})
+
 export const WorkflowSchema = z.object({
   id: z.string().min(1),
   accountId: z.string().min(1),
@@ -25,6 +31,8 @@ export const WorkflowSchema = z.object({
 export const WorkflowSummarySchema = WorkflowSchema.omit({
   nodes: true,
   edges: true,
+}).extend({
+  previewImage: WorkflowPreviewImageSchema.optional(),
 })
 
 export const WorkflowRunNodeStateSchema = z.object({
@@ -138,6 +146,7 @@ export type WorkflowNodeTaskHistoryResponse = z.infer<typeof WorkflowNodeTaskHis
 export type WorkflowNodeRunStatus = z.infer<typeof WorkflowNodeRunStatusSchema>
 export type WorkflowNodeRuntime = z.infer<typeof WorkflowNodeRuntimeSchema>
 export type WorkflowParams = z.infer<typeof WorkflowParamsSchema>
+export type WorkflowPreviewImage = z.infer<typeof WorkflowPreviewImageSchema>
 export type WorkflowResponse = z.infer<typeof WorkflowResponseSchema>
 export type WorkflowRun = z.infer<typeof WorkflowRunSchema>
 export type WorkflowRunListResponse = z.infer<typeof WorkflowRunListResponseSchema>

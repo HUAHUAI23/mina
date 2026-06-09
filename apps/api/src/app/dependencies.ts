@@ -35,10 +35,12 @@ import { DrizzleWorkflowYjsRepository } from '../modules/workflows/collaboration
 import {
   DrizzleWorkflowDefinitionRepository,
   DrizzleWorkflowNodeTaskRepository,
+  DrizzleWorkflowPreviewRepository,
   DrizzleWorkflowRunNodeStateRepository,
   DrizzleWorkflowRunRepository,
 } from '../modules/workflows/workflows.drizzle-repository'
 import { WorkflowsService } from '../modules/workflows/workflows.service'
+import { WorkflowPreviewHydrator } from '../modules/workflows/workflow-preview-hydrator'
 import { WorkflowYjsRoomService } from '../modules/workflows/collaboration/workflow-yjs-room.service'
 
 export interface AppDependencies {
@@ -129,6 +131,9 @@ export const createAppDependencies = (): AppDependencies => {
   const projectsService = new ProjectsService(
     repositories.projectRepository,
     repositories.workflowRepositories.definitions,
+    new WorkflowPreviewHydrator(
+      new DrizzleWorkflowPreviewRepository(db),
+    ),
   )
   const assetLibraryService = new AssetLibraryService(
     repositories.assetLibraryRepository,

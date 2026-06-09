@@ -72,6 +72,7 @@ export const workflowSummaryDto = (input: {
   createdAt: string
   id: string
   name: string
+  previewImage?: WorkflowSummary['previewImage']
   updatedAt: string
   version: number
 }): WorkflowSummary =>
@@ -80,6 +81,7 @@ export const workflowSummaryDto = (input: {
     accountId: input.accountId,
     name: input.name,
     version: input.version,
+    ...(input.previewImage ? { previewImage: input.previewImage } : {}),
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
   })
