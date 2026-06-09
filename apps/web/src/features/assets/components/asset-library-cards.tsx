@@ -23,7 +23,7 @@ import { cn } from '@mina/ui/lib/utils'
 import type { MinaLocale } from '@mina/i18n'
 
 import type { WebMessages } from '../../../lib/i18n-messages'
-import { previewUrlForMedia } from '../../../lib/media-url'
+import { MediaImage } from '../../../components/media/MediaImage'
 import {
   assetDragId,
   assetDropId,
@@ -54,18 +54,29 @@ interface AssetPreviewProps {
 function AssetPreview({ asset, label }: AssetPreviewProps) {
   const Icon = kindIcon[asset.mediaObject.kind]
   const isImage = asset.mediaObject.kind === 'image'
-  const previewUrl = isImage
-    ? previewUrlForMedia({ mediaObjectId: asset.mediaObjectId, url: asset.mediaObject.url })
-    : undefined
 
   return (
     <div className={thumbnailClassName} aria-label={label}>
-      {previewUrl ? (
-        <img alt="" className="size-full object-cover" decoding="async" loading="lazy" src={previewUrl} />
+      {isImage ? (
+        <MediaImage
+          alt=""
+          className="size-full object-cover"
+          decoding="async"
+          fallback={(
+            <>
+              <div className="absolute inset-0 bg-linear-to-br from-surface-container-lowest via-surface-container-low to-surface-container-high" />
+              <div className="absolute inset-0 grid place-items-center text-brand-accent">
+                <Icon aria-hidden="true" size={34} />
+              </div>
+            </>
+          )}
+          loading="lazy"
+          source={{ type: 'media', media: { mediaObjectId: asset.mediaObjectId, url: asset.mediaObject.url } }}
+        />
       ) : (
         <div className="absolute inset-0 bg-linear-to-br from-surface-container-lowest via-surface-container-low to-surface-container-high" />
       )}
-      {!previewUrl ? (
+      {!isImage ? (
         <div className="absolute inset-0 grid place-items-center text-brand-accent">
           <Icon aria-hidden="true" size={34} />
         </div>

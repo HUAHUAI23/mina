@@ -15,6 +15,7 @@ import { cn } from '@mina/ui/lib/utils'
 
 import { useAuth } from '../features/auth/components/auth-provider'
 import { useRefreshAuthenticatedUser } from '../features/account/hooks/use-refresh-authenticated-user'
+import { MediaImage } from '../components/media/MediaImage'
 import { useI18n } from './i18n-provider'
 import type { WebMessages } from '../lib/i18n-messages'
 
@@ -211,7 +212,14 @@ export function AppShell({ children }: PropsWithChildren) {
                     className="flex size-10 flex-none items-center justify-center overflow-hidden rounded-full bg-foreground text-base font-normal text-primary-foreground"
                     aria-hidden="true"
                   >
-                    {user?.avatarUrl ? <img alt="" className="size-full object-cover" src={user.avatarUrl} /> : initials || 'M'}
+                    {user?.avatarUpdatedAt ? (
+                      <MediaImage
+                        alt=""
+                        className="size-full object-cover"
+                        fallback={initials || 'M'}
+                        source={{ type: 'account_avatar', avatarUpdatedAt: user.avatarUpdatedAt }}
+                      />
+                    ) : initials || 'M'}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-base font-normal leading-tight">{displayName}</span>
                 </button>

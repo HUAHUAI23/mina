@@ -201,6 +201,8 @@ Mina now has backend contracts and API services for the generation workflow core
 - `assets`: an account-scoped asset library that records reusable business relationships over `media_objects`. Asset rows reference media objects instead of owning files, can be grouped by one single-level folder, tagged with system/custom tags, searched across display text, descriptions, tags, folders, and source snapshots, and reused by canvas/task creation through the original `mediaObjectId`.
 - `workflows`: normalized React Flow-compatible workflow definitions, ordered node `mediaSlots`, ordinary canvas node execution, flow-group DAG execution, row-level node run states, scheduler leases, and run cancellation.
 
+Private media reads use stable API content endpoints instead of exposing presigned read URLs in JSON DTOs. The browser renders managed media through `/api/media-objects/:id/content?token=...` and account avatars through `/api/account/avatar/content?token=...&v=...`; each request authenticates the actor, creates a short-lived object-storage read URL, and returns a `302` redirect with private no-store cache headers. Frontend media components keep these stable API URLs as their `src` values and add a refresh nonce after image/video load failures so expired final storage redirects can be retried without persisting presigned URLs in application state.
+
 The workflow module keeps public services small and splits stable internal rules by responsibility:
 
 - `workflows.service.ts`: workflow definition CRUD, version checks, MediaView updates, and node task link lookup.

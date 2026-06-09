@@ -65,6 +65,7 @@ export class S3ObjectStorage implements ObjectStorage {
       new GetObjectCommand({
         Bucket: this.#bucket,
         Key: input.key,
+        ResponseCacheControl: 'private, no-store, max-age=0',
       }),
       { expiresIn: input.expiresInSeconds },
     )

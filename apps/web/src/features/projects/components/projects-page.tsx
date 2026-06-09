@@ -58,9 +58,9 @@ import { Skeleton } from '@mina/ui/components/skeleton'
 import { cn } from '@mina/ui/lib/utils'
 
 import { useI18n, useMessages } from '../../../app/i18n-provider'
+import { MediaImage } from '../../../components/media/MediaImage'
 import type { WebMessages } from '../../../lib/i18n-messages'
 import { getErrorMessage } from '../../../lib/http'
-import { previewUrlForMedia } from '../../../lib/media-url'
 import {
   dragDataFromUnknown,
   draggableId,
@@ -161,22 +161,12 @@ interface CanvasPreviewProps {
 }
 
 function CanvasPreview({ id, label, previewImage }: CanvasPreviewProps) {
-  const previewUrl = previewUrlForMedia(previewImage)
-  if (previewUrl) {
-    return (
-      <div className={thumbnailClassName} aria-label={label}>
-        <img alt="" className="size-full object-cover" decoding="async" draggable={false} loading="lazy" src={previewUrl} />
-      </div>
-    )
-  }
-
   const tone = previewToneForId(id)
   const isDashboard = tone === 'dashboard'
   const isIcons = tone === 'icons'
   const isFrames = tone === 'frames'
-
-  return (
-    <div className={thumbnailClassName} aria-label={label}>
+  const fallbackArt = (
+    <>
       <div className="absolute inset-0 bg-linear-to-br from-surface-container-lowest via-surface-container-low to-surface-container-high" />
       <svg aria-hidden="true" className="absolute inset-0 size-full text-foreground-faint" fill="none" viewBox="0 0 242 172">
         <path d="M26 39h190M26 86h190M26 133h190M73 18v136M121 18v136M169 18v136" stroke="currentColor" strokeOpacity="0.18" />
@@ -213,6 +203,24 @@ function CanvasPreview({ id, label, previewImage }: CanvasPreviewProps) {
           <span className="h-12 w-6 rounded-sm bg-surface-container-highest ring-1 ring-outline-ghost ring-inset" />
         </div>
       ) : null}
+    </>
+  )
+
+  if (!previewImage) {
+    return <div className={thumbnailClassName} aria-label={label}>{fallbackArt}</div>
+  }
+
+  return (
+    <div className={thumbnailClassName} aria-label={label}>
+      <MediaImage
+        alt=""
+        className="size-full object-cover"
+        decoding="async"
+        draggable={false}
+        fallback={fallbackArt}
+        loading="lazy"
+        source={{ type: 'media', media: previewImage }}
+      />
     </div>
   )
 }

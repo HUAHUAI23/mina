@@ -737,8 +737,8 @@ function ImagePreview({ resource }: { resource?: MediaResource }) {
   return (
     <div className="mina-wc-preview mina-wc-preview-image">
       {resource ? (
-        <img
-          src={resource.thumbnailUrl ?? resource.url}
+        <MediaImage
+          source={{ type: 'media', media: resource }}
           alt=""
           loading="lazy"
           decoding="async"
@@ -768,7 +768,15 @@ Example:
 function VideoPosterPreview({ poster }: { poster?: MediaResource }) {
   return (
     <div className="mina-wc-preview mina-wc-preview-video">
-      {poster ? <img src={poster.url} alt="" loading="lazy" decoding="async" draggable={false} /> : null}
+      {poster ? (
+        <MediaImage
+          source={{ type: 'media', media: poster }}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+        />
+      ) : null}
       <PlayBadge />
     </div>
   )

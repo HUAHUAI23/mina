@@ -5,13 +5,13 @@ import type { TaskStatus } from '@mina/contracts/modules/tasks'
 import { formatDateTime } from '@mina/i18n'
 import { cn } from '@mina/ui/lib/utils'
 
+import { MediaImage } from '../../../../components/media/MediaImage'
 import { useI18n, useMessages } from '../../../../app/i18n-provider'
 import { workflowKeys } from '../../api/workflow-keys'
 import { listNodeTasks } from '../../api/workflow-queries'
 import { isMediaGenerationNode } from '../../domain/canvas-node-types'
 import { historyThumbnailResource } from '../../media/history-thumbnail'
 import { primarySelectableResources } from '../../utils/media-view'
-import { previewUrlForMedia } from '../../utils/media-url'
 import { useCanvasStore } from '../../store/canvas-store'
 import { useCanvasUiStore } from '../../store/canvas-ui-store'
 import { useNodeRuntimeStore } from '../../store/node-runtime-store'
@@ -125,7 +125,6 @@ export function NodeHistoryRail() {
             const fallbackResource = resources[0]
             const displayResource = selectedResource ?? fallbackResource
             const previewResource = displayResource ? historyThumbnailResource(item.task.output, displayResource) : undefined
-            const previewUrl = previewUrlForMedia(previewResource)
             const active = liveStatus === 'queued' || liveStatus === 'running'
             const isSelected = Boolean(selectedResource)
 
@@ -194,8 +193,14 @@ export function NodeHistoryRail() {
                       }}
                       type="button"
                     >
-                      {previewResource?.kind === 'image' && previewUrl ? (
-                        <img alt="" className="absolute inset-0 size-full object-cover transition-transform duration-300 group-hover:scale-[1.015]" loading="lazy" src={previewUrl} />
+                      {previewResource?.kind === 'image' ? (
+                        <MediaImage
+                          alt=""
+                          className="absolute inset-0 size-full object-cover transition-transform duration-300 group-hover:scale-[1.015]"
+                          fallback={<span className={historyPlaceholderClassName}>{m.workflow_canvas_history_no_output()}</span>}
+                          loading="lazy"
+                          source={{ type: 'media', media: previewResource }}
+                        />
                       ) : previewResource?.kind === 'video' ? (
                         <div className="absolute inset-0 grid place-items-center bg-zinc-100 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-500">
                           <Clapperboard aria-hidden="true" size={20} />
@@ -208,7 +213,6 @@ export function NodeHistoryRail() {
                       <div className={outputStripClassName}>
                         {resources.map((resource) => {
                           const thumbResource = historyThumbnailResource(item.task.output, resource)
-                          const thumbUrl = previewUrlForMedia(thumbResource)
                           const selected =
                             mediaView?.taskId === item.task.id &&
                             (mediaView.outputResourceId ? mediaView.outputResourceId === resource.id : mediaView.outputIndex === resource.index)
@@ -227,8 +231,13 @@ export function NodeHistoryRail() {
                               }
                               type="button"
                             >
-                              {thumbResource?.kind === 'image' && thumbUrl ? (
-                                <img alt="" className="size-full object-cover transition-all duration-200" loading="lazy" src={thumbUrl} />
+                              {thumbResource?.kind === 'image' ? (
+                                <MediaImage
+                                  alt=""
+                                  className="size-full object-cover transition-all duration-200"
+                                  loading="lazy"
+                                  source={{ type: 'media', media: thumbResource }}
+                                />
                               ) : thumbResource?.kind === 'video' ? (
                                 <Clapperboard aria-hidden="true" size={14} />
                               ) : (

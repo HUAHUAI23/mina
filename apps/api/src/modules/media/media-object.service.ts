@@ -191,8 +191,17 @@ export class MediaObjectService {
 
   async getReadyMediaObject(accountId: string, mediaObjectId: string): Promise<MediaObject> {
     const mediaObject = await this.repository.findById(accountId, mediaObjectId)
-    if (!mediaObject || mediaObject.status !== 'ready' || mediaObject.deletedAt) {
-      throw new Error('Media object is not ready.')
+    if (!mediaObject || mediaObject.deletedAt) {
+      throw new HttpError(404, 'MEDIA_OBJECT_NOT_FOUND', {
+        fallbackMessage: 'Media object not found.',
+        messageKey: 'api_error_media_object_not_found',
+      })
+    }
+    if (mediaObject.status !== 'ready') {
+      throw new HttpError(409, 'MEDIA_OBJECT_NOT_READY', {
+        fallbackMessage: 'Media object is not ready.',
+        messageKey: 'api_error_media_object_not_ready',
+      })
     }
     return mediaObject
   }

@@ -1,8 +1,8 @@
 import { memo } from 'react'
 import type { NodeOutputResource } from '@mina/contracts/modules/tasks'
 
+import { MediaImage } from '../../../../../components/media/MediaImage'
 import { useMessages } from '../../../../../app/i18n-provider'
-import { previewUrlForMedia } from '../../../utils/media-url'
 
 interface ImagePreviewProps {
   resource?: NodeOutputResource | undefined
@@ -17,9 +17,15 @@ export const ImagePreview = memo(function ImagePreview({ resource }: ImagePrevie
   if (!resource) {
     return <div className={placeholderClassName}>{m.workflow_canvas_no_output_selected()}</div>
   }
-  const previewUrl = previewUrlForMedia(resource)
-  if (!previewUrl) {
-    return <div className={placeholderClassName}>{m.workflow_canvas_preview_unavailable()}</div>
-  }
-  return <img alt="" className={nodeMediaClassName} decoding="async" draggable={false} loading="lazy" src={previewUrl} />
+  return (
+    <MediaImage
+      alt=""
+      className={nodeMediaClassName}
+      decoding="async"
+      draggable={false}
+      fallback={<div className={placeholderClassName}>{m.workflow_canvas_preview_unavailable()}</div>}
+      loading="lazy"
+      source={{ type: 'media', media: resource }}
+    />
+  )
 })

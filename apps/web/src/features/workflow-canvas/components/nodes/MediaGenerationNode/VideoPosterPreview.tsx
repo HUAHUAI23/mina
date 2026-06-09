@@ -3,9 +3,10 @@ import { Film, Play } from 'lucide-react'
 import { useNodeId } from '@xyflow/react'
 import type { NodeOutputResource } from '@mina/contracts/modules/tasks'
 
+import { MediaImage } from '../../../../../components/media/MediaImage'
+import { MediaVideo } from '../../../../../components/media/MediaVideo'
 import { useMessages } from '../../../../../app/i18n-provider'
 import { useActiveVideoStore } from '../../../media/active-video-store'
-import { previewUrlForMedia } from '../../../utils/media-url'
 import { useFlowRenderStore } from '../../../render/flow-render-store'
 
 interface VideoPosterPreviewProps {
@@ -55,22 +56,18 @@ export const VideoPosterPreview = memo(function VideoPosterPreview({ nodeVisible
   if (!resource || resource.kind !== 'video') {
     return <div className={placeholderClassName}>{m.workflow_canvas_no_poster_selected()}</div>
   }
-  const videoUrl = previewUrlForMedia(resource)
-  if (!videoUrl) {
-    return <div className={placeholderClassName}>{m.workflow_canvas_preview_unavailable()}</div>
-  }
-  const posterUrl = previewUrlForMedia(poster)
   if (mounted) {
     return (
-      <video
+      <MediaVideo
         autoPlay
         className={nodeMediaClassName}
         controls
+        fallback={<div className={placeholderClassName}>{m.workflow_canvas_preview_unavailable()}</div>}
         playsInline
-        {...(posterUrl ? { poster: posterUrl } : {})}
+        posterResource={poster}
         preload="metadata"
         ref={videoRef}
-        src={videoUrl}
+        resource={resource}
       />
     )
   }
@@ -85,8 +82,20 @@ export const VideoPosterPreview = memo(function VideoPosterPreview({ nodeVisible
       }}
       type="button"
     >
-      {posterUrl ? (
-        <img alt="" className={posterImageClassName} decoding="async" draggable={false} src={posterUrl} loading="lazy" />
+      {poster ? (
+        <MediaImage
+          alt=""
+          className={posterImageClassName}
+          decoding="async"
+          draggable={false}
+          fallback={(
+            <span className={placeholderClassName}>
+              <Film aria-hidden="true" size={28} />
+            </span>
+          )}
+          loading="lazy"
+          source={{ type: 'media', media: poster }}
+        />
       ) : (
         <span className={placeholderClassName}>
           <Film aria-hidden="true" size={28} />

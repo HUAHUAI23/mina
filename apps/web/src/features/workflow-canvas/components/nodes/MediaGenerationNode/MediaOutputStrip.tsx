@@ -2,8 +2,8 @@ import { memo } from 'react'
 import type { NodeMediaViewState } from '@mina/contracts/modules/canvas'
 import type { NodeOutputResource } from '@mina/contracts/modules/tasks'
 
+import { MediaImage } from '../../../../../components/media/MediaImage'
 import { useMessages } from '../../../../../app/i18n-provider'
-import { previewUrlForMedia } from '../../../utils/media-url'
 
 interface MediaOutputStripProps {
   mediaView?: NodeMediaViewState | undefined
@@ -23,7 +23,6 @@ export const MediaOutputStrip = memo(function MediaOutputStrip({ mediaView, onSe
         const active = mediaView?.outputResourceId
           ? mediaView.outputResourceId === resource.id
           : mediaView?.outputIndex === resource.index
-        const previewUrl = previewUrlForMedia(resource)
         return (
           <button
             aria-label={m.workflow_canvas_select_output_number({ index: resource.index + 1 })}
@@ -36,8 +35,13 @@ export const MediaOutputStrip = memo(function MediaOutputStrip({ mediaView, onSe
             }}
             type="button"
           >
-            {resource.kind === 'image' && previewUrl ? (
-              <img alt="" className="size-full object-cover" loading="lazy" src={previewUrl} />
+            {resource.kind === 'image' ? (
+              <MediaImage
+                alt=""
+                className="size-full object-cover"
+                loading="lazy"
+                source={{ type: 'media', media: resource }}
+              />
             ) : (
               <span>{resource.role === 'generated_video' ? 'V' : resource.index + 1}</span>
             )}

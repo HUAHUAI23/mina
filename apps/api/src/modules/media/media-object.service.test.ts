@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
+import type { HttpError } from '../../lib/http/http-error'
 import { assertAccountStorageKey } from '../../lib/storage/storage-key'
 import { FakeMediaObjectRepository, FakeObjectStorage } from '../../test/fakes'
 import { MediaObjectService } from './media-object.service'
@@ -111,9 +112,14 @@ describe('MediaObjectService', () => {
     const cleaned = await service.cleanupExpiredUploading(now)
 
     expect(cleaned.map((mediaObject) => mediaObject.id)).toEqual(['media_uploading'])
-    await expect(service.getReadyMediaObject('account_1', 'media_uploading')).rejects.toThrow(
-      'Media object is not ready.',
-    )
+    await expect(service.getReadyMediaObject('account_1', 'media_uploading')).rejects.toMatchObject({
+      code: 'MEDIA_OBJECT_NOT_FOUND',
+      status: 404,
+    } satisfies Partial<HttpError>)
+    await expect(service.getReadyMediaObject('account_1', 'media_failed')).rejects.toMatchObject({
+      code: 'MEDIA_OBJECT_NOT_READY',
+      status: 409,
+    } satisfies Partial<HttpError>)
     expect(await service.getAccountStorageUsage('account_1')).toEqual({
       accountId: 'account_1',
       totalBytes: 0,

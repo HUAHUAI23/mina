@@ -120,7 +120,7 @@ describe('account management routes', () => {
     expect(payload.user.preferredLocale).toBe('zh-Hans')
   })
 
-  test('uploads avatar and returns a display URL', async () => {
+  test('uploads avatar and redirects stable avatar content without exposing a signed URL in profile JSON', async () => {
     const app = createTestApp()
     const token = await register(app)
     const form = new FormData()
@@ -134,7 +134,38 @@ describe('account management routes', () => {
 
     expect(response.status).toBe(200)
     const payload = AccountProfileResponseSchema.parse(await response.json())
-    expect(payload.user.avatarUrl).toMatch(/^fake:\/\//)
+    expect(payload.user.avatarUpdatedAt).toBeTruthy()
+
+    const profileResponse = await app.request('/api/account/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const profile = AccountProfileResponseSchema.parse(await profileResponse.json())
+    expect(profile.user.avatarUpdatedAt).toBe(payload.user.avatarUpdatedAt)
+
+    const contentResponse = await app.request('/api/account/avatar/content', {
+      headers: { Authorization: `Bearer ${token}` },
+      redirect: 'manual',
+    })
+    expect(contentResponse.status).toBe(302)
+    expect(contentResponse.headers.get('location')).toMatch(/^fake:\/\//)
+    expect(contentResponse.headers.get('cache-control')).toBe('private, no-store, max-age=0')
+    expect(contentResponse.headers.get('pragma')).toBe('no-cache')
+    expect(contentResponse.headers.get('referrer-policy')).toBe('no-referrer')
+    expect(contentResponse.headers.get('x-content-type-options')).toBe('nosniff')
+  })
+
+  test('returns not found for missing avatar content', async () => {
+    const app = createTestApp()
+    const token = await register(app)
+
+    const response = await app.request('/api/account/avatar/content', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    expect(response.status).toBe(404)
+    expect(await response.json()).toMatchObject({
+      error: { code: 'ACCOUNT_AVATAR_NOT_FOUND' },
+    })
   })
 
   test('rejects unsupported avatar MIME types', async () => {

@@ -12,6 +12,7 @@ import { Hono } from 'hono'
 
 import { apiEnv } from '../../config/env'
 import { HttpError } from '../../lib/http/http-error'
+import { setPrivateContentRedirectHeaders } from '../../lib/http/private-content-redirect'
 import { apiValidator } from '../../lib/http/validation'
 import { requireAuthActor } from '../accounts/auth-middleware'
 import { assertCanManagePublicResource } from '../accounts/authorization'
@@ -85,6 +86,7 @@ export const createMediaRoutes = (mediaObjectService: MediaObjectService, accoun
     .get('/media-objects/:id/content', apiValidator('param', MediaObjectParamsSchema), async (c) => {
       const actor = await requireAuthActor(c, accountsService)
       const { id } = c.req.valid('param')
+      setPrivateContentRedirectHeaders(c)
       return c.redirect(await mediaObjectService.createReadUrl(actor.accountId, id), 302)
     })
     .post(

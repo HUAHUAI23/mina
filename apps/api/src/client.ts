@@ -77,6 +77,13 @@ type JsonEndpoint<Input, Output, Status extends number = 200> = {
   status: Status
 }
 
+type RedirectEndpoint<Input, Status extends number = 302> = {
+  input: Input
+  output: {}
+  outputFormat: 'redirect'
+  status: Status
+}
+
 type CreateMediaObjectForm = CreateMediaObjectInput & {
   file: File
 }
@@ -104,6 +111,9 @@ type ClientSchema = {
   }
   '/api/account/avatar': {
     $post: JsonEndpoint<{ form: AccountAvatarForm }, AccountProfileResponse>
+  }
+  '/api/account/avatar/content': {
+    $get: RedirectEndpoint<{ query?: { token?: string } }>
   }
   '/api/account/password': {
     $patch: JsonEndpoint<{ json: ChangePasswordInput }, ChangePasswordResponse>
@@ -236,6 +246,9 @@ type ClientSchema = {
   }
   '/api/media-objects/:id': {
     $get: JsonEndpoint<{ param: { id: string } }, GetMediaObjectResponse>
+  }
+  '/api/media-objects/:id/content': {
+    $get: RedirectEndpoint<{ param: { id: string }; query?: { token?: string } }>
   }
   '/api/media-objects/presigned-upload': {
     $post: JsonEndpoint<{ json: CreatePresignedMediaUploadInput }, CreatePresignedMediaUploadResponse, 201>

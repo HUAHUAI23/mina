@@ -13,7 +13,7 @@ export const useRefreshAuthenticatedUser = () => {
     if (
       profileUser &&
       (user?.updatedAt !== profileUser.updatedAt ||
-        user.avatarUrl !== profileUser.avatarUrl ||
+        user?.avatarUpdatedAt !== profileUser.avatarUpdatedAt ||
         user.displayName !== profileUser.displayName ||
         user.preferredLocale !== profileUser.preferredLocale)
     ) {
@@ -22,7 +22,7 @@ export const useRefreshAuthenticatedUser = () => {
   }, [
     profileQuery.data?.user,
     updateAuthenticatedUser,
-    user?.avatarUrl,
+    user?.avatarUpdatedAt,
     user?.displayName,
     user?.preferredLocale,
     user?.updatedAt,

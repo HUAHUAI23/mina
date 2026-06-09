@@ -52,7 +52,7 @@ export class AccountManagementService {
 
   async getProfile(actor: AuthActor): Promise<AccountProfileResponse> {
     const user = await this.requireUser(actor.userId)
-    return { user: toAuthUser(user, await this.avatarUrl(user, actor.accountId)) }
+    return { user: toAuthUser(user) }
   }
 
   async updateProfile(actor: AuthActor, input: UpdateAccountProfileInput): Promise<AccountProfileResponse> {
@@ -61,7 +61,7 @@ export class AccountManagementService {
       updatedAt: nowIso(),
       userId: actor.userId,
     })
-    return { user: toAuthUser(user, await this.avatarUrl(user, actor.accountId)) }
+    return { user: toAuthUser(user) }
   }
 
   async updateAvatar(actor: AuthActor, input: AvatarUploadInput): Promise<AccountProfileResponse> {
@@ -105,7 +105,7 @@ export class AccountManagementService {
       }).catch(() => undefined)
     }
 
-    return { user: toAuthUser(user, await this.avatarUrl(user, actor.accountId)) }
+    return { user: toAuthUser(user) }
   }
 
   async changePassword(actor: AuthActor, input: ChangePasswordInput): Promise<{ success: true }> {
@@ -130,7 +130,7 @@ export class AccountManagementService {
       updatedAt: nowIso(),
       userId: actor.userId,
     })
-    return { user: toAuthUser(user, await this.avatarUrl(user, actor.accountId)) }
+    return { user: toAuthUser(user) }
   }
 
   async getStorageOverview(actor: AuthActor): Promise<AccountStorageOverview> {
@@ -151,14 +151,19 @@ export class AccountManagementService {
     }
   }
 
-  private async avatarUrl(user: User, accountId: string): Promise<string | undefined> {
-    if (!user.avatarStorageKey) {
-      return undefined
+  async createAvatarReadUrl(actor: AuthActor, expiresInSeconds = 300): Promise<string> {
+    const user = await this.requireUser(actor.userId)
+    const avatarStorageKey = user.avatarStorageKey
+    if (!avatarStorageKey) {
+      throw new HttpError(404, 'ACCOUNT_AVATAR_NOT_FOUND', {
+        fallbackMessage: 'Avatar not found.',
+        messageKey: 'api_error_account_avatar_not_found',
+      })
     }
     return this.storage.createPresignedGetUrl({
-      accountId,
-      expiresInSeconds: 300,
-      key: user.avatarStorageKey,
+      accountId: actor.accountId,
+      expiresInSeconds,
+      key: avatarStorageKey,
     })
   }
 

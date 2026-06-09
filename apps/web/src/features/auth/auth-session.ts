@@ -6,10 +6,9 @@ const AUTH_SESSION_STORAGE_KEY = 'mina.auth.session'
 const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
 
 const toStoredAuthSession = (authSession: AuthResponse): AuthResponse => {
-  const { avatarUrl, ...user } = authSession.user
   return {
     ...authSession,
-    user,
+    user: authSession.user,
   }
 }
 

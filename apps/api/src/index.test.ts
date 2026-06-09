@@ -367,6 +367,17 @@ describe('mina api', () => {
     expect(getResponse.status).toBe(200)
     expect(fetched.item.id).toBe(created.item.id)
 
+    const contentResponse = await app.request(`/api/media-objects/${created.item.id}/content`, {
+      headers: authHeaders,
+      redirect: 'manual',
+    })
+    expect(contentResponse.status).toBe(302)
+    expect(contentResponse.headers.get('location')).toMatch(/^fake:\/\//)
+    expect(contentResponse.headers.get('cache-control')).toBe('private, no-store, max-age=0')
+    expect(contentResponse.headers.get('pragma')).toBe('no-cache')
+    expect(contentResponse.headers.get('referrer-policy')).toBe('no-referrer')
+    expect(contentResponse.headers.get('x-content-type-options')).toBe('nosniff')
+
     const unsupported = new FormData()
     unsupported.set('file', new File(['plain'], 'plain.txt', { type: 'text/plain' }))
     const unsupportedResponse = await app.request('/api/media-objects', {
@@ -393,6 +404,14 @@ describe('mina api', () => {
     }
     expect(presignedResponse.status).toBe(201)
     expect(presigned.item.status).toBe('uploading')
+
+    const pendingContentResponse = await app.request(`/api/media-objects/${presigned.item.id}/content`, {
+      headers: authHeaders,
+      redirect: 'manual',
+    })
+    const pendingContentPayload = (await pendingContentResponse.json()) as ApiError
+    expect(pendingContentResponse.status).toBe(409)
+    expect(pendingContentPayload.error.code).toBe('MEDIA_OBJECT_NOT_READY')
 
     const completeResponse = await app.request(`/api/media-objects/${presigned.item.id}/complete-upload`, {
       method: 'POST',

@@ -3,12 +3,13 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Camera, Loader2 } from 'lucide-react'
 
-import { Avatar, AvatarFallback, AvatarImage } from '@mina/ui/components/avatar'
+import { Avatar, AvatarFallback } from '@mina/ui/components/avatar'
 import { Input } from '@mina/ui/components/input'
 import { Label } from '@mina/ui/components/label'
 
 import { useMessages } from '../../../app/i18n-provider'
 import { getErrorMessage } from '../../../lib/http'
+import { MediaAvatarImage } from '../../../components/media/MediaAvatarImage'
 import { useAuth } from '../../auth/components/auth-provider'
 import {
   updateAccountProfile,
@@ -81,7 +82,13 @@ export function ProfilePanel() {
         <div className="grid justify-items-center">
           <div className="relative">
             <Avatar className="size-40 shadow-floating">
-              {profile?.avatarUrl ? <AvatarImage alt="" src={profile.avatarUrl} /> : null}
+              {profile?.avatarUpdatedAt ? (
+                <MediaAvatarImage
+                  alt=""
+                  className="aspect-square size-full object-cover"
+                  source={{ type: 'account_avatar', avatarUpdatedAt: profile.avatarUpdatedAt }}
+                />
+              ) : null}
               <AvatarFallback className="bg-foreground text-5xl font-normal text-primary-foreground">
                 {initialsFromName(displayName)}
               </AvatarFallback>

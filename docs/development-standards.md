@@ -80,6 +80,7 @@ All repository-facing project text should remain in English:
 24. Avoid resolving state styling conflicts with `!` modifiers. Prefer complete state class mappings or put the variant on the element that actually owns the style. For example, if global `a { color: inherit }` affects a link, put `text-brand-accent` on an inner text element and use `group-hover:text-brand-accent` instead of `!text-brand-accent`.
 25. Prefer Tailwind primitives over arbitrary CSS effects. Use utilities such as `ring-1`, `ring-inset`, `ring-outline-ghost`, `border-*`, and `shadow-floating` before `shadow-[...]`, raw box shadows, or feature-local CSS. Handwritten CSS remains appropriate for pseudo-elements, generated preview art, third-party DOM, and CSS-variable geometry.
 26. When deleting or replacing UI components, remove their unused style hooks in the same change. Delete stale class names, unused imported CSS files, and empty feature CSS files instead of leaving orphaned styles behind.
+27. Render managed object-storage media through the shared `MediaImage`, `MediaVideo`, and `apps/web/src/lib/media-url.ts` helpers. Frontend DTOs and component state must not store or render direct presigned storage URLs; use stable API content endpoints and component-level refresh retries for images, video posters, and playable video.
 
 ## Internationalization Rules
 

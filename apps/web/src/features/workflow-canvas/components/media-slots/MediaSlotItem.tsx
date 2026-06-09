@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { NodeMediaSlotItem as NodeMediaSlotItemType } from '@mina/contracts/modules/media'
 import { cn } from '@mina/ui/lib/utils'
 
+import { MediaImage } from '../../../../components/media/MediaImage'
 import { useMessages } from '../../../../app/i18n-provider'
 import { getMediaObject } from '../../api/media-queries'
 import { getTask } from '../../api/workflow-queries'
@@ -11,7 +12,6 @@ import { useCanvasNode } from '../../store/selectors'
 import { resolveNodeTaskView } from '../../media/resolve-node-task-view'
 import { useNodeRuntimeStore } from '../../store/node-runtime-store'
 import { resolveMediaViewResource } from '../../utils/media-view'
-import { previewUrlForMedia } from '../../utils/media-url'
 
 interface MediaSlotItemProps {
   dragHandleProps?: Record<string, unknown> | undefined
@@ -81,13 +81,13 @@ export function MediaSlotItem({
   const hasUpstreamMedia =
     item.source.type !== 'node_output' ||
     Boolean(sourceTaskId && (upstreamResource || isUpstreamPending || !taskQuery.isFetched))
-  const localPreview =
+  const localPreviewSource =
     item.source.type === 'external_url' && item.source.kind === 'image'
-      ? previewUrlForMedia(item.source)
+      ? item.source
       : mediaQuery.data?.item.kind === 'image'
-        ? previewUrlForMedia({ mediaObjectId: mediaQuery.data.item.id, url: mediaQuery.data.item.url })
+        ? { mediaObjectId: mediaQuery.data.item.id, url: mediaQuery.data.item.url }
         : upstreamResource?.kind === 'image'
-          ? previewUrlForMedia(upstreamResource)
+          ? upstreamResource
           : undefined
   const mediaKind =
     item.source.type === 'external_url' ? item.source.kind : mediaQuery.data?.item.kind ?? upstreamResource?.kind
@@ -103,8 +103,14 @@ export function MediaSlotItem({
       title={m.workflow_canvas_drag_to_reorder()}
     >
       <div className={cn(slotThumbClassName, !hasUpstreamMedia && missingSlotThumbClassName)}>
-        {localPreview ? (
-          <img alt="" className={slotImageClassName} draggable={false} src={localPreview} />
+        {localPreviewSource ? (
+          <MediaImage
+            alt=""
+            className={slotImageClassName}
+            draggable={false}
+            fallback={mediaFallback(mediaKind)}
+            source={{ type: 'media', media: localPreviewSource }}
+          />
         ) : isUpstreamPending ? (
           <LoaderCircle className={slotLoadingClassName} size={14} />
         ) : hasUpstreamMedia ? (

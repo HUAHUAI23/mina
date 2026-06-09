@@ -35,12 +35,11 @@ export const AuthUserSchema = UserSchema.pick({
   username: true,
   email: true,
   displayName: true,
+  avatarUpdatedAt: true,
   preferredLocale: true,
   role: true,
   createdAt: true,
   updatedAt: true,
-}).extend({
-  avatarUrl: z.string().min(1).optional(),
 })
 
 export const AuthSessionSchema = z.object({

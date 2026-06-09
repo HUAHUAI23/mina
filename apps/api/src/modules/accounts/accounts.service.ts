@@ -23,12 +23,12 @@ const normalizeUsername = (username: string): string => username.trim().toLowerC
 
 const createId = (prefix: string): string => `${prefix}_${crypto.randomUUID()}`
 
-export const toAuthUser = (user: User, avatarUrl?: string): AuthUser => ({
+export const toAuthUser = (user: User): AuthUser => ({
+  ...(user.avatarUpdatedAt ? { avatarUpdatedAt: user.avatarUpdatedAt } : {}),
   createdAt: user.createdAt,
   displayName: user.displayName,
   email: user.email,
   id: user.id,
-  ...(avatarUrl ? { avatarUrl } : {}),
   preferredLocale: user.preferredLocale,
   role: user.role,
   updatedAt: user.updatedAt,

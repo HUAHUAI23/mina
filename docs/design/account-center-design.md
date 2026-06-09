@@ -365,7 +365,7 @@ Response:
     "username": "mina",
     "email": "user@example.com",
     "displayName": "Mina User",
-    "avatarUrl": "https://...",
+    "avatarUpdatedAt": "2026-05-28T00:00:00.000Z",
     "preferredLocale": "en",
     "role": "user",
     "createdAt": "2026-05-28T00:00:00.000Z",
@@ -374,7 +374,9 @@ Response:
 }
 ```
 
-`avatarUrl` should be a display URL, not the raw private storage key.
+The web app should render account avatars through
+`/api/account/avatar/content?token=...&v=avatarUpdatedAt`. The profile
+payload should not contain raw storage keys or presigned read URLs.
 
 ### 7.2 Update Profile
 
@@ -420,8 +422,8 @@ Rules:
 4. Persist avatar metadata on `users`.
 5. Delete the previous avatar object after the new avatar is safely
    persisted, when possible.
-6. Return the updated profile payload or an avatar response containing a
-   display URL.
+6. Return the updated profile payload with `avatarUpdatedAt`; the browser
+   uses the stable avatar content endpoint for display.
 
 ### 7.4 Change Password
 
