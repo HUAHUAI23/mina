@@ -11,7 +11,11 @@ import {
 import { Hono } from 'hono'
 
 import { HttpError } from '../../lib/http/http-error'
-import { setPrivateContentRedirectHeaders } from '../../lib/http/private-content-redirect'
+import {
+  PRIVATE_CONTENT_CACHE_CONTROL,
+  PRIVATE_CONTENT_READ_URL_EXPIRES_SECONDS,
+  setPrivateContentRedirectHeaders,
+} from '../../lib/http/private-content-redirect'
 import { apiValidator } from '../../lib/http/validation'
 import type { AccountsService } from './accounts.service'
 import { requireAuthActor } from './auth-middleware'
@@ -53,7 +57,13 @@ export const createAccountManagementRoutes = (
     .get('/avatar/content', async (c) => {
       const actor = await requireAuthActor(c, accountsService)
       setPrivateContentRedirectHeaders(c)
-      return c.redirect(await accountManagementService.createAvatarReadUrl(actor), 302)
+      return c.redirect(
+        await accountManagementService.createAvatarReadUrl(actor, {
+          expiresInSeconds: PRIVATE_CONTENT_READ_URL_EXPIRES_SECONDS,
+          responseCacheControl: PRIVATE_CONTENT_CACHE_CONTROL,
+        }),
+        302,
+      )
     })
     .patch('/password', apiValidator('json', ChangePasswordSchema), async (c) => {
       const actor = await requireAuthActor(c, accountsService)

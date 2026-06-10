@@ -38,6 +38,7 @@ export interface CreatePresignedGetUrlInput {
   accountId: string
   expiresInSeconds: number
   key: string
+  responseCacheControl?: string
 }
 
 export interface CreatePresignedPutUrlInput {

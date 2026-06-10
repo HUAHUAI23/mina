@@ -1,6 +1,5 @@
 import { WebsocketProvider } from 'y-websocket'
 
-import { readStoredAuthToken } from '../../../auth/auth-session'
 import { webEnv } from '../../../../config/env'
 import type { WorkflowYDocHandles } from './yjs-document'
 
@@ -17,14 +16,12 @@ export const createWorkflowYjsProvider = (
   workflowId: string,
   y: WorkflowYDocHandles,
 ): WebsocketProvider => {
-  const token = readStoredAuthToken()
   return new WebsocketProvider(
     workflowYjsServerUrl(workflowId),
     workflowYjsRoomName(workflowId),
     y.ydoc,
     {
       connect: true,
-      params: token ? { token } : {},
     },
   )
 }

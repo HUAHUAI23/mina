@@ -116,6 +116,11 @@ const waitForOpen = (socket: WebSocket): Promise<void> =>
     socket.addEventListener('error', () => reject(new Error('WebSocket connection failed.')), { once: true })
   })
 
+const waitForClosed = (socket: WebSocket): Promise<CloseEvent> =>
+  new Promise((resolve) => {
+    socket.addEventListener('close', (event) => resolve(event), { once: true })
+  })
+
 const readAuthToken = (value: unknown): string => {
   if (
     value &&
@@ -249,9 +254,10 @@ describe('workflow collaboration routes', () => {
     const server = Bun.serve({ fetch: app.fetch, port: 0, websocket })
 
     try {
-      const roomUrl = `ws://127.0.0.1:${server.port}/api/workflows/${workflowId}/collab/${workflowId}?token=${token}`
-      const firstSocket = new WebSocket(roomUrl)
-      const secondSocket = new WebSocket(roomUrl)
+      const roomUrl = `ws://127.0.0.1:${server.port}/api/workflows/${workflowId}/collab/${workflowId}`
+      const authCookie = `mina_session=${token}`
+      const firstSocket = new WebSocket(roomUrl, { headers: { Cookie: authCookie } })
+      const secondSocket = new WebSocket(roomUrl, { headers: { Cookie: authCookie } })
       const firstMessages = createMessageCollector(firstSocket)
       const secondMessages = createMessageCollector(secondSocket)
       await Promise.all([waitForOpen(firstSocket), waitForOpen(secondSocket)])
@@ -386,7 +392,7 @@ describe('workflow collaboration routes', () => {
       expect(firstDoc.getMap('edges').has('edge_1')).toBe(false)
 
       secondSocket.close()
-      const reconnectedSocket = new WebSocket(roomUrl)
+      const reconnectedSocket = new WebSocket(roomUrl, { headers: { Cookie: authCookie } })
       const reconnectedMessages = createMessageCollector(reconnectedSocket)
       await waitForOpen(reconnectedSocket)
       await waitFor(() => reconnectedMessages.length > 0)
@@ -402,6 +408,13 @@ describe('workflow collaboration routes', () => {
       const reconnectedFrame = reconnectedDoc.getMap('nodeFrames').get('node_1') as { position: { x: number; y: number } }
       expect(reconnectedFrame.position).toEqual({ x: 720, y: 260 })
       expect(reconnectedDoc.getMap('nodes').has('node_2')).toBe(false)
+
+      const queryTokenSocket = new WebSocket(`${roomUrl}?token=${encodeURIComponent(token)}`)
+      const queryTokenClosed = waitForClosed(queryTokenSocket)
+      await waitForOpen(queryTokenSocket)
+      queryTokenSocket.send(encodeClientSyncStep1(new Y.Doc()))
+      const queryTokenCloseEvent = await queryTokenClosed
+      expect(queryTokenCloseEvent.code).toBe(1008)
 
       const firstAwarenessDoc = new Y.Doc()
       const reconnectedAwareness = new awarenessProtocol.Awareness(new Y.Doc())

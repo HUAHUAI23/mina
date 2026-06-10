@@ -25,6 +25,7 @@ import type {
   ChangePasswordResponse,
   AuthResponse,
   LoginInput,
+  LogoutResponse,
   RegisterInput,
   UpdateAccountPreferencesInput,
   UpdateAccountProfileInput,
@@ -103,6 +104,11 @@ type AccountAvatarForm = {
   file: File
 }
 
+type PrivateContentQuery = {
+  _r?: number | string
+  v?: string
+}
+
 type CreateAssetUploadForm = {
   description?: string
   displayName?: string
@@ -124,7 +130,7 @@ type ClientSchema = {
     $post: JsonEndpoint<{ form: AccountAvatarForm }, AccountProfileResponse>
   }
   '/api/account/avatar/content': {
-    $get: RedirectEndpoint<{ query?: { token?: string } }>
+    $get: RedirectEndpoint<{ query?: PrivateContentQuery }>
   }
   '/api/account/password': {
     $patch: JsonEndpoint<{ json: ChangePasswordInput }, ChangePasswordResponse>
@@ -143,6 +149,9 @@ type ClientSchema = {
   }
   '/api/auth/register': {
     $post: JsonEndpoint<{ json: RegisterInput }, AuthResponse, 201>
+  }
+  '/api/auth/logout': {
+    $post: JsonEndpoint<{}, LogoutResponse>
   }
   '/api/health': {
     $get: JsonEndpoint<
@@ -270,7 +279,7 @@ type ClientSchema = {
     $get: JsonEndpoint<{ param: { id: string } }, GetMediaObjectResponse>
   }
   '/api/media-objects/:id/content': {
-    $get: RedirectEndpoint<{ param: { id: string }; query?: { token?: string } }>
+    $get: RedirectEndpoint<{ param: { id: string }; query?: Pick<PrivateContentQuery, '_r'> }>
   }
   '/api/media-objects/presigned-upload': {
     $post: JsonEndpoint<{ json: CreatePresignedMediaUploadInput }, CreatePresignedMediaUploadResponse, 201>

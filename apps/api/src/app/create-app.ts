@@ -22,7 +22,7 @@ export const createApp = (dependencies: AppDependencies = createAppDependencies(
   app.use('*', requestId())
   app.use('*', prettyJSON())
   app.use('*', secureHeaders())
-  app.use('/api/*', cors({ origin: apiEnv.allowedOrigin }))
+  app.use('/api/*', cors({ credentials: true, origin: apiEnv.allowedOrigin }))
 
   if (apiEnv.nodeEnv !== 'test') {
     app.use('*', logger((message) => console.log(redactRequestLogMessage(message))))

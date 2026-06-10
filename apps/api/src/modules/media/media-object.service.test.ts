@@ -1,12 +1,23 @@
 import { describe, expect, test } from 'bun:test'
 
 import type { HttpError } from '../../lib/http/http-error'
+import type { CreatePresignedGetUrlInput } from '../../lib/storage/object-storage'
 import { assertAccountStorageKey } from '../../lib/storage/storage-key'
+import { FakeObjectStorage } from '../../test/doubles'
 import { createMediaObjectTestScenario } from '../../test/scenarios/media-object-scenario'
 import type { RemoteMediaFetcher } from './remote-media-fetcher'
 
 const createService = (fetcher?: RemoteMediaFetcher) =>
   createMediaObjectTestScenario({ ...(fetcher ? { fetcher } : {}) })
+
+class ReadUrlRecordingStorage extends FakeObjectStorage {
+  readonly getUrlCalls: CreatePresignedGetUrlInput[] = []
+
+  override async createPresignedGetUrl(input: CreatePresignedGetUrlInput): Promise<string> {
+    this.getUrlCalls.push(input)
+    return super.createPresignedGetUrl(input)
+  }
+}
 
 describe('MediaObjectService', () => {
   test('creates ready media objects from buffers under the account media root', async () => {
@@ -57,6 +68,34 @@ describe('MediaObjectService', () => {
       accountId: 'account_1',
       totalBytes: 0,
     })
+  })
+
+  test('passes private content cache options to presigned read URLs', async () => {
+    const storage = new ReadUrlRecordingStorage()
+    const { service } = createMediaObjectTestScenario({ storage })
+    const mediaObject = await service.createFromBuffer({
+      accountId: 'account_1',
+      body: new TextEncoder().encode('image-bytes'),
+      kind: 'image',
+      mimeType: 'image/png',
+      origin: 'user_upload',
+      purpose: 'workflow_slot',
+      retention: 'project_scoped',
+    })
+
+    await service.createReadUrl('account_1', mediaObject.id, {
+      expiresInSeconds: 900,
+      responseCacheControl: 'private, max-age=840',
+    })
+
+    expect(storage.getUrlCalls).toEqual([
+      {
+        accountId: 'account_1',
+        expiresInSeconds: 900,
+        key: mediaObject.storageKey,
+        responseCacheControl: 'private, max-age=840',
+      },
+    ])
   })
 
   test('cleans up expired uploading media objects and excludes failed objects from usage', async () => {

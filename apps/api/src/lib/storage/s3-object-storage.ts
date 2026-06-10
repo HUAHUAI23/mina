@@ -32,6 +32,8 @@ export interface S3ObjectStorageConfig {
   secretAccessKey?: string
 }
 
+const DEFAULT_PRESIGNED_GET_CACHE_CONTROL = 'private, no-store, max-age=0'
+
 const trimTrailingSlash = (value: string): string => value.replace(/\/+$/, '')
 
 const createS3ClientConfig = (config: S3ObjectStorageConfig): S3ClientConfig => ({
@@ -68,7 +70,7 @@ export class S3ObjectStorage implements ObjectStorage {
       new GetObjectCommand({
         Bucket: this.#bucket,
         Key: input.key,
-        ResponseCacheControl: 'private, no-store, max-age=0',
+        ResponseCacheControl: input.responseCacheControl ?? DEFAULT_PRESIGNED_GET_CACHE_CONTROL,
       }),
       { expiresIn: input.expiresInSeconds },
     )

@@ -3,6 +3,7 @@ import { createContext, useContext, useMemo, useState } from 'react'
 import type { AuthResponse, AuthSession, AuthUser } from '@mina/contracts/modules/accounts'
 
 import { clearStoredAuthSession, readStoredAuthSession, storeAuthSession } from '../auth-session'
+import { logoutSession } from '../api/auth.client'
 
 interface AuthContextValue {
   auth: AuthResponse | null
@@ -28,6 +29,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const logout = () => {
       clearStoredAuthSession()
       setAuth(null)
+      void logoutSession().catch(() => {
+        // Local logout should not be blocked by a failed best-effort cookie clear.
+      })
     }
 
     const updateAuthenticatedUser = (user: AuthUser) => {

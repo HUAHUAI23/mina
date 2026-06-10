@@ -70,6 +70,11 @@ export interface PresignedMediaUpload {
   upload: PresignedPutObjectUrl
 }
 
+export interface CreateMediaReadUrlOptions {
+  expiresInSeconds?: number
+  responseCacheControl?: string
+}
+
 export interface MediaObjectServiceConfig {
   remoteFetchMaxBytes: number
   remoteFetchTimeoutMs: number
@@ -217,12 +222,17 @@ export class MediaObjectService {
     return mediaObject
   }
 
-  async createReadUrl(accountId: string, mediaObjectId: string, expiresInSeconds = 300): Promise<string> {
+  async createReadUrl(
+    accountId: string,
+    mediaObjectId: string,
+    options: CreateMediaReadUrlOptions = {},
+  ): Promise<string> {
     const mediaObject = await this.getReadyMediaObject(accountId, mediaObjectId)
     return this.storage.createPresignedGetUrl({
       accountId,
-      expiresInSeconds,
+      expiresInSeconds: options.expiresInSeconds ?? 300,
       key: mediaObject.storageKey,
+      ...(options.responseCacheControl ? { responseCacheControl: options.responseCacheControl } : {}),
     })
   }
 

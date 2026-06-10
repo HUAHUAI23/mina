@@ -60,6 +60,7 @@ export interface AccountsRepository {
   findUserById(id: string): Promise<User | undefined>
   findUserByUsername(username: string): Promise<User | undefined>
   registerUserWithAccount(input: RegisterUserWithAccountInput): Promise<{ account: Account; user: User }>
+  revokeSessionByTokenHash(tokenHash: string, revokedAtIso: string, reason: 'expired' | 'logout' | 'rotation' | 'security'): Promise<void>
   updatePasswordCredential(userId: string, passwordHash: string, updatedAtIso: string): Promise<PasswordCredential>
   updateUserAvatar(input: UpdateUserAvatarInput): Promise<User>
   updateUserPreferences(input: UpdateUserPreferencesInput): Promise<User>

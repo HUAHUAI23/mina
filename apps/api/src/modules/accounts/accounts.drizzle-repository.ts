@@ -159,6 +159,21 @@ export class DrizzleAccountsRepository implements AccountsRepository {
     return row ? storedSessionFromRow(row) : undefined
   }
 
+  async revokeSessionByTokenHash(
+    tokenHash: string,
+    revokedAtIso: string,
+    reason: 'expired' | 'logout' | 'rotation' | 'security',
+  ): Promise<void> {
+    await this.db
+      .update(sessions)
+      .set({
+        revokedAt: new Date(revokedAtIso),
+        revocationReason: reason,
+        updatedAt: new Date(revokedAtIso),
+      })
+      .where(eq(sessions.tokenHash, tokenHash))
+  }
+
   async findUserByEmail(email: string): Promise<User | undefined> {
     const [row] = await this.db.select().from(users).where(eq(users.email, email)).limit(1)
     return row ? userFromRow(row) : undefined

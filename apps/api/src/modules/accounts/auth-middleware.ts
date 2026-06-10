@@ -3,6 +3,7 @@ import type { Context } from 'hono'
 import { HttpError } from '../../lib/http/http-error'
 import type { AccountsService } from './accounts.service'
 import type { AuthActor } from './auth-context'
+import { readSessionTokenCookie } from './auth-cookie'
 
 const AUTH_ACTOR_KEY = 'mina.auth.actor'
 
@@ -22,7 +23,9 @@ const tokenFromWebSocketProtocol = (value: string | undefined): string | undefin
 const tokenFromRequest = (c: Context): string | undefined =>
   bearerTokenFromHeader(c.req.header('Authorization')) ??
   tokenFromWebSocketProtocol(c.req.header('Sec-WebSocket-Protocol')) ??
-  c.req.query('token')?.trim()
+  readSessionTokenCookie(c)
+
+export const readAuthTokenFromRequest = tokenFromRequest
 
 export const requireAuthActor = async (c: Context, accountsService: AccountsService): Promise<AuthActor> => {
   const existing = c.get(AUTH_ACTOR_KEY) as AuthActor | undefined

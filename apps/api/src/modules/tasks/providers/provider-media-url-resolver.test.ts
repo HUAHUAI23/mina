@@ -129,6 +129,7 @@ describe('ProviderMediaUrlResolver', () => {
     expect(resolved.config.media.lastFrame?.source).toEqual({ type: 'media_object', mediaObjectId: 'media_last' })
     expect(storage.getUrlCalls).toHaveLength(5)
     expect(storage.getUrlCalls.map((call) => call.expiresInSeconds)).toEqual([14_400, 14_400, 14_400, 14_400, 14_400])
+    expect(storage.getUrlCalls.every((call) => call.responseCacheControl === undefined)).toBe(true)
   })
 
   test('leaves external urls and data urls unchanged when no media objects are present', async () => {

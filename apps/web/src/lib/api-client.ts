@@ -13,4 +13,7 @@ export const apiClient = hc<AppType>(webEnv.apiBaseUrl, {
       'X-Mina-Locale': getCurrentLocaleForRequest(),
     }
   },
+  init: {
+    credentials: 'include',
+  },
 })

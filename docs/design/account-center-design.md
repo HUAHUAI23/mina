@@ -375,7 +375,7 @@ Response:
 ```
 
 The web app should render account avatars through
-`/api/account/avatar/content?token=...&v=avatarUpdatedAt`. The profile
+`/api/account/avatar/content?v=avatarUpdatedAt`. The profile
 payload should not contain raw storage keys or presigned read URLs.
 
 ### 7.2 Update Profile

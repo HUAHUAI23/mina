@@ -54,6 +54,10 @@ export const AuthResponseSchema = z.object({
   user: AuthUserSchema,
 })
 
+export const LogoutResponseSchema = z.object({
+  success: z.literal(true),
+})
+
 const usernameSchema = z
   .string()
   .trim()
@@ -128,6 +132,7 @@ export type AuthUser = z.infer<typeof AuthUserSchema>
 export type ChangePasswordInput = z.infer<typeof ChangePasswordSchema>
 export type ChangePasswordResponse = z.infer<typeof ChangePasswordResponseSchema>
 export type LoginInput = z.infer<typeof LoginSchema>
+export type LogoutResponse = z.infer<typeof LogoutResponseSchema>
 export type RegisterInput = z.infer<typeof RegisterSchema>
 export type UpdateAccountPreferencesInput = z.infer<typeof UpdateAccountPreferencesSchema>
 export type UpdateAccountProfileInput = z.infer<typeof UpdateAccountProfileSchema>

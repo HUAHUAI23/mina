@@ -48,7 +48,7 @@ const withBrowserWindow = (run: () => void): void => {
 }
 
 describe('media URL helpers', () => {
-  test('returns stable media content URLs with auth token and refresh nonce', () => withBrowserWindow(() => {
+  test('returns stable media content URLs without exposing auth tokens', () => withBrowserWindow(() => {
     localStorageStore.set(
       'mina.auth.session',
       JSON.stringify({
@@ -72,7 +72,7 @@ describe('media URL helpers', () => {
 
     expect(url.origin).toBe('https://app.example.test')
     expect(url.pathname).toBe('/api/media-objects/media%2F1/content')
-    expect(url.searchParams.get('token')).toBe('token value token value token value')
+    expect(url.searchParams.get('token')).toBeNull()
     expect(url.searchParams.get('_r')).toBe('2')
   }))
 
@@ -84,6 +84,7 @@ describe('media URL helpers', () => {
 
     expect(url.pathname).toBe('/api/account/avatar/content')
     expect(url.searchParams.get('v')).toBe('2026-06-09T00:00:00.000Z')
+    expect(url.searchParams.get('token')).toBeNull()
     expect(url.searchParams.get('_r')).toBe('1')
   }))
 

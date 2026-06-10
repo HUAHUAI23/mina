@@ -16,7 +16,7 @@ import { clone } from '../shared/clone'
 export class FakeAccountsRepository implements AccountsRepository {
   readonly #accounts = new Map<string, Account>()
   readonly #passwordCredentials = new Map<string, PasswordCredential>()
-  readonly #sessions = new Map<string, AuthSession & { tokenHash: string }>()
+  readonly #sessions = new Map<string, AuthSession & { revokedAt?: string; revocationReason?: string; tokenHash: string }>()
   readonly #users = new Map<string, User>()
 
   constructor(initialUsers: User[] = []) {
@@ -100,6 +100,22 @@ export class FakeAccountsRepository implements AccountsRepository {
   async findSessionByTokenHash(tokenHash: string): Promise<StoredSession | undefined> {
     const session = [...this.#sessions.values()].find((item) => item.tokenHash === tokenHash)
     return session ? clone(session) : undefined
+  }
+
+  async revokeSessionByTokenHash(
+    tokenHash: string,
+    revokedAtIso: string,
+    reason: 'expired' | 'logout' | 'rotation' | 'security',
+  ): Promise<void> {
+    const session = [...this.#sessions.values()].find((item) => item.tokenHash === tokenHash)
+    if (!session) {
+      return
+    }
+    this.#sessions.set(session.id, {
+      ...session,
+      revokedAt: revokedAtIso,
+      revocationReason: reason,
+    })
   }
 
   async findUserByEmail(email: string): Promise<User | undefined> {

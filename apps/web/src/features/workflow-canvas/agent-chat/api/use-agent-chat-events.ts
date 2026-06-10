@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { applyChatMessageDelta, upsertChatMessage, type AgentChatMessageListCache } from '../domain/chat-message-cache'
 import { parseChatEvent } from './chat-event'
 import { chatKeys } from './chat-keys'
-import { chatEventProtocols, chatEventUrl, getAgentChatClientId } from './chat-ws'
+import { chatEventUrl, getAgentChatClientId } from './chat-ws'
 
 const RECONNECT_BASE_MS = 1_000
 const RECONNECT_MAX_MS = 30_000
@@ -53,7 +53,7 @@ export const useAgentChatEvents = (threadId: string | undefined): void => {
       if (disposed) {
         return
       }
-      const next = new WebSocket(chatEventUrl(activeThreadId), chatEventProtocols())
+      const next = new WebSocket(chatEventUrl(activeThreadId), ['mina-chat'])
       socket = next
       next.onopen = () => {
         const wasReconnect = reconnectAttempts > 0

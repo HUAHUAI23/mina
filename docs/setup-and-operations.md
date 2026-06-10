@@ -168,6 +168,44 @@ The API test suite uses explicit fakes under `apps/api/src/test` for unit and ro
 bun run build
 ```
 
+## Container Image
+
+The repository includes a production `Dockerfile` and a GitHub Actions workflow that publishes images to GitHub Container Registry.
+
+The image builds both workspaces with Bun, serves the Vite web build, and routes `/api`, `/docs`, `/openapi.json`, and API WebSocket endpoints to the Hono API from one exposed port.
+
+### CI Publishing
+
+The workflow lives at `.github/workflows/publish-image.yml`.
+
+- Pull requests build the image without pushing it.
+- Pushes to `main` publish `ghcr.io/<owner>/<repo>:main`, `:latest`, and `:sha-<commit>`.
+- Version tags such as `v1.2.3` additionally publish semver tags such as `:1.2.3` and `:1.2`.
+- Manual runs can override the image name with the `image_name` input.
+
+The workflow uses the repository `GITHUB_TOKEN` with `packages: write` permission, so no extra registry secret is required for the default GHCR target.
+
+### Local Image Build
+
+```bash
+docker build -t mina:local .
+```
+
+### Run The Image
+
+```bash
+docker run --rm -p 3000:3000 \
+  -e MINA_DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/mina \
+  -e MINA_ALLOWED_ORIGIN=http://localhost:3000 \
+  -e MINA_S3_BUCKET=your-bucket \
+  -e MINA_S3_REGION=us-east-1 \
+  ghcr.io/huahuai23/mina:latest
+```
+
+The container listens on `PORT`, defaulting to `3000`. `MINA_API_PORT` is set from `PORT` by the container start script when it is not provided.
+
+Use the same runtime variables documented above for database, AI providers, task scheduler, and S3-compatible storage. Enable background task, workflow, and chat recovery in the container with `MINA_SCHEDULER_ENABLED=true`.
+
 ### Full Verification
 
 ```bash

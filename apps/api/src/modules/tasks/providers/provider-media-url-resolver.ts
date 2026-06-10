@@ -53,7 +53,9 @@ export class ProviderMediaUrlResolver {
       await Promise.all(
         [...mediaObjectIds].map(async (mediaObjectId) => [
           mediaObjectId,
-          await this.mediaObjectService.createReadUrl(task.accountId, mediaObjectId, this.expiresInSeconds),
+          await this.mediaObjectService.createReadUrl(task.accountId, mediaObjectId, {
+            expiresInSeconds: this.expiresInSeconds,
+          }),
         ] as const),
       ),
     )

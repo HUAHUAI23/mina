@@ -6,6 +6,7 @@ import {
   ChangePasswordResponseSchema,
 } from '@mina/contracts/modules/accounts'
 
+import { PRIVATE_CONTENT_CACHE_CONTROL, PRIVATE_CONTENT_VARY } from '../../lib/http/private-content-redirect'
 import { createTestApp } from '../../test/app'
 
 const readAuthToken = (value: unknown): string => {
@@ -35,6 +36,8 @@ const register = async (app: ReturnType<typeof createTestApp>) => {
     method: 'POST',
   })
   expect(response.status).toBe(201)
+  expect(response.headers.get('set-cookie')).toContain('mina_session=')
+  expect(response.headers.get('set-cookie')).toContain('HttpOnly')
   return readAuthToken(await response.json())
 }
 
@@ -148,10 +151,29 @@ describe('account management routes', () => {
     })
     expect(contentResponse.status).toBe(302)
     expect(contentResponse.headers.get('location')).toMatch(/^fake:\/\//)
-    expect(contentResponse.headers.get('cache-control')).toBe('private, no-store, max-age=0')
-    expect(contentResponse.headers.get('pragma')).toBe('no-cache')
+    expect(contentResponse.headers.get('cache-control')).toBe(PRIVATE_CONTENT_CACHE_CONTROL)
+    expect(contentResponse.headers.get('pragma')).toBeNull()
+    expect(contentResponse.headers.get('vary')?.split(',').map((value) => value.trim())).toEqual(
+      expect.arrayContaining(PRIVATE_CONTENT_VARY.split(',').map((value) => value.trim())),
+    )
     expect(contentResponse.headers.get('referrer-policy')).toBe('no-referrer')
     expect(contentResponse.headers.get('x-content-type-options')).toBe('nosniff')
+
+    const cookieContentResponse = await app.request('/api/account/avatar/content', {
+      headers: { Cookie: `mina_session=${token}` },
+      redirect: 'manual',
+    })
+    expect(cookieContentResponse.status).toBe(302)
+    expect(cookieContentResponse.headers.get('location')).toMatch(/^fake:\/\//)
+
+    const queryTokenContentResponse = await app.request(
+      `/api/account/avatar/content?token=${encodeURIComponent(token)}`,
+      { redirect: 'manual' },
+    )
+    expect(queryTokenContentResponse.status).toBe(401)
+    expect(await queryTokenContentResponse.json()).toMatchObject({
+      error: { code: 'UNAUTHENTICATED' },
+    })
   })
 
   test('returns not found for missing avatar content', async () => {

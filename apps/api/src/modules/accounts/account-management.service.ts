@@ -151,7 +151,10 @@ export class AccountManagementService {
     }
   }
 
-  async createAvatarReadUrl(actor: AuthActor, expiresInSeconds = 300): Promise<string> {
+  async createAvatarReadUrl(
+    actor: AuthActor,
+    options: { expiresInSeconds?: number; responseCacheControl?: string } = {},
+  ): Promise<string> {
     const user = await this.requireUser(actor.userId)
     const avatarStorageKey = user.avatarStorageKey
     if (!avatarStorageKey) {
@@ -162,8 +165,9 @@ export class AccountManagementService {
     }
     return this.storage.createPresignedGetUrl({
       accountId: actor.accountId,
-      expiresInSeconds,
+      expiresInSeconds: options.expiresInSeconds ?? 300,
       key: avatarStorageKey,
+      ...(options.responseCacheControl ? { responseCacheControl: options.responseCacheControl } : {}),
     })
   }
 

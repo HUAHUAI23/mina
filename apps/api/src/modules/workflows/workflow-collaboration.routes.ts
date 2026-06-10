@@ -2,6 +2,7 @@ import { upgradeWebSocket } from 'hono/bun'
 import { Hono } from 'hono'
 import type { WorkflowSummary } from '@mina/contracts/modules/workflows'
 
+import { HttpError } from '../../lib/http/http-error'
 import { requireAuthActor } from '../accounts/auth-middleware'
 import type { AccountsService } from '../accounts/accounts.service'
 import type { WorkflowYjsRoomService } from './collaboration/workflow-yjs-room.service'
@@ -43,7 +44,11 @@ export const createWorkflowCollaborationRoutes = (
                 message: event.data,
                 workflow: connectedWorkflow,
               })
-            } catch {
+            } catch (error) {
+              if (error instanceof HttpError && error.status === 401) {
+                ws.close(1008, 'Workflow collaboration access denied.')
+                return
+              }
               ws.close(1011, 'Workflow collaboration message failed.')
             }
           },

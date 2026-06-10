@@ -22,6 +22,7 @@ import type { ApiError } from '@mina/contracts/schemas/api-error'
 import { hc } from 'hono/client'
 import type { AppType } from './index'
 
+import { PRIVATE_CONTENT_CACHE_CONTROL, PRIVATE_CONTENT_VARY } from './lib/http/private-content-redirect'
 import { createTestApp } from './test/app'
 
 describe('mina api', () => {
@@ -84,6 +85,9 @@ describe('mina api', () => {
       expect(payload.user.email).toBe('admin@example.com')
       expect(payload.user.username).toBe('mina_admin')
       expect(payload.session.token.length).toBeGreaterThanOrEqual(32)
+      expect(response.headers.get('set-cookie')).toContain('mina_session=')
+      expect(response.headers.get('set-cookie')).toContain('HttpOnly')
+      expect(response.headers.get('set-cookie')).toContain('SameSite=Lax')
 
       const workflowResponse = await app.request('/api/workflows', {
         method: 'POST',
@@ -135,9 +139,40 @@ describe('mina api', () => {
       expect(response.status).toBe(200)
       expect(payload.user.username).toBe('director')
       expect(payload.session.userId).toBe(payload.user.id)
+      expect(response.headers.get('set-cookie')).toContain('mina_session=')
+      expect(response.headers.get('set-cookie')).toContain('HttpOnly')
     },
     10_000,
   )
+
+  test('POST /api/auth/logout clears the browser session cookie', async () => {
+    const { auth } = await registerAndAuthHeaders()
+    const response = await app.request('/api/auth/logout', {
+      headers: {
+        Authorization: `Bearer ${auth.session.token}`,
+      },
+      method: 'POST',
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ success: true })
+    expect(response.headers.get('set-cookie')).toContain('mina_session=')
+    expect(response.headers.get('set-cookie')).toContain('Max-Age=0')
+
+    const profileResponse = await app.request('/api/account/me', {
+      headers: {
+        Authorization: `Bearer ${auth.session.token}`,
+      },
+    })
+    expect(profileResponse.status).toBe(401)
+
+    const cookieProfileResponse = await app.request('/api/account/me', {
+      headers: {
+        Cookie: `mina_session=${auth.session.token}`,
+      },
+    })
+    expect(cookieProfileResponse.status).toBe(401)
+  })
 
   test('POST /api/auth/login rejects invalid credentials', async () => {
     const response = await app.request('/api/auth/login', {
@@ -373,10 +408,29 @@ describe('mina api', () => {
     })
     expect(contentResponse.status).toBe(302)
     expect(contentResponse.headers.get('location')).toMatch(/^fake:\/\//)
-    expect(contentResponse.headers.get('cache-control')).toBe('private, no-store, max-age=0')
-    expect(contentResponse.headers.get('pragma')).toBe('no-cache')
+    expect(contentResponse.headers.get('cache-control')).toBe(PRIVATE_CONTENT_CACHE_CONTROL)
+    expect(contentResponse.headers.get('pragma')).toBeNull()
+    expect(contentResponse.headers.get('vary')?.split(',').map((value) => value.trim())).toEqual(
+      expect.arrayContaining(PRIVATE_CONTENT_VARY.split(',').map((value) => value.trim())),
+    )
     expect(contentResponse.headers.get('referrer-policy')).toBe('no-referrer')
     expect(contentResponse.headers.get('x-content-type-options')).toBe('nosniff')
+
+    const cookieContentResponse = await app.request(`/api/media-objects/${created.item.id}/content`, {
+      headers: { Cookie: `mina_session=${auth.session.token}` },
+      redirect: 'manual',
+    })
+    expect(cookieContentResponse.status).toBe(302)
+    expect(cookieContentResponse.headers.get('location')).toMatch(/^fake:\/\//)
+
+    const queryTokenContentResponse = await app.request(
+      `/api/media-objects/${created.item.id}/content?token=${encodeURIComponent(auth.session.token)}`,
+      { redirect: 'manual' },
+    )
+    expect(queryTokenContentResponse.status).toBe(401)
+    expect(await queryTokenContentResponse.json()).toMatchObject({
+      error: { code: 'UNAUTHENTICATED' },
+    })
 
     const unsupported = new FormData()
     unsupported.set('file', new File(['plain'], 'plain.txt', { type: 'text/plain' }))

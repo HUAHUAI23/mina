@@ -1,5 +1,4 @@
 import { webEnv } from '../config/env'
-import { readStoredAuthToken } from '../features/auth/auth-session'
 
 const mediaObjectUrlPattern = /^mina:\/\/media\/([^/?#]+)$/
 
@@ -18,9 +17,7 @@ const withRefreshNonce = (url: string, refreshNonce: number | undefined): string
 }
 
 export const mediaObjectContentUrl = (mediaObjectId: string, refreshNonce?: number): string => {
-  const token = readStoredAuthToken()
-  const params = token ? `?token=${encodeURIComponent(token)}` : ''
-  return withRefreshNonce(apiPath(`/api/media-objects/${encodeURIComponent(mediaObjectId)}/content${params}`), refreshNonce)
+  return withRefreshNonce(apiPath(`/api/media-objects/${encodeURIComponent(mediaObjectId)}/content`), refreshNonce)
 }
 
 export const accountAvatarContentUrl = (
@@ -29,11 +26,7 @@ export const accountAvatarContentUrl = (
   if (!input?.avatarUpdatedAt) {
     return undefined
   }
-  const token = readStoredAuthToken()
   const params = new URLSearchParams()
-  if (token) {
-    params.set('token', token)
-  }
   params.set('v', input.avatarUpdatedAt)
   return withRefreshNonce(apiPath(`/api/account/avatar/content?${params.toString()}`), input.refreshNonce)
 }

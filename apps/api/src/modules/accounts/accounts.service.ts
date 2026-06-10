@@ -101,6 +101,13 @@ export class AccountsService {
     }
   }
 
+  async logout(token: string | undefined): Promise<void> {
+    if (!token) {
+      return
+    }
+    await this.accountsRepository.revokeSessionByTokenHash(hashSessionToken(token), new Date().toISOString(), 'logout')
+  }
+
   async register(input: RegisterInput): Promise<AuthResponse> {
     const email = normalizeEmail(input.email)
     const username = normalizeUsername(input.username)
