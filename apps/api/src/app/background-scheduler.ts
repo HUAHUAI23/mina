@@ -1,10 +1,12 @@
 import { Cron } from 'croner'
 
 import { appLogger, type AppLogger } from '../lib/logger/logger'
+import type { ChatService } from '../modules/chat/chat.service'
 import type { TasksService } from '../modules/tasks/tasks.service'
 import type { WorkflowsService } from '../modules/workflows/workflows.service'
 
 interface BackgroundSchedulerInput {
+  chatService: Pick<ChatService, 'reconcileAssistantRuns'>
   cronPattern: string
   logger?: AppLogger
   tasksService: TasksService
@@ -62,6 +64,7 @@ export class BackgroundTaskScheduler {
         await this.input.tasksService.pollAsyncTasks(),
       )
       await this.input.workflowsService.reconcileRunningRuns()
+      await this.input.chatService.reconcileAssistantRuns()
     } catch (error) {
       this.#logger.error({ error }, 'Background task scheduler tick failed.')
     } finally {

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 
-import type { ResourceKind } from '@mina/contracts/modules/tasks'
+import type { MediaObjectKind } from '@mina/contracts/modules/media/media-object'
 
 import type { ObjectStorage, PresignedPutObjectUrl } from '../../lib/storage/object-storage'
 import { HttpError } from '../../lib/http/http-error'
@@ -17,13 +17,13 @@ import {
   type MediaDerivedObjectNameKind,
   mediaOriginalObjectName,
 } from './media-storage-key'
-import { resourceKindFromMimeType } from './media-type'
+import { mediaObjectKindFromMimeType } from './media-type'
 import type { RemoteMediaFetcher } from './remote-media-fetcher'
 
 export interface CreateMediaObjectFromBufferInput {
   accountId: string
   body: Uint8Array
-  kind: ResourceKind
+  kind: MediaObjectKind
   mimeType?: string
   origin: MediaObjectOrigin
   parentMediaObjectId?: string
@@ -37,7 +37,7 @@ export interface CreateMediaObjectFromBufferInput {
 
 export interface CreateMediaObjectFromRemoteUrlInput {
   accountId: string
-  kind?: ResourceKind
+  kind?: MediaObjectKind
   maxBytes?: number
   metadata?: Record<string, unknown>
   origin: MediaObjectOrigin
@@ -53,7 +53,7 @@ export interface CreateMediaObjectFromRemoteUrlInput {
 export interface CreatePresignedUploadInput {
   accountId: string
   byteSize?: number
-  kind: ResourceKind
+  kind: MediaObjectKind
   mimeType: string
   purpose: MediaObjectPurpose
   retention: MediaObjectRetention
@@ -163,7 +163,7 @@ export class MediaObjectService {
       timeoutMs: input.timeoutMs ?? this.config.remoteFetchTimeoutMs,
       url: input.url,
     })
-    const inferredKind = input.kind ?? resourceKindFromMimeType(fetched.contentType)
+    const inferredKind = input.kind ?? mediaObjectKindFromMimeType(fetched.contentType)
     if (!inferredKind) {
       throw new Error('Remote media content type is not supported.')
     }
@@ -224,6 +224,16 @@ export class MediaObjectService {
       expiresInSeconds,
       key: mediaObject.storageKey,
     })
+  }
+
+  async readBody(accountId: string, mediaObjectId: string, maxBytes?: number): Promise<Uint8Array> {
+    const mediaObject = await this.getReadyMediaObject(accountId, mediaObjectId)
+    const stored = await this.storage.getObject({
+      accountId,
+      key: mediaObject.storageKey,
+      ...(maxBytes !== undefined ? { maxBytes } : {}),
+    })
+    return stored.body
   }
 
   async completePresignedUpload(input: CompletePresignedUploadInput): Promise<MediaObject> {

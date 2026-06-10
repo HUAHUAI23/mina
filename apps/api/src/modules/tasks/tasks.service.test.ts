@@ -8,7 +8,7 @@ import {
   FakePricingRepository,
   FakeTaskEventLog,
   FakeTaskRepository,
-} from '../../test/fakes'
+} from '../../test/doubles'
 import { MediaObjectService } from '../media/media-object.service'
 import { PricingService } from '../pricing/pricing.service'
 import { ModelRegistry } from './models/model-registry'

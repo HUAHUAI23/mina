@@ -8,6 +8,12 @@ export interface StoredObject {
   url: string
 }
 
+export interface StoredObjectData {
+  body: Uint8Array
+  byteSize: number
+  contentType?: string
+}
+
 export interface PutAccountObjectInput {
   accountId: string
   body: ObjectStorageBody
@@ -15,6 +21,12 @@ export interface PutAccountObjectInput {
   metadata?: Record<string, string>
   objectName: string
   scope: StorageObjectScope
+}
+
+export interface GetAccountObjectInput {
+  accountId: string
+  key: string
+  maxBytes?: number
 }
 
 export interface DeleteAccountObjectInput {
@@ -46,5 +58,13 @@ export interface ObjectStorage {
   createPresignedGetUrl(input: CreatePresignedGetUrlInput): Promise<string>
   createPresignedPutUrl(input: CreatePresignedPutUrlInput): Promise<PresignedPutObjectUrl>
   deleteObject(input: DeleteAccountObjectInput): Promise<void>
+  getObject(input: GetAccountObjectInput): Promise<StoredObjectData>
   putObject(input: PutAccountObjectInput): Promise<StoredObject>
+}
+
+export class ObjectStorageReadLimitError extends Error {
+  constructor() {
+    super('Stored object exceeds the configured read limit.')
+    this.name = 'ObjectStorageReadLimitError'
+  }
 }

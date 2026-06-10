@@ -2,6 +2,9 @@ import { createApp } from '../app/create-app'
 import { AccountManagementService } from '../modules/accounts/account-management.service'
 import { AccountsService } from '../modules/accounts/accounts.service'
 import { MediaObjectService } from '../modules/media/media-object.service'
+import { InMemoryChatEventBus } from '../modules/chat/chat-event-bus'
+import { ChatService } from '../modules/chat/chat.service'
+import type { AssistantChatResponder } from '../modules/chat/ai-chat.service'
 import { PricingService } from '../modules/pricing/pricing.service'
 import { TaskConfigAssembler } from '../modules/tasks/config/task-config-assembler'
 import { TaskModelCatalogService } from '../modules/tasks/models/model-catalog.service'
@@ -21,6 +24,7 @@ import { WorkflowsService } from '../modules/workflows/workflows.service'
 import {
   FakeAssetLibraryRepository,
   FakeAccountsRepository,
+  FakeChatRepository,
   FakeMediaObjectRepository,
   FakeObjectStorage,
   FakePricingRepository,
@@ -33,13 +37,18 @@ import {
   FakeWorkflowRunEventLog,
   FakeWorkflowRunRepository,
   FakeWorkflowYjsRepository,
-} from './fakes'
+} from './doubles'
 import { WorkflowYjsRoomService } from '../modules/workflows/collaboration/workflow-yjs-room.service'
 import { ProjectsService } from '../modules/projects/projects.service'
 import { AssetLibraryService } from '../modules/assets/asset-library.service'
 import { WorkflowPreviewHydrator } from '../modules/workflows/workflow-preview-hydrator'
 
-export const createTestApp = () => {
+export interface CreateTestAppOptions {
+  assistantChatResponder?: AssistantChatResponder
+  assistantRunMaxAttempts?: number
+}
+
+export const createTestApp = (options: CreateTestAppOptions = {}) => {
   const accountsRepository = new FakeAccountsRepository()
   const storage = new FakeObjectStorage()
   const taskRepository = new FakeTaskRepository()
@@ -70,6 +79,7 @@ export const createTestApp = () => {
   const runs = new FakeWorkflowRunRepository()
   const nodeTasks = new FakeWorkflowNodeTaskRepository(runs, taskRepository)
   const workflowEventBus = new InMemoryWorkflowEventBus()
+  const chatEventBus = new InMemoryChatEventBus()
   const workflowDefinitions = new FakeWorkflowDefinitionRepository()
   const workflowYjsRoomService = new WorkflowYjsRoomService(
     new FakeWorkflowYjsRepository(),
@@ -110,11 +120,27 @@ export const createTestApp = () => {
   const accountsService = new AccountsService(accountsRepository, {
     onAccountCreated: (accountId) => assetLibraryService.seedAccount(accountId),
   })
+  const chatService = new ChatService(
+    new FakeChatRepository(),
+    mediaObjectService,
+    workflowsService,
+    chatEventBus,
+    options.assistantChatResponder,
+    {
+      assistantRetryBaseMs: 1,
+      assistantRetryMaxMs: 1,
+      ...(options.assistantRunMaxAttempts === undefined ? {} : {
+        assistantRunMaxAttempts: options.assistantRunMaxAttempts,
+      }),
+    },
+  )
 
   const app = createApp({
     accountManagementService: new AccountManagementService(accountsRepository, storage, mediaObjectService),
     accountsService,
     assetLibraryService,
+    chatEventBus,
+    chatService,
     mediaObjectService,
     modelCatalogService,
     projectsService: projectServiceWithSharedRepo,
@@ -129,6 +155,7 @@ export const createTestApp = () => {
       await tasksService.startQueuedTasks()
       await tasksService.pollAsyncTasks()
       await workflowsService.reconcileRunningRuns()
+      await chatService.reconcileAssistantRuns()
     },
   })
 }

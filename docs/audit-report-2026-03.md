@@ -114,3 +114,20 @@ Verification after the migration:
 
 - `bun run check:boundaries` passes.
 - `bun run check` passes, including workspace typecheck, tests, and builds.
+
+## 2026-06 Chat And Test Fixture Baseline Update
+
+The workflow canvas agent chat moved from UI-only planning into a durable backend and frontend runtime:
+
+- Added shared chat contracts for threads, ordered message parts, chat events, and assistant deltas.
+- Added PostgreSQL-backed chat persistence for `chat_threads`, `chat_messages`, `chat_message_parts`, `chat_message_attachments`, and `chat_assistant_runs`.
+- Added per-thread `orderIndex` ordering so REST history, WebSocket cache updates, optimistic messages, and assistant context windows use one durable ordering model.
+- Added AI SDK Core plus `@ai-sdk/openai-compatible` integration behind Mina's chat service. The service accepts configurable OpenAI-compatible endpoints and keeps provider failures behind semantic Mina error messages.
+- Added durable assistant run recovery. Request-time creation schedules the thread immediately, and the background scheduler scans queued runs plus stale running runs so process restarts do not strand assistant placeholders.
+- Added chat attachment support over `media_objects` with `purpose=chat_attachment`, file/image part validation, object-storage reads for AI inputs, and no presigned storage URLs in chat DTOs.
+- Replaced the single large API `test/fakes.ts` file with bounded-context doubles under `apps/api/src/test/doubles`, plain object builders under `apps/api/src/test/builders`, and cross-module scenarios under `apps/api/src/test/scenarios`.
+
+Verification after the update:
+
+- `bun --filter @mina/api typecheck` passes.
+- Focused API chat/scheduler tests pass, including assistant-run restart and stale-running recovery.

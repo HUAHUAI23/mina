@@ -29,7 +29,7 @@ import {
   FakeWorkflowRunEventLog,
   FakeWorkflowRunRepository,
   FakeWorkflowYjsRepository,
-} from '../../test/fakes'
+} from '../../test/doubles'
 import { WorkflowsService } from './workflows.service'
 import { WorkflowYjsRoomService } from './collaboration/workflow-yjs-room.service'
 

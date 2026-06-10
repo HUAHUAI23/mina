@@ -30,6 +30,16 @@ import type {
   UpdateAccountProfileInput,
 } from '@mina/contracts/modules/accounts'
 import type {
+  ChatMessageListResponse,
+  ChatMessageResponse,
+  ChatThreadListResponse,
+  ChatThreadResponse,
+  CreateChatMessageInput,
+  CreateChatThreadInput,
+  ListChatMessagesQuery,
+  ListChatThreadsQuery,
+} from '@mina/contracts/modules/chat'
+import type {
   CancelTaskResponse,
   CreateTaskInput,
   TaskListResponse,
@@ -43,6 +53,7 @@ import type {
   CreatePresignedMediaUploadInput,
   CreatePresignedMediaUploadResponse,
   GetMediaObjectResponse,
+  MediaObjectKind,
   MediaObjectResponse,
 } from '@mina/contracts/modules/media/media-object'
 import type {
@@ -98,7 +109,7 @@ type CreateAssetUploadForm = {
   file: File
   folderId?: string
   homeProjectId?: string
-  kind?: 'image' | 'video' | 'audio'
+  kind?: Exclude<MediaObjectKind, 'file'>
   tagIds?: string | string[]
 }
 
@@ -142,6 +153,17 @@ type ClientSchema = {
         timestamp: string
       }
     >
+  }
+  '/api/chat/threads': {
+    $get: JsonEndpoint<{ query?: ListChatThreadsQuery }, ChatThreadListResponse>
+    $post: JsonEndpoint<{ json: CreateChatThreadInput }, ChatThreadResponse, 201>
+  }
+  '/api/chat/threads/:threadId/messages': {
+    $get: JsonEndpoint<{ param: { threadId: string }; query?: ListChatMessagesQuery }, ChatMessageListResponse>
+    $post: JsonEndpoint<{ json: CreateChatMessageInput; param: { threadId: string } }, ChatMessageResponse, 201>
+  }
+  '/api/chat/threads/:threadId/messages/:messageId/retry': {
+    $post: JsonEndpoint<{ param: { messageId: string; threadId: string } }, ChatMessageResponse>
   }
   '/api/assets': {
     $get: JsonEndpoint<{ query?: ListAssetLibraryItemsQuery }, AssetLibraryListResponse>

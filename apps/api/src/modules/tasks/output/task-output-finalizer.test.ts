@@ -1,8 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { Task } from '@mina/contracts/modules/tasks'
 
-import { FakeMediaObjectRepository, FakeObjectStorage } from '../../../test/fakes'
-import { MediaObjectService } from '../../media/media-object.service'
+import { createMediaObjectTestScenario } from '../../../test/scenarios/media-object-scenario'
 import { TaskOutputFinalizer } from './task-output-finalizer'
 
 const task = (): Task => ({
@@ -38,17 +37,15 @@ const task = (): Task => ({
 })
 
 const createFinalizer = () => {
-  const mediaObjectService = new MediaObjectService(
-    new FakeMediaObjectRepository(),
-    new FakeObjectStorage(),
-    {
+  const { service: mediaObjectService } = createMediaObjectTestScenario({
+    fetcher: {
       fetch: async () => ({
         body: new TextEncoder().encode('remote-output'),
         byteSize: 13,
         contentType: 'image/png',
       }),
     },
-  )
+  })
   return { finalizer: new TaskOutputFinalizer(mediaObjectService), mediaObjectService }
 }
 

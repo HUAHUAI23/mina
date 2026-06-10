@@ -7,6 +7,11 @@ import { DrizzleAccountsRepository } from '../modules/accounts/accounts.drizzle-
 import { AccountsService } from '../modules/accounts/accounts.service'
 import { DrizzleAssetLibraryRepository } from '../modules/assets/asset-library.drizzle-repository'
 import { AssetLibraryService } from '../modules/assets/asset-library.service'
+import { DrizzleChatRepository } from '../modules/chat/chat.drizzle-repository'
+import { AiChatService } from '../modules/chat/ai-chat.service'
+import { OpenAiCompatibleChatModelFactory } from '../modules/chat/ai-chat-provider'
+import { InMemoryChatEventBus } from '../modules/chat/chat-event-bus'
+import { ChatService } from '../modules/chat/chat.service'
 import { DrizzleMediaObjectRepository } from '../modules/media/media-object.drizzle-repository'
 import { MediaObjectService } from '../modules/media/media-object.service'
 import { FetchRemoteMediaFetcher } from '../modules/media/remote-media-fetcher'
@@ -47,6 +52,8 @@ export interface AppDependencies {
   accountManagementService: AccountManagementService
   accountsService: AccountsService
   assetLibraryService: AssetLibraryService
+  chatEventBus: InMemoryChatEventBus
+  chatService: ChatService
   mediaObjectService: MediaObjectService
   modelCatalogService: TaskModelCatalogService
   projectsService: ProjectsService
@@ -65,6 +72,7 @@ export const createAppDependencies = (): AppDependencies => {
     pricingRepository: new DrizzlePricingRepository(db),
     mediaObjectRepository: new DrizzleMediaObjectRepository(db),
     assetLibraryRepository: new DrizzleAssetLibraryRepository(db),
+    chatRepository: new DrizzleChatRepository(db),
     projectRepository: new DrizzleProjectRepository(db),
     taskEventLog: new DrizzleTaskEventLog(db),
     taskRepository: new DrizzleTaskRepository(db),
@@ -108,6 +116,7 @@ export const createAppDependencies = (): AppDependencies => {
   )
   const workflowMediaResolver = new WorkflowMediaResolver(mediaObjectService, tasksService)
   const workflowEventBus = new InMemoryWorkflowEventBus()
+  const chatEventBus = new InMemoryChatEventBus()
   const workflowRunEventPublisher = new BusWorkflowRunEventPublisher(workflowEventBus)
   const workflowYjsRoomService = new WorkflowYjsRoomService(
     new DrizzleWorkflowYjsRepository(db),
@@ -140,6 +149,28 @@ export const createAppDependencies = (): AppDependencies => {
     mediaObjectService,
     repositories.projectRepository,
   )
+  const chatService = new ChatService(
+    repositories.chatRepository,
+    mediaObjectService,
+    workflowsService,
+    chatEventBus,
+    new AiChatService(
+      new OpenAiCompatibleChatModelFactory({
+        apiKey: apiEnv.aiApiKey,
+        baseUrl: apiEnv.aiBaseUrl,
+        model: apiEnv.aiModel,
+        providerName: apiEnv.aiProviderName,
+      }),
+      mediaObjectService,
+      {
+        systemPrompt: 'You are Mina, an AI assistant embedded in a workflow canvas. Help the user reason about the current creative workflow, uploaded images, and attached files. Answer concisely and ask for missing details when needed.',
+        timeoutMs: apiEnv.aiTimeoutMs,
+      },
+    ),
+    {
+      assistantRunStaleMs: Math.max(apiEnv.aiTimeoutMs * 2, 60_000),
+    },
+  )
   const accountsService = new AccountsService(accountsRepository, {
     onAccountCreated: (accountId) => assetLibraryService.seedAccount(accountId),
   })
@@ -148,6 +179,8 @@ export const createAppDependencies = (): AppDependencies => {
     accountManagementService: new AccountManagementService(accountsRepository, storage, mediaObjectService),
     accountsService,
     assetLibraryService,
+    chatEventBus,
+    chatService,
     mediaObjectService,
     modelCatalogService,
     projectsService,

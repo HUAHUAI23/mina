@@ -8,6 +8,7 @@
   "workspaces": {
     "packages": ["apps/*", "packages/*"],
     "catalog": {
+      "@ai-sdk/openai-compatible": "2.0.48",
       "@aws-sdk/client-s3": "3.1045.0",
       "@aws-sdk/s3-request-presigner": "3.1045.0",
       "@base-ui/react": "^1.4.1",
@@ -20,6 +21,7 @@
       "@types/react": "^19.2.14",
       "@types/react-dom": "^19.2.3",
       "@vitejs/plugin-react": "^6.0.1",
+      "ai": "6.0.198",
       "class-variance-authority": "^0.7.1",
       "clsx": "^2.1.1",
       "cmdk": "^1.1.1",

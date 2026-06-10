@@ -146,6 +146,7 @@ export function WorkflowCanvasPage({ workflowId }: WorkflowCanvasPageProps) {
           onSelectOutput={selectOutput}
           runError={runError}
           runningNodeId={runningNodeId}
+          workflowId={workflowId}
         />
       </section>
 

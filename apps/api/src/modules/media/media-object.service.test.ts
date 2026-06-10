@@ -2,25 +2,11 @@ import { describe, expect, test } from 'bun:test'
 
 import type { HttpError } from '../../lib/http/http-error'
 import { assertAccountStorageKey } from '../../lib/storage/storage-key'
-import { FakeMediaObjectRepository, FakeObjectStorage } from '../../test/fakes'
-import { MediaObjectService } from './media-object.service'
+import { createMediaObjectTestScenario } from '../../test/scenarios/media-object-scenario'
 import type { RemoteMediaFetcher } from './remote-media-fetcher'
 
-const createService = (fetcher?: RemoteMediaFetcher) => {
-  const repository = new FakeMediaObjectRepository()
-  const storage = new FakeObjectStorage()
-  const service = new MediaObjectService(
-    repository,
-    storage,
-    fetcher ?? {
-      fetch: async () => {
-        throw new Error('fetcher not configured')
-      },
-    },
-  )
-
-  return { repository, service, storage }
-}
+const createService = (fetcher?: RemoteMediaFetcher) =>
+  createMediaObjectTestScenario({ ...(fetcher ? { fetcher } : {}) })
 
 describe('MediaObjectService', () => {
   test('creates ready media objects from buffers under the account media root', async () => {

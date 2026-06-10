@@ -1,4 +1,4 @@
-import { FileAudio, ImageOff, Link2, LoaderCircle, Video, X } from 'lucide-react'
+import { FileAudio, FileText, ImageOff, Link2, LoaderCircle, Video, X } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import type { NodeMediaSlotItem as NodeMediaSlotItemType } from '@mina/contracts/modules/media'
 import { cn } from '@mina/ui/lib/utils'
@@ -26,9 +26,10 @@ const isNodeOutput = (
   source: NodeMediaSlotItemType['source'],
 ): source is Extract<NodeMediaSlotItemType['source'], { type: 'node_output' }> => source.type === 'node_output'
 
-const mediaFallback = (kind: 'audio' | 'image' | 'video' | undefined) => {
+const mediaFallback = (kind: 'audio' | 'file' | 'image' | 'video' | undefined) => {
   if (kind === 'video') return <Video size={14} />
   if (kind === 'audio') return <FileAudio size={14} />
+  if (kind === 'file') return <FileText size={14} />
   return <Link2 size={14} />
 }
 

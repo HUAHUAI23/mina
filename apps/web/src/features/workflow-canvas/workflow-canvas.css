@@ -10,12 +10,40 @@
   z-index: 20;
 }
 
+.mina-wc-flow-shell .mina-wc-agent-panel.react-flow__panel.top.left {
+  left: clamp(16px, 2.4vw, 34px);
+  margin: 0;
+  top: 70px;
+  z-index: 34;
+}
+
+.mina-wc-flow-shell .mina-wc-agent-composer-panel.react-flow__panel.bottom.center {
+  bottom: 24px;
+  left: 50%;
+  margin: 0;
+  transform: translateX(-50%);
+  z-index: 34;
+}
+
 @media (max-width: 720px) {
   .mina-wc-flow-shell .mina-wc-canvas-dock.react-flow__panel.bottom.center {
     bottom: 20px;
     left: 10px;
     max-width: none;
     right: 10px;
+    transform: none;
+    width: auto;
+  }
+
+  .mina-wc-flow-shell .mina-wc-agent-panel.react-flow__panel.top.left {
+    left: 12px;
+    top: 68px;
+  }
+
+  .mina-wc-flow-shell .mina-wc-agent-composer-panel.react-flow__panel.bottom.center {
+    bottom: 14px;
+    left: 12px;
+    right: 12px;
     transform: none;
     width: auto;
   }
@@ -38,4 +66,62 @@
 
 .mina-wc-shimmer-bg {
   background-size: 400% 100%;
+}
+
+.mina-wc-agent-markdown {
+  overflow-wrap: anywhere;
+}
+
+.mina-wc-agent-markdown :where(a) {
+  color: var(--brand-accent);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.mina-wc-agent-markdown :where(h1, h2, h3, h4, h5, h6) {
+  color: var(--foreground);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.mina-wc-agent-markdown :where(ul, ol) {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.mina-wc-agent-markdown :where(ul) {
+  list-style: disc;
+}
+
+.mina-wc-agent-markdown :where(ol) {
+  list-style: decimal;
+}
+
+.mina-wc-agent-markdown :where(blockquote) {
+  border-left: 2px solid var(--border);
+  color: var(--foreground-secondary);
+  margin: 0;
+  padding-left: 0.75rem;
+}
+
+.mina-wc-agent-markdown :where(table) {
+  font-size: 0.75rem;
+}
+
+.mina-wc-agent-markdown :where([data-streamdown="code-block"]) {
+  margin-block: 0.625rem;
+  max-width: 100%;
+}
+
+.mina-wc-agent-markdown :where([data-streamdown="code-block-body"]) {
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.mina-wc-agent-markdown :where([data-streamdown="inline-code"]) {
+  font-size: 0.8125rem;
 }

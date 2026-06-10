@@ -30,6 +30,7 @@
     "test": "bun --filter @mina/i18n i18n:compile && NODE_ENV=test MINA_STORAGE_DRIVER=s3 bun test src"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "catalog:",
     "@aws-sdk/client-s3": "catalog:",
     "@aws-sdk/s3-request-presigner": "catalog:",
     "@hono/standard-validator": "catalog:",
@@ -38,6 +39,7 @@
     "@mina/i18n": "workspace:*",
     "@scalar/hono-api-reference": "^0.10.16",
     "@t3-oss/env-core": "catalog:",
+    "ai": "catalog:",
     "croner": "catalog:",
     "dotenv": "catalog:",
     "drizzle-orm": "catalog:",

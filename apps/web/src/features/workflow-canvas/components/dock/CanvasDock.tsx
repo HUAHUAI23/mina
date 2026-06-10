@@ -17,6 +17,7 @@ import { useFlowRenderStore } from '../../render/flow-render-store'
 import { useCanvasStore } from '../../store/canvas-store'
 import { useCanvasUiStore } from '../../store/canvas-ui-store'
 import { useCanvasNode } from '../../store/selectors'
+import { useAgentChatUiStore } from '../../agent-chat/store/agent-chat-ui-store'
 import type { WorkflowFlowEdge, WorkflowFlowNode } from '../../domain/flow-types'
 
 interface CanvasDockProps {
@@ -55,6 +56,7 @@ export function CanvasDock({ onRunNode, runError, runningNodeId }: CanvasDockPro
     state.interaction.viewportMoving
   ))
   const dockInteractionHidden = useFlowRenderStore((state) => state.interaction.selectionDragActive)
+  const agentComposerOpen = useAgentChatUiStore((state) => state.composerOpen)
   const activePanelNode = useCanvasNode(activePanel?.panel === 'config' ? activePanel.nodeId : '')
   const selectedNode = useCanvasNode(selectedNodeIds.length === 1 ? selectedNodeIds[0] ?? '' : '')
   const activeNode = activePanelNode ?? selectedNode
@@ -64,7 +66,7 @@ export function CanvasDock({ onRunNode, runError, runningNodeId }: CanvasDockPro
     [onRunNode, runError, runningNodeId],
   )
   const blocks = useMemo(() => composerRegistry.resolve(context), [context])
-  const hidden = blocks.length === 0 || dockInteractionHidden
+  const hidden = blocks.length === 0 || dockInteractionHidden || agentComposerOpen
   const getNewNodePosition = useCallback((nodeType: MediaNodeType) => {
     if (!reactFlow.viewportInitialized || typeof window === 'undefined') {
       return undefined

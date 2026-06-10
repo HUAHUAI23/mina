@@ -2,12 +2,11 @@ import { describe, expect, test } from 'bun:test'
 import type { MediaInput, Task } from '@mina/contracts/modules/tasks'
 
 import {
-  FakeMediaObjectRepository,
   FakeObjectStorage,
-} from '../../../test/fakes'
+} from '../../../test/doubles'
+import { buildReadyMediaObject } from '../../../test/builders/media-object-builder'
+import { createMediaObjectTestScenario } from '../../../test/scenarios/media-object-scenario'
 import type { CreatePresignedGetUrlInput } from '../../../lib/storage/object-storage'
-import type { MediaObject } from '../../media/media-object'
-import { MediaObjectService } from '../../media/media-object.service'
 import { ProviderMediaUrlResolver } from './provider-media-url-resolver'
 
 class CountingObjectStorage extends FakeObjectStorage {
@@ -62,40 +61,25 @@ const taskWithMedia = (media: Task['config']['media']): Task => ({
 })
 
 const createResolver = () => {
-  const repository = new FakeMediaObjectRepository()
   const storage = new CountingObjectStorage('bucket')
-  const service = new MediaObjectService(
-    repository,
-    storage,
-    {
-      fetch: async () => {
-        throw new Error('fetcher not configured')
-      },
-    },
-  )
+  const { repository, service } = createMediaObjectTestScenario({ storage })
   const resolver = new ProviderMediaUrlResolver(service, 14_400)
   return { repository, resolver, storage }
 }
 
-const readyMediaObject = (id: string): MediaObject => ({
-  id,
-  accountId: 'account',
-  kind: id.includes('audio') ? 'audio' : id.includes('video') ? 'video' : 'image',
-  status: 'ready',
-  bucket: 'bucket',
-  storageKey: `users/account/media/${id}/original`,
-  url: `s3://bucket/users/account/media/${id}/original`,
-  byteSize: 1,
-  origin: 'user_upload',
-  purpose: 'workflow_slot',
-  retention: 'project_scoped',
-  createdAt: now,
-  updatedAt: now,
-})
-
-const addReadyMediaObjects = async (repository: FakeMediaObjectRepository, ids: string[]): Promise<void> => {
+const addReadyMediaObjects = async (
+  repository: ReturnType<typeof createMediaObjectTestScenario>['repository'],
+  ids: string[],
+): Promise<void> => {
   for (const id of ids) {
-    await repository.create(readyMediaObject(id))
+    await repository.create(buildReadyMediaObject({
+      accountId: 'account',
+      id,
+      kind: id.includes('audio') ? 'audio' : id.includes('video') ? 'video' : 'image',
+      storageKey: `users/account/media/${id}/original`,
+      updatedAt: now,
+      url: `s3://bucket/users/account/media/${id}/original`,
+    }))
   }
 }
 

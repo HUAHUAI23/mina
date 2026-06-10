@@ -387,6 +387,21 @@ describe('mina api', () => {
     })
     expect(unsupportedResponse.status).toBe(415)
 
+    const unsupportedPresignedResponse = await app.request('/api/media-objects/presigned-upload', {
+      method: 'POST',
+      headers: { ...authHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'file',
+        mimeType: 'text/plain',
+        byteSize: 1024,
+        purpose: 'workflow_slot',
+        retention: 'project_scoped',
+      }),
+    })
+    const unsupportedPresignedPayload = (await unsupportedPresignedResponse.json()) as ApiError
+    expect(unsupportedPresignedResponse.status).toBe(400)
+    expect(unsupportedPresignedPayload.error.code).toBe('VALIDATION_FAILED')
+
     const presignedResponse = await app.request('/api/media-objects/presigned-upload', {
       method: 'POST',
       headers: { ...authHeaders, 'Content-Type': 'application/json' },

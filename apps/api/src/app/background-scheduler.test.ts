@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
+import type { ChatService } from '../modules/chat/chat.service'
 import type { TasksService } from '../modules/tasks/tasks.service'
 import type { WorkflowsService } from '../modules/workflows/workflows.service'
 import { BackgroundTaskScheduler } from './background-scheduler'
@@ -10,6 +11,7 @@ class SchedulerProbe {
   taskStarts = 0
   taskPolls = 0
   taskStatusPublishes = 0
+  chatReconciliations = 0
   workflowReconciliations = 0
   releaseTick: (() => void) | undefined
 
@@ -29,6 +31,13 @@ class SchedulerProbe {
       return []
     },
   } as unknown as TasksService
+
+  readonly chatService = {
+    reconcileAssistantRuns: async () => {
+      this.chatReconciliations += 1
+      return 0
+    },
+  } satisfies Pick<ChatService, 'reconcileAssistantRuns'>
 
   readonly workflowsService = {
     publishTaskStatusUpdates: async () => {
@@ -55,6 +64,7 @@ describe('BackgroundTaskScheduler', () => {
   test('does not overlap ticks while a previous tick is still running', async () => {
     const probe = new SchedulerProbe()
     const scheduler = new BackgroundTaskScheduler({
+      chatService: probe.chatService,
       cronPattern: '*/5 * * * * *',
       tasksService: probe.tasksService,
       workflowsService: probe.workflowsService,
@@ -66,6 +76,7 @@ describe('BackgroundTaskScheduler', () => {
     expect(probe.taskStarts).toBe(1)
     expect(probe.taskPolls).toBe(1)
     expect(probe.taskStatusPublishes).toBe(1)
+    expect(probe.chatReconciliations).toBe(0)
     expect(probe.workflowReconciliations).toBe(0)
     expect(probe.maxConcurrentTicks).toBe(1)
 
@@ -73,6 +84,7 @@ describe('BackgroundTaskScheduler', () => {
     await firstTick
 
     expect(probe.taskStatusPublishes).toBe(2)
+    expect(probe.chatReconciliations).toBe(1)
     expect(probe.workflowReconciliations).toBe(1)
   })
 })

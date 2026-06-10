@@ -30,10 +30,15 @@ Environment variables are validated with `@t3-oss/env-core` and Zod during start
 | `MINA_LOG_LEVEL` | Pino log level | `info` |
 | `MINA_DATABASE_URL` | PostgreSQL URL used by the API runtime and database tooling | `postgres://postgres:postgres@localhost:5432/mina` |
 | `MINA_POSTGRES_TEST_DATABASE_URL` | Optional PostgreSQL URL for opt-in Drizzle repository integration tests | empty |
+| `MINA_AI_API_KEY` | Bearer key for the workflow chat OpenAI-compatible endpoint | empty |
+| `MINA_AI_BASE_URL` | Workflow chat OpenAI-compatible API base URL | empty |
+| `MINA_AI_MODEL` | Workflow chat model id accepted by `MINA_AI_BASE_URL` | empty |
+| `MINA_AI_PROVIDER_NAME` | Provider label used by AI SDK metadata | `mina-ai` |
+| `MINA_AI_TIMEOUT_MS` | Workflow chat model call timeout in milliseconds | `120000` |
 | `GOOGLE_API_BASE_URL` | Google Gemini/Veo API base URL | `https://generativelanguage.googleapis.com` |
 | `GOOGLE_API_KEY` | Google API key for Gemini image and Veo video providers | empty |
-| `MINA_SCHEDULER_CRON` | Croner expression for task/workflow scheduler ticks | `*/5 * * * * *` |
-| `MINA_SCHEDULER_ENABLED` | Enables the background task/workflow scheduler outside tests | `false` |
+| `MINA_SCHEDULER_CRON` | Croner expression for task/workflow/chat recovery scheduler ticks | `*/5 * * * * *` |
+| `MINA_SCHEDULER_ENABLED` | Enables the background task/workflow/chat scheduler outside tests | `false` |
 | `MINA_PROVIDER_MEDIA_URL_EXPIRES_SECONDS` | Signed input media URL lifetime for third-party provider calls | `14400` |
 | `MINA_STORAGE_DRIVER` | Object storage driver. Runtime accepts `s3`. | `s3` |
 | `MINA_STORAGE_ROOT_PREFIX` | Root prefix for per-account object storage keys | `users` |
@@ -73,13 +78,13 @@ bun run dev
 - API reference: `http://localhost:3001/docs`
 - OpenAPI JSON: `http://localhost:3001/openapi.json`
 
-Task and workflow execution require the background scheduler:
+Task, workflow, and assistant-run recovery require the background scheduler:
 
 ```bash
 MINA_SCHEDULER_ENABLED=true bun run dev:api
 ```
 
-Without the scheduler, `POST /api/tasks` and `POST /api/workflows/:id/runs` still create durable records, but tasks remain `queued` until a scheduler or worker tick starts them.
+Without the scheduler, `POST /api/tasks` and `POST /api/workflows/:id/runs` still create durable records, but tasks remain `queued` until a scheduler or worker tick starts them. Chat user messages still persist and newly created assistant runs are scheduled immediately by the request path. Retryable assistant failures are written back to `queued` with `next_retry_at` and are also scheduled by an in-process timer, but queued runs left by a process restart, future retries that become due while the process is down, and stale running runs are only recovered by the scheduler.
 
 ## UI System
 
@@ -155,7 +160,7 @@ bun run typecheck
 bun run test
 ```
 
-The API test suite uses explicit fakes under `apps/api/src/test` for unit and route coverage. Application runtime dependencies still require PostgreSQL-backed repositories; the test script only overrides `MINA_STORAGE_DRIVER=s3` so stale local `.env` values cannot select a removed storage adapter.
+The API test suite uses explicit fakes under `apps/api/src/test` for unit and route coverage. Test doubles live in `doubles/<bounded-context>`, plain object builders live in `builders`, and multi-service fixtures live in `scenarios`. Application runtime dependencies still require PostgreSQL-backed repositories; the test script only overrides `MINA_STORAGE_DRIVER=s3` so stale local `.env` values cannot select a removed storage adapter.
 
 ### Production Build
 

@@ -51,6 +51,7 @@ API modules:
 - `apps/api/src/modules/tasks/`
 - `apps/api/src/modules/pricing/`
 - `apps/api/src/modules/workflows/`
+- `apps/api/src/modules/chat/`
 - `apps/api/src/modules/assets/`
 - `apps/api/src/lib/storage/`
 
@@ -74,6 +75,16 @@ Workflow internals:
 Task lifecycle logic is split across `tasks.service.ts`, `lifecycle.ts`, `models/*`, `config/*`, `output/*`, `pricing.ts`, `resources.ts`, `retry.ts`, and `providers/*`. Durable task lifecycle logging lives in `apps/api/src/modules/tasks/task-events.ts`.
 
 The asset library module records reusable business relationships over `media_objects`. Asset items can come from local uploads or from existing media objects produced by canvas/task workflows. The library is account-scoped, uses a single-level folder card model rather than a directory tree, supports system/custom tags, and stores source snapshots for project/canvas/task provenance. Canvas and task creation should continue to reference the underlying `mediaObjectId`; the asset item is the library/catalog entry, not a second media identity.
+
+The chat module provides the workflow canvas agent conversation runtime. Threads are account-scoped and can be linked to a workflow. A workflow has one active chat thread per account; repeated create requests return that thread instead of forking history. Messages are stored as ordered structured parts with a durable per-thread `orderIndex`, not a single text blob, and image/file attachments reference `media_objects` by `mediaObjectId`. Chat attachments must be ready account-owned media objects uploaded with `purpose=chat_attachment`, and image parts must reference image media objects. REST endpoints are the source of truth for history and stable cursor pagination; `/api/chat/threads/:threadId/events` is a live notification channel with client-side backoff for transient disconnects. When the assistant responder is wired, chat uses AI SDK Core plus `@ai-sdk/openai-compatible` to generate assistant messages through the configured endpoint. Assistant responses are streamed by durably creating a queued assistant run and a `streaming` placeholder message, publishing sequenced `chat.message.delta` snapshots, and finishing with `chat.message.updated`. Runs are drained serially per thread so rapid user messages keep deterministic context order; the background scheduler recovers due queued runs after restarts and requeues stale running runs. Supported image, text, JSON, PDF, and audio attachments are read from object storage into AI SDK model parts; oversized or unsupported files are represented as attachment metadata in the prompt. Assistant errors are persisted as structured `error` parts with code, message key, retryability, and retry state. Network, timeout, rate-limit, provider-unavailable, attachment-read, and response-persistence failures are automatically retried with bounded backoff; exhausted retryable failures can be retried through `POST /api/chat/threads/:threadId/messages/:messageId/retry`. Configuration, auth, invalid-model, and context-size errors are visible in the chat UI but are not retried automatically. If no assistant responder is configured, chat still works as a durable conversation store.
+
+AI chat environment variables:
+
+- `MINA_AI_API_KEY`: bearer key for the configured OpenAI-compatible endpoint.
+- `MINA_AI_BASE_URL`: OpenAI-compatible API base URL, for example an AWS API Gateway/Lambda proxy ending at a `/v1`-style API.
+- `MINA_AI_MODEL`: model id accepted by that endpoint.
+- `MINA_AI_PROVIDER_NAME`: provider label used inside AI SDK metadata; defaults to `mina-ai`.
+- `MINA_AI_TIMEOUT_MS`: model call timeout; defaults to `120000`.
 
 User/account ownership is represented in PostgreSQL by `users` and `accounts`; task and workflow product records reference `accounts.id`. Object storage keys are account-scoped under `users/{accountId}/...`.
 
@@ -120,6 +131,8 @@ Media edges always represent target media slots.
 - Workflow runs remain running until the scheduler/worker completes their linked node tasks and reconciliation marks nodes terminal.
 
 Persist React Flow-compatible stable fields only: `id`, `type`, `position`, `parentId`, `extent`, dimensions, and typed `data`. Do not persist transient UI fields like `selected`, `dragging`, or `measured`.
+
+The workflow canvas also owns an agent chat overlay. It renders inside the React Flow tree as panel chrome: a top-left launcher/message card and a bottom-center composer. These surfaces must use `nodrag`, `nowheel`, `nopan`, and `data-mina-canvas-ignore` so text editing, scrolling, paste, and drag-and-drop uploads do not pan or zoom the canvas. When the agent composer is open, the existing media `CanvasDock` hides so two bottom-center composer surfaces do not compete.
 
 ## Verification
 

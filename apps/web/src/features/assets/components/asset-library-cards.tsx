@@ -6,6 +6,7 @@ import { formatRelativeTime } from '@mina/i18n'
 import {
   FileAudio,
   FileImage,
+  FileText,
   FileVideo,
   Heart,
   MoreVertical,
@@ -41,6 +42,7 @@ import {
 
 const kindIcon = {
   audio: FileAudio,
+  file: FileText,
   image: FileImage,
   video: FileVideo,
 } as const
