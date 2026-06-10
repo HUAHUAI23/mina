@@ -21,7 +21,7 @@ import {
   setPrivateContentRedirectHeaders,
 } from '../../lib/http/private-content-redirect'
 import { apiValidator } from '../../lib/http/validation'
-import { requireAuthActor } from '../accounts/auth-middleware'
+import { requireAuthActor, requireBrowserContentAuthActor } from '../accounts/auth-middleware'
 import { assertCanManagePublicResource } from '../accounts/authorization'
 import type { AccountsService } from '../accounts/accounts.service'
 import { mediaObjectKindFromMimeType } from './media-type'
@@ -99,7 +99,7 @@ export const createMediaRoutes = (mediaObjectService: MediaObjectService, accoun
       return c.json(GetMediaObjectResponseSchema.parse({ item: await mediaObjectService.getMediaObject(actor.accountId, id) }))
     })
     .get('/media-objects/:id/content', apiValidator('param', MediaObjectParamsSchema), async (c) => {
-      const actor = await requireAuthActor(c, accountsService)
+      const actor = await requireBrowserContentAuthActor(c, accountsService)
       const { id } = c.req.valid('param')
       setPrivateContentRedirectHeaders(c)
       return c.redirect(

@@ -206,6 +206,8 @@ The container listens on `PORT`, defaulting to `3000`. `MINA_API_PORT` is set fr
 
 Use the same runtime variables documented above for database, AI providers, task scheduler, and S3-compatible storage. Enable background task, workflow, and chat recovery in the container with `MINA_SCHEDULER_ENABLED=true`.
 
+The default production shape is same-origin: serve the web app and API from one origin, leave `VITE_API_BASE_URL=/`, and set `MINA_ALLOWED_ORIGIN` to that origin. The browser session cookie is scoped for this same-site shape and is only used by media content reads, browser WebSocket upgrades, and logout of the current browser session; ordinary JSON APIs still use bearer authorization. Cookie-authenticated WebSocket upgrades reject non-matching `Origin` headers against `MINA_ALLOWED_ORIGIN`. If a future deployment splits the web and API across sites, the cookie `SameSite=None; Secure` policy and CSRF/origin checks must be designed together before enabling cookie-authenticated browser media and WebSocket traffic across origins.
+
 ### Full Verification
 
 ```bash
@@ -290,7 +292,7 @@ The test creates and drops an isolated schema inside the configured database.
 ## Operational Notes
 
 1. The web app proxies `/api/*` to the local Bun API during development.
-2. In production, set `VITE_API_BASE_URL` to the deployed API origin if the frontend and backend are split.
+2. In production, prefer the same-origin container path with `VITE_API_BASE_URL=/`. Split-origin deployments need an explicit cookie and CSRF/origin policy before they can rely on browser session cookies for media or WebSocket requests.
 3. `POST /api/auth/register` and `POST /api/auth/login` use the PostgreSQL-backed accounts repository. OAuth tables are present in the Drizzle schema, but OAuth runtime flows are not implemented yet.
 4. The task/workflow core uses Drizzle repositories for tasks, media objects, pricing rules, workflow definitions, workflow runs, node states, node task links, and lifecycle events.
 5. The asset library stores catalog, folder, tag, and source-snapshot rows over existing `media_objects`; deleting an asset library item does not delete the underlying media object.

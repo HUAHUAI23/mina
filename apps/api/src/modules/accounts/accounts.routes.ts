@@ -21,7 +21,7 @@ export const createAccountsRoutes = (accountsService: AccountsService): Hono =>
       return c.json(auth)
     })
     .post('/logout', async (c) => {
-      await accountsService.logout(readAuthTokenFromRequest(c))
+      await accountsService.logout(readAuthTokenFromRequest(c, { sources: ['authorization', 'cookie'] }))
       clearSessionTokenCookie(c)
       return c.json(LogoutResponseSchema.parse({ success: true }))
     })

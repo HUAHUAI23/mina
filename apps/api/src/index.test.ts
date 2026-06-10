@@ -145,11 +145,11 @@ describe('mina api', () => {
     10_000,
   )
 
-  test('POST /api/auth/logout clears the browser session cookie', async () => {
+  test('POST /api/auth/logout clears and revokes the browser session cookie', async () => {
     const { auth } = await registerAndAuthHeaders()
     const response = await app.request('/api/auth/logout', {
       headers: {
-        Authorization: `Bearer ${auth.session.token}`,
+        Cookie: `mina_session=${auth.session.token}`,
       },
       method: 'POST',
     })
@@ -172,6 +172,20 @@ describe('mina api', () => {
       },
     })
     expect(cookieProfileResponse.status).toBe(401)
+  })
+
+  test('authenticated JSON APIs do not accept browser session cookies as their primary credential', async () => {
+    const { auth } = await registerAndAuthHeaders()
+    const response = await app.request('/api/account/me', {
+      headers: {
+        Cookie: `mina_session=${auth.session.token}`,
+      },
+    })
+
+    expect(response.status).toBe(401)
+    expect(await response.json()).toMatchObject({
+      error: { code: 'UNAUTHENTICATED' },
+    })
   })
 
   test('POST /api/auth/login rejects invalid credentials', async () => {

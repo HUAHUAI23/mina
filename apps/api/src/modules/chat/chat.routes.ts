@@ -13,8 +13,9 @@ import {
 import { upgradeWebSocket } from 'hono/bun'
 import { Hono } from 'hono'
 
+import { requireAllowedWebSocketOrigin } from '../../lib/http/websocket-origin'
 import { apiValidator } from '../../lib/http/validation'
-import { requireAuthActor } from '../accounts/auth-middleware'
+import { requireAuthActor, requireBrowserWebSocketAuthActor } from '../accounts/auth-middleware'
 import type { AccountsService } from '../accounts/accounts.service'
 import { createChatEventId, type ChatEventBus } from './chat-event-bus'
 import type { ChatService } from './chat.service'
@@ -83,7 +84,8 @@ export const createChatRoutes = (
       '/threads/:threadId/events',
       apiValidator('param', ChatThreadParamsSchema),
       async (c, next) => {
-        const actor = await requireAuthActor(c, accountsService)
+        requireAllowedWebSocketOrigin(c)
+        const actor = await requireBrowserWebSocketAuthActor(c, accountsService)
         const { threadId } = c.req.valid('param')
         await chatService.getThread(actor.accountId, threadId)
         await next()

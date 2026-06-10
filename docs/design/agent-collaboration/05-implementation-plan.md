@@ -57,7 +57,7 @@ DoD:
 - Schema unit tests cover: ref regex accepts/rejects fixtures, plan
   graph round-trip parse, profile defaults validity, chat part union
   backward compatibility (old parts still parse).
-- `bun --filter @mina/contracts test` and `bun run typecheck` pass.
+- `bun --filter @mina/contracts typecheck` and `bun run typecheck` pass.
 - No app code changed yet.
 
 ---

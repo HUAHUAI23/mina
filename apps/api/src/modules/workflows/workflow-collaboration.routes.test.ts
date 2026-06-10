@@ -5,6 +5,7 @@ import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
 import * as syncProtocol from 'y-protocols/sync'
 import * as Y from 'yjs'
+import { WorkflowEventSchema } from '@mina/contracts/modules/workflows/events'
 import type { WorkflowResponse } from '@mina/contracts/modules/workflows'
 
 import { createTestApp } from '../../test/app'
@@ -54,6 +55,28 @@ const connectedNode = {
           },
         },
       ],
+    },
+  },
+}
+
+const executableImageNode = {
+  id: 'image_node',
+  type: 'image_generation',
+  position: { x: 0, y: 0 },
+  data: {
+    nodeType: 'image_generation',
+    title: 'Image',
+    config: {
+      task: {
+        kind: 'image_generation',
+        provider: 'dev',
+        model: 'dev-image',
+        prompt: 'event stream test image',
+        params: {
+          count: 1,
+          size: '1024x1024',
+        },
+      },
     },
   },
 }
@@ -229,28 +252,39 @@ const sendLocalTransaction = (socket: WebSocket, doc: Y.Doc, mutate: () => void)
   socket.send(encodeClientUpdate(updates.length === 1 ? updates[0]! : Y.mergeUpdates(updates)))
 }
 
+const createAuthenticatedWorkflow = async (
+  app: ReturnType<typeof createTestApp>,
+  nodes: unknown[] = [node],
+) => {
+  const suffix = crypto.randomUUID()
+  const registerResponse = await app.request('/api/auth/register', {
+    body: JSON.stringify({
+      email: `collab-route-${suffix}@example.com`,
+      password: 'correct horse battery staple',
+      username: `collab_route_${suffix.replaceAll('-', '_')}`,
+    }),
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+  })
+  const token = readAuthToken(await registerResponse.json())
+  const createWorkflowResponse = await app.request('/api/workflows', {
+    body: JSON.stringify({ edges: [], name: 'Collab route', nodes }),
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    method: 'POST',
+  })
+  return {
+    token,
+    workflowId: readWorkflowId(await createWorkflowResponse.json()),
+  }
+}
+
 describe('workflow collaboration routes', () => {
   test('syncs yjs document and awareness across authenticated websocket clients', async () => {
     const app = createTestApp()
-    const registerResponse = await app.request('/api/auth/register', {
-      body: JSON.stringify({
-        email: 'collab-route@example.com',
-        password: 'correct horse battery staple',
-        username: 'collab_route',
-      }),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    })
-    const token = readAuthToken(await registerResponse.json())
-    const createWorkflowResponse = await app.request('/api/workflows', {
-      body: JSON.stringify({ edges: [], name: 'Collab route', nodes: [node] }),
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      method: 'POST',
-    })
-    const workflowId = readWorkflowId(await createWorkflowResponse.json())
+    const { token, workflowId } = await createAuthenticatedWorkflow(app)
     const server = Bun.serve({ fetch: app.fetch, port: 0, websocket })
 
     try {
@@ -416,6 +450,14 @@ describe('workflow collaboration routes', () => {
       const queryTokenCloseEvent = await queryTokenClosed
       expect(queryTokenCloseEvent.code).toBe(1008)
 
+      const invalidCollabOriginResponse = await app.request(`/api/workflows/${workflowId}/collab/${workflowId}`, {
+        headers: { Origin: 'https://evil.example' },
+      })
+      expect(invalidCollabOriginResponse.status).toBe(403)
+      expect(await invalidCollabOriginResponse.json()).toMatchObject({
+        error: { code: 'WEBSOCKET_ORIGIN_FORBIDDEN' },
+      })
+
       const firstAwarenessDoc = new Y.Doc()
       const reconnectedAwareness = new awarenessProtocol.Awareness(new Y.Doc())
       const firstAwareness = new awarenessProtocol.Awareness(firstAwarenessDoc)
@@ -442,6 +484,49 @@ describe('workflow collaboration routes', () => {
 
       firstSocket.close()
       reconnectedSocket.close()
+    } finally {
+      server.stop(true)
+    }
+  })
+
+  test('workflow event streams require workflow access and allow browser session cookies', async () => {
+    const app = createTestApp()
+    const { token, workflowId } = await createAuthenticatedWorkflow(app, [executableImageNode])
+    const server = Bun.serve({ fetch: app.fetch, port: 0, websocket })
+
+    try {
+      const url = `ws://127.0.0.1:${server.port}/api/workflows/${workflowId}/events`
+      const invalidOriginResponse = await app.request(`/api/workflows/${workflowId}/events`, {
+        headers: { Origin: 'https://evil.example' },
+      })
+      const anonymousResponse = await app.request(`/api/workflows/${workflowId}/events`)
+      expect(invalidOriginResponse.status).toBe(403)
+      expect(await invalidOriginResponse.json()).toMatchObject({
+        error: { code: 'WEBSOCKET_ORIGIN_FORBIDDEN' },
+      })
+      expect(anonymousResponse.status).toBe(401)
+
+      const cookieSocket = new WebSocket(url, { headers: { Cookie: `mina_session=${token}` } })
+      await waitForOpen(cookieSocket)
+
+      const eventPromise = new Promise((resolve) => {
+        cookieSocket.addEventListener('message', (event) => resolve(event.data), { once: true })
+      })
+      const runResponse = await app.request(`/api/workflows/${workflowId}/runs`, {
+        body: JSON.stringify({ selectedNodeId: 'image_node' }),
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      })
+      expect(runResponse.status).toBe(201)
+
+      const event = WorkflowEventSchema.parse(JSON.parse(String(await eventPromise)))
+      expect(event.workflowId).toBe(workflowId)
+      expect(['workflow.node.task.updated', 'workflow.run.updated']).toContain(event.type)
+
+      cookieSocket.close()
     } finally {
       server.stop(true)
     }

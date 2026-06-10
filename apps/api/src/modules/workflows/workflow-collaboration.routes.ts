@@ -3,7 +3,8 @@ import { Hono } from 'hono'
 import type { WorkflowSummary } from '@mina/contracts/modules/workflows'
 
 import { HttpError } from '../../lib/http/http-error'
-import { requireAuthActor } from '../accounts/auth-middleware'
+import { requireAllowedWebSocketOrigin } from '../../lib/http/websocket-origin'
+import { requireBrowserWebSocketAuthActor } from '../accounts/auth-middleware'
 import type { AccountsService } from '../accounts/accounts.service'
 import type { WorkflowYjsRoomService } from './collaboration/workflow-yjs-room.service'
 import type { WorkflowsService } from './workflows.service'
@@ -15,13 +16,17 @@ export const createWorkflowCollaborationRoutes = (
 ): Hono =>
   new Hono()
     .get('/:id/collab/snapshot', async (c) => {
-      const actor = await requireAuthActor(c, accountsService)
+      const actor = await requireBrowserWebSocketAuthActor(c, accountsService)
       const workflowId = c.req.param('id')
       const workflow = await workflowsService.getWorkflow(workflowId, actor.accountId)
       return c.json({ item: await workflowYjsRoomService.snapshotForWorkflow(workflow) })
     })
     .get(
       '/:id/collab/:room',
+      async (c, next) => {
+        requireAllowedWebSocketOrigin(c)
+        await next()
+      },
       upgradeWebSocket((c) => {
         const workflowId = c.req.param('id') ?? ''
         const room = c.req.param('room') ?? ''
@@ -36,7 +41,7 @@ export const createWorkflowCollaborationRoutes = (
                 return
               }
               if (!connectedWorkflow) {
-                const actor = await requireAuthActor(c, accountsService)
+                const actor = await requireBrowserWebSocketAuthActor(c, accountsService)
                 connectedWorkflow = await workflowsService.getWorkflow(workflowId, actor.accountId)
               }
               await workflowYjsRoomService.handleMessage({
@@ -54,7 +59,7 @@ export const createWorkflowCollaborationRoutes = (
           },
           onOpen: async (_event, ws) => {
             try {
-              const actor = await requireAuthActor(c, accountsService)
+              const actor = await requireBrowserWebSocketAuthActor(c, accountsService)
               if (room !== workflowId) {
                 ws.close(1008, 'Workflow collaboration room mismatch.')
                 return

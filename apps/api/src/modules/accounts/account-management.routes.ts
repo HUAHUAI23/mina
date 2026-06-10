@@ -18,7 +18,7 @@ import {
 } from '../../lib/http/private-content-redirect'
 import { apiValidator } from '../../lib/http/validation'
 import type { AccountsService } from './accounts.service'
-import { requireAuthActor } from './auth-middleware'
+import { requireAuthActor, requireBrowserContentAuthActor } from './auth-middleware'
 import type { AccountManagementService } from './account-management.service'
 
 export const createAccountManagementRoutes = (
@@ -55,7 +55,7 @@ export const createAccountManagementRoutes = (
       )
     })
     .get('/avatar/content', async (c) => {
-      const actor = await requireAuthActor(c, accountsService)
+      const actor = await requireBrowserContentAuthActor(c, accountsService)
       setPrivateContentRedirectHeaders(c)
       return c.redirect(
         await accountManagementService.createAvatarReadUrl(actor, {

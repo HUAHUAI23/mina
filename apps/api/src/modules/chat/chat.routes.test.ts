@@ -311,7 +311,7 @@ describe('chat routes', () => {
     )
     const secondSocket = new WebSocket(
       `ws://127.0.0.1:${server.port}/api/chat/threads/${threadId}/events`,
-      ['mina-chat', `mina-token.${token}`],
+      { headers: { Cookie: `mina_session=${token}` } },
     )
     const firstEvents = collectChatEvents(firstSocket)
     const secondEvents = collectChatEvents(secondSocket)
@@ -356,8 +356,15 @@ describe('chat routes', () => {
     const token = await register(app)
     const workflowId = await createWorkflow(app, token)
     const threadId = await createThread(app, token, workflowId)
+    const invalidOriginResponse = await app.request(`/api/chat/threads/${threadId}/events`, {
+      headers: { Origin: 'https://evil.example' },
+    })
     const response = await app.request(`/api/chat/threads/${threadId}/events`)
 
+    expect(invalidOriginResponse.status).toBe(403)
+    expect(await invalidOriginResponse.json()).toMatchObject({
+      error: { code: 'WEBSOCKET_ORIGIN_FORBIDDEN' },
+    })
     expect(response.status).toBe(401)
   })
 

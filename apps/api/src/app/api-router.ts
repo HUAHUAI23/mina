@@ -66,5 +66,5 @@ export const createApiRouter = ({
     .route('/tasks', createTasksRoutes(tasksService, modelCatalogService, accountsService))
     .route('/workflows', createWorkflowsRoutes(workflowsService, accountsService))
     .route('/workflows', createWorkflowCollaborationRoutes(workflowsService, accountsService, workflowYjsRoomService))
-    .route('/workflows', createWorkflowEventsRoutes(workflowEventBus))
+    .route('/workflows', createWorkflowEventsRoutes(workflowEventBus, workflowsService, accountsService))
     .route('/workflow-runs', createWorkflowRunsRoutes(workflowsService, accountsService))
