@@ -1,9 +1,12 @@
 import {
   CompletePresignedMediaUploadSchema,
-  CreateMediaObjectSchema,
+  CreateMediaObjectPurposeSchema,
+  CreateMediaObjectRetentionInputSchema,
   CreatePresignedMediaUploadSchema,
   GetMediaObjectResponseSchema,
+  MediaObjectKindSchema,
   MediaObjectResponseSchema,
+  type MediaObjectKind,
   type MediaObjectPurpose,
   type MediaObjectRetention,
 } from '@mina/contracts/modules/media/media-object'
@@ -17,7 +20,7 @@ import { apiValidator } from '../../lib/http/validation'
 import { requireAuthActor } from '../accounts/auth-middleware'
 import { assertCanManagePublicResource } from '../accounts/authorization'
 import type { AccountsService } from '../accounts/accounts.service'
-import { resourceKindFromMimeType } from './media-type'
+import { mediaObjectKindFromMimeType } from './media-type'
 import type { MediaObjectService } from './media-object.service'
 
 const MediaObjectParamsSchema = z.object({
@@ -28,10 +31,19 @@ const formValue = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim() ? value.trim() : undefined
 
 const parsePurpose = (value: string | undefined): MediaObjectPurpose =>
-  CreateMediaObjectSchema.shape.purpose.parse(value ?? 'workflow_slot')
+  CreateMediaObjectPurposeSchema.parse(value ?? 'workflow_slot')
 
 const parseRetention = (value: string | undefined): MediaObjectRetention =>
-  CreateMediaObjectSchema.shape.retention.parse(value ?? 'project_scoped')
+  CreateMediaObjectRetentionInputSchema.parse(value ?? 'project_scoped')
+
+const assertUploadKindPurposeAllowed = (kind: MediaObjectKind, purpose: MediaObjectPurpose): void => {
+  if (kind === 'file' && purpose !== 'chat_attachment') {
+    throw new HttpError(415, 'MEDIA_TYPE_UNSUPPORTED', {
+      fallbackMessage: 'Media MIME type is not supported.',
+      messageKey: 'api_error_media_type_unsupported',
+    })
+  }
+}
 
 export const createMediaRoutes = (mediaObjectService: MediaObjectService, accountsService: AccountsService): Hono =>
   new Hono()
@@ -52,14 +64,19 @@ export const createMediaRoutes = (mediaObjectService: MediaObjectService, accoun
         })
       }
 
-      const declaredKind = CreateMediaObjectSchema.shape.kind.parse(formValue(form.get('kind')))
-      const kind = declaredKind ?? resourceKindFromMimeType(file.type)
+      const purpose = parsePurpose(formValue(form.get('purpose')))
+      if (purpose === 'public_library') {
+        assertCanManagePublicResource(actor)
+      }
+      const declaredKind = MediaObjectKindSchema.optional().parse(formValue(form.get('kind')))
+      const kind = declaredKind ?? mediaObjectKindFromMimeType(file.type)
       if (!kind) {
         throw new HttpError(415, 'MEDIA_TYPE_UNSUPPORTED', {
           fallbackMessage: 'Media MIME type is not supported.',
           messageKey: 'api_error_media_type_unsupported',
         })
       }
+      assertUploadKindPurposeAllowed(kind, purpose)
 
       const mediaObject = await mediaObjectService.createFromBuffer({
         accountId: actor.accountId,
@@ -67,13 +84,7 @@ export const createMediaRoutes = (mediaObjectService: MediaObjectService, accoun
         kind,
         ...(file.type ? { mimeType: file.type } : {}),
         origin: 'user_upload',
-        purpose: (() => {
-          const purpose = parsePurpose(formValue(form.get('purpose')))
-          if (purpose === 'public_library') {
-            assertCanManagePublicResource(actor)
-          }
-          return purpose
-        })(),
+        purpose,
         retention: parseRetention(formValue(form.get('retention'))),
       })
       return c.json(MediaObjectResponseSchema.parse({ item: mediaObject }), 201)
@@ -98,6 +109,7 @@ export const createMediaRoutes = (mediaObjectService: MediaObjectService, accoun
         if (payload.purpose === 'public_library') {
           assertCanManagePublicResource(actor)
         }
+        assertUploadKindPurposeAllowed(payload.kind, payload.purpose)
         const result = await mediaObjectService.createPresignedUpload({
           accountId: actor.accountId,
           kind: payload.kind,

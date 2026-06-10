@@ -6,6 +6,7 @@ import type {
   WorkflowNodeType,
 } from '@mina/contracts/modules/canvas'
 import type { WorkflowMediaLinkConnection } from '@mina/contracts/modules/media'
+import type { MediaObjectKind } from '@mina/contracts/modules/media/media-object'
 import type { PricingRule } from '@mina/contracts/modules/pricing'
 import type {
   NodeExecutionOutput,
@@ -21,6 +22,12 @@ import type {
   WorkflowRunNodeState,
   WorkflowRunStatus,
 } from '@mina/contracts/modules/workflows'
+import type {
+  ChatMessagePart,
+  ChatMessageRole,
+  ChatMessageStatus,
+  ChatThreadStatus,
+} from '@mina/contracts/modules/chat'
 import { sql } from 'drizzle-orm'
 import {
   boolean,
@@ -44,9 +51,11 @@ export type MediaObjectPurpose =
   | 'workflow_slot'
   | 'temporary'
   | 'preview'
+  | 'chat_attachment'
   | 'public_library'
   | 'asset_library'
 export type MediaObjectRetention = 'temporary' | 'task_scoped' | 'project_scoped' | 'library'
+export type ChatAssistantRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 export type AssetLibraryItemStatus = 'active' | 'archived' | 'deleted' | 'unavailable'
 export type AssetLibrarySourceType = 'local_upload' | 'workflow_output' | 'external_import' | 'system'
 export type AssetTagSource = 'system' | 'custom'
@@ -366,7 +375,7 @@ export const mediaObjects = pgTable(
     accountId: text('account_id')
       .notNull()
       .references(() => accounts.id),
-    kind: text('kind').$type<ResourceKind>().notNull(),
+    kind: text('kind').$type<MediaObjectKind>().notNull(),
     status: text('status').$type<MediaObjectStatus>().notNull(),
     bucket: text('bucket').notNull(),
     storageKey: text('storage_key').notNull(),
@@ -559,6 +568,129 @@ export const projectWorkflows = pgTable(
     primaryKey({ columns: [table.projectId, table.workflowId] }),
     uniqueIndex('project_workflows_workflow_uidx').on(table.workflowId),
     index('project_workflows_project_sort_idx').on(table.projectId, table.sortOrder),
+  ],
+)
+
+export const chatThreads = pgTable(
+  'chat_threads',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    workflowId: text('workflow_id').references(() => workflows.id),
+    title: text('title'),
+    status: text('status').$type<ChatThreadStatus>().notNull().default('active'),
+    lastMessageAt: timestamp('last_message_at', { withTimezone: true }),
+    ...timestamps(),
+  },
+  (table) => [
+    index('chat_threads_account_updated_idx').on(table.accountId, table.updatedAt),
+    index('chat_threads_workflow_updated_idx').on(table.workflowId, table.updatedAt),
+    uniqueIndex('chat_threads_active_workflow_uidx')
+      .on(table.accountId, table.workflowId)
+      .where(sql`${table.workflowId} is not null and ${table.status} = 'active'`),
+  ],
+)
+
+export const chatMessages = pgTable(
+  'chat_messages',
+  {
+    id: text('id').primaryKey(),
+    threadId: text('thread_id')
+      .notNull()
+      .references(() => chatThreads.id, { onDelete: 'cascade' }),
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    role: text('role').$type<ChatMessageRole>().notNull(),
+    status: text('status').$type<ChatMessageStatus>().notNull().default('sent'),
+    orderIndex: integer('order_index').notNull(),
+    clientMessageId: text('client_message_id'),
+    ...timestamps(),
+  },
+  (table) => [
+    index('chat_messages_thread_created_idx').on(table.threadId, table.createdAt, table.id),
+    index('chat_messages_thread_order_idx').on(table.threadId, table.orderIndex),
+    uniqueIndex('chat_messages_thread_order_uidx').on(table.threadId, table.orderIndex),
+    uniqueIndex('chat_messages_thread_client_uidx')
+      .on(table.threadId, table.clientMessageId)
+      .where(sql`${table.clientMessageId} is not null`),
+  ],
+)
+
+export const chatMessageParts = pgTable(
+  'chat_message_parts',
+  {
+    id: text('id').primaryKey(),
+    messageId: text('message_id')
+      .notNull()
+      .references(() => chatMessages.id, { onDelete: 'cascade' }),
+    type: text('type').$type<ChatMessagePart['type']>().notNull(),
+    orderIndex: integer('order_index').notNull(),
+    content: jsonb('content').$type<ChatMessagePart>().notNull(),
+  },
+  (table) => [
+    index('chat_message_parts_message_order_idx').on(table.messageId, table.orderIndex),
+    uniqueIndex('chat_message_parts_message_order_uidx').on(table.messageId, table.orderIndex),
+  ],
+)
+
+export const chatMessageAttachments = pgTable(
+  'chat_message_attachments',
+  {
+    id: text('id').primaryKey(),
+    messageId: text('message_id')
+      .notNull()
+      .references(() => chatMessages.id, { onDelete: 'cascade' }),
+    partId: text('part_id').references(() => chatMessageParts.id, { onDelete: 'cascade' }),
+    mediaObjectId: text('media_object_id')
+      .notNull()
+      .references(() => mediaObjects.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('chat_message_attachments_message_idx').on(table.messageId),
+    index('chat_message_attachments_media_idx').on(table.mediaObjectId),
+  ],
+)
+
+export const chatAssistantRuns = pgTable(
+  'chat_assistant_runs',
+  {
+    id: text('id').primaryKey(),
+    threadId: text('thread_id')
+      .notNull()
+      .references(() => chatThreads.id, { onDelete: 'cascade' }),
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    userMessageId: text('user_message_id')
+      .notNull()
+      .references(() => chatMessages.id, { onDelete: 'cascade' }),
+    assistantMessageId: text('assistant_message_id')
+      .notNull()
+      .references(() => chatMessages.id, { onDelete: 'cascade' }),
+    status: text('status').$type<ChatAssistantRunStatus>().notNull(),
+    attemptCount: integer('attempt_count').notNull().default(0),
+    maxAttempts: integer('max_attempts').notNull().default(3),
+    nextRetryAt: timestamp('next_retry_at', { withTimezone: true }),
+    errorCode: text('error_code'),
+    errorMessageKey: text('error_message_key'),
+    errorParams: jsonb('error_params').$type<Record<string, string | number | boolean>>(),
+    errorDebugMessage: text('error_debug_message'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    ...timestamps(),
+  },
+  (table) => [
+    index('chat_assistant_runs_thread_status_idx').on(table.threadId, table.status, table.createdAt),
+    index('chat_assistant_runs_retry_idx').on(table.status, table.nextRetryAt),
+    index('chat_assistant_runs_user_message_idx').on(table.userMessageId),
+    index('chat_assistant_runs_assistant_message_idx').on(table.assistantMessageId),
+    uniqueIndex('chat_assistant_runs_thread_running_uidx')
+      .on(table.threadId)
+      .where(sql`${table.status} = 'running'`),
   ],
 )
 

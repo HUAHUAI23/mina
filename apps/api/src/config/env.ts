@@ -5,6 +5,8 @@ import { DEFAULT_DATABASE_URL } from './defaults'
 import './load-env'
 
 const DEFAULT_ALLOWED_ORIGIN = 'http://localhost:3000'
+const DEFAULT_AI_PROVIDER_NAME = 'mina-ai'
+const DEFAULT_AI_TIMEOUT_MS = 120_000
 const DEFAULT_API_PORT = 3001
 const DEFAULT_SCHEDULER_CRON = '*/5 * * * * *'
 const DEFAULT_S3_REGION = 'us-east-1'
@@ -30,6 +32,11 @@ const optionalNonEmptyStringSchema = z.string().trim().min(1).optional()
 const env = createEnv({
   server: {
     MINA_ALLOWED_ORIGIN: z.string().trim().min(1).default(DEFAULT_ALLOWED_ORIGIN),
+    MINA_AI_API_KEY: optionalNonEmptyStringSchema,
+    MINA_AI_BASE_URL: z.url().optional(),
+    MINA_AI_MODEL: optionalNonEmptyStringSchema,
+    MINA_AI_PROVIDER_NAME: z.string().trim().min(1).default(DEFAULT_AI_PROVIDER_NAME),
+    MINA_AI_TIMEOUT_MS: z.coerce.number().int().positive().default(DEFAULT_AI_TIMEOUT_MS),
     MINA_API_PORT: z.coerce.number().int().positive().default(DEFAULT_API_PORT),
     MINA_DATABASE_URL: z.url().default(DEFAULT_DATABASE_URL),
     GOOGLE_API_BASE_URL: z.url().default(DEFAULT_GOOGLE_API_BASE_URL),
@@ -83,6 +90,11 @@ const env = createEnv({
 
 export const apiEnv = {
   allowedOrigin: env.MINA_ALLOWED_ORIGIN,
+  aiApiKey: env.MINA_AI_API_KEY,
+  aiBaseUrl: env.MINA_AI_BASE_URL,
+  aiModel: env.MINA_AI_MODEL,
+  aiProviderName: env.MINA_AI_PROVIDER_NAME,
+  aiTimeoutMs: env.MINA_AI_TIMEOUT_MS,
   databaseUrl: env.MINA_DATABASE_URL,
   googleApiBaseUrl: env.GOOGLE_API_BASE_URL,
   googleApiKey: env.GOOGLE_API_KEY,

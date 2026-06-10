@@ -9,6 +9,7 @@ import { appLogger } from './lib/logger/logger'
 const dependencies = createAppDependencies()
 const app = createApp(dependencies)
 const scheduler = new BackgroundTaskScheduler({
+  chatService: dependencies.chatService,
   cronPattern: apiEnv.schedulerCron,
   logger: appLogger,
   tasksService: dependencies.tasksService,

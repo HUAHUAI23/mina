@@ -24,6 +24,7 @@ import { VideoGenerationNode } from './nodes/MediaGenerationNode/VideoGeneration
 import { NodeGroupNode } from './nodes/NodeGroupNode'
 import { TextNode } from './nodes/TextNode'
 import { CanvasDock } from './dock/CanvasDock'
+import { AgentChatOverlay } from '../agent-chat/components/AgentChatOverlay'
 import { NodeHistoryRail } from './panels/NodeHistoryRail'
 import { useCanvasUiStore } from '../store/canvas-ui-store'
 import { useCanvasAddMenuController } from '../react-flow/use-canvas-add-menu-controller'
@@ -56,6 +57,7 @@ interface WorkflowCanvasProps {
   onSelectOutput(nodeId: string, taskId: string, outputResourceId: string, outputIndex: number): void
   runError?: string | undefined
   runningNodeId?: string | undefined
+  workflowId: string
 }
 
 const edgeTypes = {
@@ -75,7 +77,7 @@ const MINIMAP_FALLBACK_NODE_THRESHOLD = 5_000
 const WORKFLOW_CANVAS_PAN_ON_DRAG_BUTTONS = [1, 2]
 const WORKFLOW_CANVAS_PAN_ON_SCROLL_SPEED = 0.8
 
-export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNodeId }: WorkflowCanvasProps) {
+export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNodeId, workflowId }: WorkflowCanvasProps) {
   const { locale } = useI18n()
   useHydrateFlowRender()
   useCanvasDevGlobals()
@@ -253,6 +255,7 @@ export function WorkflowCanvas({ onRunNode, onSelectOutput, runError, runningNod
             ) : null}
             {addMenu ? <CanvasAddMenu state={addMenu} /> : null}
             <NodeHistoryRail />
+            <AgentChatOverlay workflowId={workflowId} />
             <CanvasDock onRunNode={onRunNode} runError={runError} runningNodeId={runningNodeId} />
           </ReactFlow>
         </div>

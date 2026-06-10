@@ -15,7 +15,7 @@ import {
 import type { WorkflowYjsSnapshotRecord } from './workflow-yjs-repository'
 import type { WorkflowYjsRoomMessage } from './workflow-yjs-room.service'
 import { WorkflowYjsRoomService } from './workflow-yjs-room.service'
-import { FakeWorkflowYjsRepository } from '../../../test/fakes'
+import { FakeWorkflowYjsRepository } from '../../../test/doubles'
 
 const messageSync = 0
 const messageAwareness = 1

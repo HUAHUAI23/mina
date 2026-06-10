@@ -104,7 +104,10 @@ All repository-facing project text should remain in English:
 
 1. Every backend feature module should have at least one request-level test.
 2. New API routes should be validated with Bun tests before merging.
-3. Run `bun run check` before release or deployment.
+3. Keep API test doubles under `apps/api/src/test/doubles`, grouped by bounded context. Do not add new shared in-memory repositories to a single catch-all fake file.
+4. Use test data builders for plain object construction and scenario helpers for cross-module setup. Keep fake repositories focused on implementing repository contracts.
+5. Use Bun mocks for function/module replacement and call assertions, not as the default substitute for stateful repository behavior.
+6. Run `bun run check` before release or deployment.
 
 ## Dependency Rules
 

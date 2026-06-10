@@ -1,12 +1,12 @@
 import type {
   MediaObject,
+  MediaObjectKind,
   MediaObjectOrigin,
   MediaObjectPurpose,
   MediaObjectRetention,
   MediaObjectStatus,
 } from '@mina/contracts/modules/media/media-object'
 import { MediaObjectSchema } from '@mina/contracts/modules/media/media-object'
-import type { ResourceKind } from '@mina/contracts/modules/tasks'
 
 export interface CreateMediaObjectRecordInput {
   accountId: string
@@ -17,7 +17,7 @@ export interface CreateMediaObjectRecordInput {
   expiresAt?: string
   height?: number
   id: string
-  kind: ResourceKind
+  kind: MediaObjectKind
   metadata?: Record<string, unknown>
   mimeType?: string
   origin: MediaObjectOrigin
@@ -33,4 +33,4 @@ export interface CreateMediaObjectRecordInput {
 }
 
 export { MediaObjectSchema }
-export type { MediaObject, MediaObjectOrigin, MediaObjectPurpose, MediaObjectRetention, MediaObjectStatus }
+export type { MediaObject, MediaObjectKind, MediaObjectOrigin, MediaObjectPurpose, MediaObjectRetention, MediaObjectStatus }

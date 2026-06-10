@@ -24,6 +24,10 @@
       "types": "./src/modules/canvas/group-conversion.ts",
       "default": "./src/modules/canvas/group-conversion.ts"
     },
+    "./modules/chat": {
+      "types": "./src/modules/chat/chat.schemas.ts",
+      "default": "./src/modules/chat/chat.schemas.ts"
+    },
     "./modules/media": {
       "types": "./src/modules/media/media.schemas.ts",
       "default": "./src/modules/media/media.schemas.ts"

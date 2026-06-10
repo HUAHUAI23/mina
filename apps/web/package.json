@@ -30,6 +30,8 @@
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "streamdown": "^2.5.0",
+    "use-stick-to-bottom": "^1.1.6",
     "y-websocket": "^3.0.0",
     "yjs": "^13.6.30",
     "zod": "catalog:",

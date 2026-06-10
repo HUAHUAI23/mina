@@ -7,13 +7,16 @@ import {
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
+import { ObjectStorageReadLimitError } from './object-storage'
 import type {
   CreatePresignedGetUrlInput,
   CreatePresignedPutUrlInput,
   DeleteAccountObjectInput,
+  GetAccountObjectInput,
   ObjectStorage,
   PresignedPutObjectUrl,
   PutAccountObjectInput,
+  StoredObjectData,
   StoredObject,
 } from './object-storage'
 import { assertAccountStorageKey, buildAccountStorageKey } from './storage-key'
@@ -104,6 +107,28 @@ export class S3ObjectStorage implements ObjectStorage {
         Key: input.key,
       }),
     )
+  }
+
+  async getObject(input: GetAccountObjectInput): Promise<StoredObjectData> {
+    assertAccountStorageKey(input.accountId, input.key, this.#rootPrefix)
+    const response = await this.#client.send(
+      new GetObjectCommand({
+        Bucket: this.#bucket,
+        Key: input.key,
+      }),
+    )
+    if (input.maxBytes !== undefined && response.ContentLength !== undefined && response.ContentLength > input.maxBytes) {
+      throw new ObjectStorageReadLimitError()
+    }
+    const body = response.Body ? await response.Body.transformToByteArray() : new Uint8Array()
+    if (input.maxBytes !== undefined && body.byteLength > input.maxBytes) {
+      throw new ObjectStorageReadLimitError()
+    }
+    return {
+      body,
+      byteSize: body.byteLength,
+      ...(response.ContentType ? { contentType: response.ContentType } : {}),
+    }
   }
 
   async putObject(input: PutAccountObjectInput): Promise<StoredObject> {

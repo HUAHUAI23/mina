@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
 import type { CreatePresignedGetUrlInput } from '../../../lib/storage/object-storage'
-import { FakeMediaObjectRepository, FakeObjectStorage } from '../../../test/fakes'
-import { MediaObjectService } from '../../media/media-object.service'
+import { FakeObjectStorage } from '../../../test/doubles'
+import { createMediaObjectTestScenario } from '../../../test/scenarios/media-object-scenario'
 import { DeterministicVideoFrameGenerator, FfmpegVideoFrameGenerator } from './video-frame-generator'
 
 class ReadUrlTrackingStorage extends FakeObjectStorage {
@@ -16,17 +16,16 @@ class ReadUrlTrackingStorage extends FakeObjectStorage {
 
 const createMediaObjectService = () => {
   const storage = new ReadUrlTrackingStorage()
-  const mediaObjectService = new MediaObjectService(
-    new FakeMediaObjectRepository(),
+  const { service: mediaObjectService } = createMediaObjectTestScenario({
     storage,
-    {
+    fetcher: {
       fetch: async () => ({
         body: new Uint8Array(),
         byteSize: 0,
         contentType: 'video/mp4',
       }),
     },
-  )
+  })
   return { mediaObjectService, storage }
 }
 

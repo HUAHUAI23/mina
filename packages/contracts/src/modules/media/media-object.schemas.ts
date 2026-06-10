@@ -1,7 +1,6 @@
 import { z } from 'zod'
 
-import { ResourceKindSchema } from '../tasks/task.schemas'
-
+export const MediaObjectKindSchema = z.enum(['image', 'video', 'audio', 'file'])
 export const MediaObjectStatusSchema = z.enum(['uploading', 'ready', 'failed', 'deleted'])
 export const MediaObjectOriginSchema = z.enum(['user_upload', 'task_output', 'external_import', 'system_generated'])
 export const MediaObjectPurposeSchema = z.enum([
@@ -10,6 +9,7 @@ export const MediaObjectPurposeSchema = z.enum([
   'temporary',
   'task_output',
   'preview',
+  'chat_attachment',
   'public_library',
   'asset_library',
 ])
@@ -18,7 +18,7 @@ export const MediaObjectRetentionSchema = z.enum(['temporary', 'task_scoped', 'p
 export const MediaObjectSchema = z.object({
   id: z.string().min(1),
   accountId: z.string().min(1),
-  kind: ResourceKindSchema,
+  kind: MediaObjectKindSchema,
   status: MediaObjectStatusSchema,
   bucket: z.string().min(1),
   storageKey: z.string().min(1),
@@ -42,10 +42,29 @@ export const MediaObjectSchema = z.object({
   updatedAt: z.string().datetime(),
 })
 
+const fileKindPurposeIssue = {
+  code: 'custom' as const,
+  message: 'File media objects are only supported for chat attachments.',
+  path: ['purpose'],
+}
+
+export const CreateMediaObjectPurposeSchema = z.enum([
+  'workflow_slot',
+  'task_input',
+  'temporary',
+  'chat_attachment',
+  'public_library',
+]).default('workflow_slot')
+export const CreateMediaObjectRetentionInputSchema = MediaObjectRetentionSchema.default('project_scoped')
+
 export const CreateMediaObjectSchema = z.object({
-  kind: ResourceKindSchema.optional(),
-  purpose: z.enum(['workflow_slot', 'task_input', 'temporary', 'public_library']).default('workflow_slot'),
-  retention: MediaObjectRetentionSchema.default('project_scoped'),
+  kind: MediaObjectKindSchema.optional(),
+  purpose: CreateMediaObjectPurposeSchema,
+  retention: CreateMediaObjectRetentionInputSchema,
+}).superRefine((value, context) => {
+  if (value.kind === 'file' && value.purpose !== 'chat_attachment') {
+    context.addIssue(fileKindPurposeIssue)
+  }
 })
 
 export const MediaObjectResponseSchema = z.object({
@@ -56,11 +75,15 @@ export const CreateMediaObjectResponseSchema = MediaObjectResponseSchema
 export const GetMediaObjectResponseSchema = MediaObjectResponseSchema
 
 export const CreatePresignedMediaUploadSchema = z.object({
-  kind: ResourceKindSchema,
+  kind: MediaObjectKindSchema,
   mimeType: z.string().min(1),
   byteSize: z.number().int().nonnegative().optional(),
-  purpose: z.enum(['workflow_slot', 'task_input', 'temporary', 'public_library']).default('workflow_slot'),
-  retention: MediaObjectRetentionSchema.default('project_scoped'),
+  purpose: CreateMediaObjectPurposeSchema,
+  retention: CreateMediaObjectRetentionInputSchema,
+}).superRefine((value, context) => {
+  if (value.kind === 'file' && value.purpose !== 'chat_attachment') {
+    context.addIssue(fileKindPurposeIssue)
+  }
 })
 
 export const CreatePresignedMediaUploadResponseSchema = z.object({
@@ -81,6 +104,7 @@ export type CreatePresignedMediaUploadInput = z.infer<typeof CreatePresignedMedi
 export type CreatePresignedMediaUploadResponse = z.infer<typeof CreatePresignedMediaUploadResponseSchema>
 export type GetMediaObjectResponse = z.infer<typeof GetMediaObjectResponseSchema>
 export type MediaObject = z.infer<typeof MediaObjectSchema>
+export type MediaObjectKind = z.infer<typeof MediaObjectKindSchema>
 export type MediaObjectOrigin = z.infer<typeof MediaObjectOriginSchema>
 export type MediaObjectPurpose = z.infer<typeof MediaObjectPurposeSchema>
 export type MediaObjectResponse = z.infer<typeof MediaObjectResponseSchema>

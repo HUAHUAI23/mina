@@ -11,8 +11,18 @@ const bearerTokenFromHeader = (value: string | undefined): string | undefined =>
   return match?.[1]?.trim()
 }
 
+const tokenFromWebSocketProtocol = (value: string | undefined): string | undefined =>
+  value
+    ?.split(',')
+    .map((protocol) => protocol.trim())
+    .find((protocol) => protocol.startsWith('mina-token.'))
+    ?.slice('mina-token.'.length)
+    .trim()
+
 const tokenFromRequest = (c: Context): string | undefined =>
-  bearerTokenFromHeader(c.req.header('Authorization')) ?? c.req.query('token')?.trim()
+  bearerTokenFromHeader(c.req.header('Authorization')) ??
+  tokenFromWebSocketProtocol(c.req.header('Sec-WebSocket-Protocol')) ??
+  c.req.query('token')?.trim()
 
 export const requireAuthActor = async (c: Context, accountsService: AccountsService): Promise<AuthActor> => {
   const existing = c.get(AUTH_ACTOR_KEY) as AuthActor | undefined

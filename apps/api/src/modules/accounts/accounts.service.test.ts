@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { FakeAccountsRepository } from '../../test/fakes'
+import { FakeAccountsRepository } from '../../test/doubles'
 import { AccountsService } from './accounts.service'
 import { hashPassword } from './password'
 
