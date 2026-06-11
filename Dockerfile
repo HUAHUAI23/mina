@@ -33,6 +33,10 @@ ENV PORT=3000
 ENV MINA_API_PORT=3000
 ENV VITE_API_BASE_URL=/
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates ffmpeg \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY package.json bun.lock bunfig.toml ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
