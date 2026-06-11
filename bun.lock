@@ -21,6 +21,7 @@
         "@mina/contracts": "workspace:*",
         "@mina/i18n": "workspace:*",
         "@scalar/hono-api-reference": "^0.10.16",
+        "@standard-schema/spec": "^1.1.0",
         "@t3-oss/env-core": "catalog:",
         "ai": "catalog:",
         "croner": "catalog:",
